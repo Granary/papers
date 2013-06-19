@@ -1,0 +1,902 @@
+\documentclass[10pt,preprint]{sigplanconf}
+\usepackage{amsmath,epsfig,subfigure,multirow}
+
+\usepackage{graphicx}
+\usepackage{refstyle}
+\usepackage{enumerate}
+\usepackage{listings}
+\usepackage{framed}
+\usepackage{lipsum}
+\usepackage{multicol}
+\usepackage[english]{babel}
+\usepackage{numprint}
+\usepackage[dvipsnames]{color}
+\definecolor{shadecolor}{RGB}{250,250,250}
+
+\begin{document}
+
+\conferenceinfo{OSDI '12}{Feb. 23, Shenzhen.} 
+\copyrightyear{2012} 
+\copyrightdata{[to be supplied]} 
+
+\titlebanner{banner above paper title}        % These are ignored unless
+\preprintfooter{short description of paper}   % 'preprint' option specified.
+
+\title{Granary: Comprehensive Kernel Module Instrumentation}
+\subtitle{}
+
+\authorinfo{Peter Goodman\and Angela Demke Brown}
+           {Department of Computer Science\\ University of Toronto}
+           {\{pag, demke\}@cs.toronto.edu}
+
+\authorinfo{Akshay Kumar\and Ashvin Goel}
+           {Department of Electrical and Computer Engineering\\ University of Toronto}
+           {akshayk@cs.toronto.edu\and ashvin@eecg.toronto.edu}
+
+\maketitle
+
+\renewcommand{\secref}[1]{\S\ref{sec:#1}}
+
+% until we find a name for our system, the following commands should suffice :-)
+\newcommand{\sysname}{Granary}
+\newcommand{\Sysname}{Granary}
+
+\newcommand{\note}[1]{}
+
+\begin{abstract}
+
+Kernel modules extend the functionality of operating systems. Modules are used to support new devices (e.g. network and graphics cards) and provide new features (e.g. file systems). These kernel modules often available as binary, executes and interacts with the kernel in a complex and dynamic environment. This makes the undertanding of module bahviour challenging. Static analysis is one of the method to understand their behaviour but this left many question unanswered. This makes it important to analyse the bahaviour of these modules dynamically.
+
+This work presents {\sysname}, a framework for efficiently instrumenting Linux kernel modules. {\sysname} uses dynamic binary translation to dynamically rewrite and comprehensively instrument kernel modules. The goal of comprehensivness requires that {\sysname} control the execution of all module code. This is achieved by attching instrumentation when module code first gets executed and leaving it attached until the next context switch to kernel code. The second goal requires that any overhead introduced by {\sysname} only affect instrumented modules. The {\sysname} introduces overhead when it translated, caches, and executes instrumented code leaving kernel execution unaffected. The attaching and detaching of the instrumentaton framework causes the execution to switch between native and instrumented mode. This makes it challenging to maintain the module isolation and consistency of the interrupt and exceptions.
+
+TODO : write a short description about the interrupt handling as an improvement over DRK.
+
+Interposing on the control-flow transfers that leads to mode switching is easy when module executes under the control of {\sysname} but is challenging when kernel code executes. Page protection is one mechanism that can be used to detect the control-flow transfer to the modules, where all modules code can be made non-executable and any attempt to execute the module code results in a page fault execption that will be handled by the {\sysname } to attach the instrumentation. Considering the associated cost of page-fault handling, {\sysname} takes an alternative approach where it interposes during module loading changing the module entry point used by the kernel, pointing to the shadow module, allowing for efficient entry point interposition. The system also introduces the novel approach of type based kernel wrapper which understand the function arguments passed to the kernel and proactively wraps all the associated function pointers of the raw module pointing to the new module entry point.
+
+Kernel wrapper recursively wrap arguments to kernel functions. However, these arguments can be deeply nested (e.g file-system module) and rewrapping them each time they cross module-kernel boundry is expensive. {\sysname} solves the problem of recursive wrapping on each kernel function call by using the taint tracking method where it wraps then on first call of the function call and stores an embedded hash map for the wrapped structure. on the subsequent calls the recursive wrapping only gets enabled when the structure value gets tainted by the module or on the fall-through where the kernel tries to execute the non-executed kernel code.
+
+Using the same method, the kernel wrapper also introduces the dynamic wrapping mechanism where each kernel object passed over the module-kernel interface will have its own wrapper, providing a more finer control over analyzing the objects passed over the module-kernel interface.
+
+{\Sysname} is a work in progress. It works on multi-core processors with pre-emtive kernels, and has modest overhead of 10\% for network drivers and 2x for in-RAM file systems. We have used {\sysname} to isolate and comprehensively instrument several network device drivers (e1000, e1000e, ixgbe, tg3) and file system modules (ext2, ext3, btrfs). We have used {\sysname} to develope an application which enforces partial control-flow integrity policies. These policies disallow modules from executing dangerous control-flow transfers. As a future work, we plan to implement more optimizations and develope applications which helps in analysing the bahaviour and debugging the module and to protect the kernel from its malicious behaviour. 
+
+\section {Rest}
+We have applied Granary and enforced some control-flow integrity policies. These policies
+disallow modules from executing dangerous control-flow transfers. As
+future work, we plan to implement more optimizations and more
+applications.
+{\Sysname} is a work-in-progress. We have used {\sysname} to comprehensively instrument several network device drivers (e1000, e1000e, ixgbe, tg3) and file system modules (ext2, ext3, btrfs). 
+
+We have applied {\sysname} and enforced some control-flow integrity policies. These policies disallow modules from executing dangerous control-flow transfers. As future work, we plan to implement more optimizations and develope mo
+TODO
+
+uses the taint tracking method to restrict the recusive wrapping of the kernel functions argument only if gets tainted after the first wrap. this 
+
+
+
+Kernel wrappers recursively wrap arguments to kernel functions. However, these arguments can be deeply nested and linked structures (e.g. file system inodes). Continually re-wrapping deep structures each time they cross the module-kernel boundary is expensive.
+
+A partial solution to this problem limits the depth of wrapping. In the worst case, some raw module addresses escape wrapping. If invoked by the kernel, a raw module address will trigger a memory protection exception and be handled by {\sysname}. {\Sysname} re-directs control to the shadow module, thus maintaining isolation. This solution alone is undesirable as it does not correct the root problem.
+
+Ideally, every kernel object would contain and embedded hash. If this were the case, then shallow changes to an object would be detected when a wrapper compares the object's embedded hash against a re-computed hash. Again, deep changes might escape detection, but not break control-flow isolation. If the kernel invokes a raw module address, then {\sysname} would take control as before but change the seed of the hash function, thus invalidating every previously wrapped data-structure and correcting the root problem.
+
+Unfortunately, embedding hashes into kernel objects is not practical, and overwriting arbitrary object fields for storing the hash can result in data loss and corruption. However, one can change a function pointer, so long as the changed function pointer behaves as before. The restriction to function pointers is not so bad: many kernel objects reference shared virtual tables (vtables) of function pointers, and continually re-wrapping these vtables is wasteful.
+
+We track changes to objects containing at least one function pointer by designating a tracking function pointer (TFP), as shown in \Figref{tracker}. TFPs are changed to address dynamically generated code that \texttt{JMP} to the TFP's original target address, thus maintaining the same control-flow behaviour. The hash of the object is located beside the \texttt{JMP} instruction in memory. Checking for changes to an object is analogous to comparing agaisnt an embedded hash, but instead compares against the TFP hash. As before, breaches in control-flow isolation are handled by {\sysname} and invalidate all previously computed hashes.
+
+TODO
+TODO
+
+we can achieve this goal by attaching instrumentation when some module code is first executed and leaving instrumentation attach until the next context switch. However, our other second goal requires tht any overhead introduced by {\sysname} only affect instrumentation modules. {\sysname} introduces overhead when it translates, caches, and executes instrumented code. The interactions between first two goal forces code to execute in one of the two modes: native and instrumented. Under this lens, module code executes in instrumented code and the module code instrumeted mode and kernel code executes it in the native mode. Attaching and detacing {\sysname} causes the execution to switch between native to instrumented and back into native mode.
+
+{\Sysname} dynamically detects when control transfers between the kernel and its module and switches the mode accordingly. Detecting and interposing on control-flow transfers that should leas to mode switches challenging. The obvious way to detect when to switch modes is to inspect every control-flow transfer instructions. This is easy when executing instrumented code as the {\sysname} can detect the control transfer to the kernel and can switch mode.However, interposing on module entry points is non-trivial because {\sysname} has no control when kernel code is executing. Page protection is one mechanism that {\sysname} uses to detect control-flow tranfers to modules. All module code is made non-executable, and any attempt to execute module code results in a page fault exception. Page fault exceptions are first handled by {\sysname}, which chooses to attach instrumentation if the faulted instruction is a module address. Because of their cost, page faults are depended on only as a last resort. Instead, {\sysname} changes the module entry points used by the kernel, allowing for efficient entry point interposition.
+
+
+
+TODO  
+
+
+Our extensive use of compile-time meta-programming enables efficient, dynamic analyses that are driven by static type information. Our approach is novel because {\sysname} can instrument \emph{arbitrary}, binary kernel modules without imposing any overhead on non-instrumented kernel code. {\Sysname} requires no special hardware support and requires minimal (under 100 lines) changes to the kernel. {\Sysname} works on multi-core processors with pre-emptible kernels, and has modest overhead of 10\% for network drivers. 
+
+Our first goal of comprehensiveness requires that {\sysname} control the execution of all module code. We can achieve this goal by attaching instrumentation when some module code is first executed and leaving instrumentation attached until the next context switch. However, our second goal requires that any overhead introduced by {\sysname} only affect instrumented modules. {\Sysname} introduces overhead when it translates, caches, and executes instrumented code. If {\sysname} is left attached then it would eventually instrument kernel code and fail to meet our second goal. This interaction between our first two goals forces code to execute in one of two modes: native or instrumented. Under this lens, module code executes in instrumented mode and kernel code executes in native mode. Attaching {\sysname} causes a native-to-instrumented mode switch and detaching causes an instrumented-to-native mode switch.
+
+{\Sysname} dynamically detects when control transfers between the kernel and its modules and switches the mode accordingly. Detecting and interposing on control-flow transfers that should lead to mode switches is challenging. The obvious way to detect when to switch modes is to inspect every control-flow transfer instruction. This is easy when executing instrumented code. For example, the dispatcher can switch modes when it detects that control is transferring to the kernel. However, interposing on module entry points is non-trivial because {\sysname} has no control when kernel code is executing. Page protection is one mechanism that {\sysname} uses to detect control-flow tranfers to modules. All module code is made non-executable, and any attempt to execute module code results in a page fault exception. Page fault exceptions are first handled by {\sysname}, which chooses to attach instrumentation if the faulted instruction is a module address. Because of their cost, page faults are depended on only as a last resort. Instead, {\sysname} changes the module entry points used by the kernel, allowing for efficient entry point interposition.
+
+{\Sysname} is a work-in-progress. We have used {\sysname} to comprehensively instrument several network device drivers (e1000, e1000e, ixgbe, tg3) and file system modules (ext2, ext3, btrfs). We have applied {\sysname} and enforced some control-flow integrity policies. These policies disallow modules from executing dangerous control-flow transfers. As future work, we plan to implement more optimizations and more applications.
+
+% {\Sysname} is efficient because of our extensive use of compile-time meta-programming.
+% {\Sysname}'s dynamic analyses are driven by kernel type information
+
+%With this tool, we show how to prevent a privilege escalation attack against a proprietary NVidia kernel module. Our technique requires no changes to the module and maintains reasonable performance on graphics-intensive workloads.
+
+%We use {\sysname} to implement basic control-flow integrity checkers and direct memory access monitors for arbitrary modules. With these tools, we show how to prevent a privilege escalation attack against a proprietary NVidia kernel module. Our technique requires no changes to the module and maintains reasonable performance with graphics-intensive workloads.
+
+%Modules extend the default behaviour of operating system (OS) kernels like Linux. In commodity OSes, the kernel and its modules execute in the same environment and freely share sensitive data. This integration makes debugging modules challenging, and makes modules a prime target for security exploits \cite{cve2010}. User space programs benefit from many instrumentation and isolation tools \cite{Ford2008,NaCl,Nethercote2007a}. Unfortunately, no tools exist that can isolate the kernel from arbitrary modules. To address this problem, we created {\sysname}.
+
+%{\Sysname} is a comprehensive framework for fine-grained instrumentation of arbitrary x86-64 binary kernel modules. {\Sysname} automatically, efficiently, and transparently isolates modules; it discovers and enforces module boundaries, and maintains isolation in the presence of interrupts, even on multi-core processors. Our implementation requires minimal changes to the kernel, and uses automatically generated code from high-level type information as a means of re-introducing semantics on to arbitrary module/kernel data and code.
+
+%We use {\sysname} to implement a basic control flow integrity (CFI) checker \cite{Abadi2009}. Our CFI implementation restricts modules to use only kernel-exported functions, enforces some return-address consistency, and performs well on standard performance benchmarks.
+
+%  has been used as a means of restricting the execution of potentially unsafe modules
+
+%and requires minimal changes to the kernel
+%The key to \sysname's efficiency is from its automatic detection of module boundaries based on high-level type information.
+
+%\Sysname transparently interposes on all module execution, with no performance overhead when executing non-module kernel code. \Sysname  to automatically discover module boundaries. 
+
+%We also show how to efficiently and transparently isolate modules in the presence of interrupts and on multi-core processors.
+
+% Once installed, kernel modules execute in the same environment and on the same data as the kernel. 
+
+% This dependence enables several attack vectors. Modern hardware features attempt to protect OS kernels against attack by executing kernel code in a privileged environment. Unfortunately, kernel modules execute in the same environment as the kernel. As a result, a misbehaving/malicious module can easily corrupt the kernel's internal data structures and compromise its integrity.
+
+%Ensuring that arbitrary kernel modules are safe to execute is challenging. Kernel modules are distributed either as source code or as pre-compiled binaries. Proving that a non-trivial kernel module is safe requires expert knowledge in the former case and is intractable in the latter case. Existing approaches attempt to solve this problem by using hardware protection domains, virtualization, or compile time and runtime checks that enforce capabilities/invariants specified in source code. Unfortunately, hardware protection domains lack widespread support, virtualization limits the breadth of modules that can be secured, and source code annotation based approaches require changes to the kernel, to the modules, and to the compiler toolchain.
+
+% Our approach generalizes previous approaches by operating on arbitrary x86-64 binaries without virtualization, hardware support, or compiler/source code modifications. \Sysname dynamically discovers a module's entry and exit points and instruments it's execution without changing the behaviour or state of the kernel. Modules are restricted to using only exported kernel functions, unless other functions have explicitly been made available through the exported API. High-level type and capability information is propagated into instrumented modules starting from the usages of exported kernel functions. This allows for runtime type checking of function pointers, assignment of ownership to memory, API integrity checking, and more.
+
+
+%Monolithic operating systems (OSes) like Linux depend on kernel modules to extend their supported behaviours and communicate with hardware. This dependence enables several attack vectors. Modern hardware features attempt to protect OS kernels against attack by executing kernel code in a privileged environment. Unfortunately, kernel modules execute in the same environment as the kernel. As a result, a misbehaving/malicious module can easily corrupt the kernel's internal data structures and compromise its integrity.
+
+%Ensuring that arbitrary kernel modules are safe to execute is challenging. Kernel modules are distributed either as source code or as pre-compiled binaries. Proving that a non-trivial kernel module is safe requires expert knowledge in the former case and is intractable in the latter case. Existing approaches attempt to solve this problem by using hardware protection domains, virtualization, or compile time and runtime checks that enforce capabilities/invariants specified in source code. Unfortunately, hardware protection domains lack widespread support, virtualization limits the breadth of modules that can be secured, and source code annotation based approaches require changes to the kernel, to the modules, and to the compiler toolchain.
+
+%Our approach generalizes previous approaches by operating on arbitrary x86-64 binaries without virtualization, hardware support, or compiler/source code modifications. \Sysname dynamically discovers a module's entry and exit points and instruments it's execution without changing the behaviour or state of the kernel. Modules are restricted to using only exported kernel functions, unless other functions have explicitly been made available through the exported API. High-level type and capability information is propagated into instrumented modules starting from the usages of exported kernel functions. This allows for runtime type checking of function pointers, assignment of ownership to memory, API integrity checking, and more.
+
+\end{abstract}
+
+% --------------------------
+% --------------------------
+
+\section{Introduction}\label{sec:intro}
+
+TODO
+
+We identified the following goals:
+\begin{enumerate}
+	\item Comprehensively isolate and instrument all binary modules.
+	\item Impose no performance overhead to non-module kernel code, or to user-level code.
+	\item Require nothing of modules, and make as few changes to the kernel as possible.
+	\item Automate as much as possible.
+\end{enumerate}
+
+
+% TODO: show how related work fails on specific goals, showing that other people didn't fully succeed
+% TODO: we don't stop malicious code, but we stop stupid code
+% TODO: our goal is not to protect agaisnt nvidia, but to prevent people from misusing nvidia
+
+
+% goal 1: comprehensive instrumentation of modules
+% goal 2: no performance overhead to non-module kernel code, or to user-level code
+% goal 3: portability across OS and hardware versions: minimal changes to the kernel
+% goal 4: automate as much as possible
+
+
+%Kernel modules (hereafter modules) extend the functionality of monolithic operating systems (OSes) like Linux. Modules and the kernel are dynamically or statically linked together and execute with unrestricted access to kernel control and non-control data. Usually, modules interact with each other and the kernel through the kernel's module-exported API. In the case of Linux, this API leaks sensitive data and is easily circumvented. Buggy, malicious, or exploited modules that misuse this API or (un)intentionally abuse kernel data structures can compromise the integrity of the kernel. Such compromises are difficult to debug and represent potential security risks.
+
+%That state of module-extensible user space 
+
+%Extensible user space programs suffer similar problems; however, they are easier to debug because of the abundance of debugging tools \cite{GDB,Nethercote2007a,Seward2005} and are easier to secure because of the abundance of isolation techniques \cite{Ford2008,NaCl,Amarasinghe2003}.
+
+%Similar to existing research, our approach attempts to maintain the kernel's integrity by isolating/sandboxing modules, but differs in the mechanism of isolation. Isolation  involves confining the execution of module code so that normal behaviour preserved, and illegal behaviour is impossible or detectable (and can thus be stopped). Illegal behaviour is defined as the misuse of the kernel's module-exported API, the use of a non-exported function, or the modification of sensitive kernel control and non-control data.
+
+%Prior research implements module isolation by compile-time and run-time checking/annotations ~\cite{Ganapathy2005,Castro2009,Erlingsson2006,Swift2005}, by hardware protection domains ~\cite{Swift2005,Witchel2005}, by moving modules into user space ~\cite{Ganapathy2005,Williams2008}, and by extending virtual machines (VMs) and hypervisors with introspection capabilities \cite{Xiong2011,Hofmann2011,Srivastava_Giffin_2011}. These approaches achieve many of the goals of this research; however, each suffers from at least one of the following two issues:
+%\begin{enumerate}
+%	\item Dependence on hardware support, which limits the breadth of modules that can be isolated (virtualization), or lacks widespread adoption by hardware vendors (protection domains).
+%	\item Dependence on language, code, or compiler changes, thus limiting the likelihood of their adoption by OS and module vendors, and limiting their ability to secure legacy modules.
+%\end{enumerate}
+
+%Our work isolates arbitrary binary modules using dynamic binary instrumentation (DBI) \cite{Bruening2004}. DBI gives fine-grained control over program execution and provides similar isolation guarantees to that of virtualization, without limiting which modules can be instrumented. Like \emph{LXFI} \cite{YMao2011}, \emph{BGI} \cite{Castro2009}, and \emph{XFI} \cite{Erlingsson2006} before us, \sysname enforces data structure and control-flow invariants through annotations. However, our annotations are valid C++, apply only to kernel data structures and APIs, and require no modifications to either the kernel, its modules, or the compiler. Thus, \sysname can secure existing modules, regardless of how or by whom they are distributed.
+
+%We tested \sysname on several 1Gb/s and 10Gb/s network drivers
+
+%and the invariants provided by our annotations are enforced and propagated at runtime.
+
+%Similar to virtualization, our work provides strong isolation guarantees on code execution, but isolates arbitrary binary modules using dynamic binary instrumentation (DBI) \cite{Bruening2004}. 
+
+%Our solution attempts to maintain the integrity of the Linux kernel from untrusted binary modules with minimal performance overhead to the kernel proper. \Sysname uses a modified version of the DynamoRIO Kernel (DRK) dynamic binary instrumentation (DBI) framework to achieve this goal ~\cite{Feiner2012,Feiner2010b}. The choice of DRK as a host platform in \sysname is motivated by its ability to provide fine-grained control over the instrumentation of the Linux kernel and arbitrary x86 binary modules.
+
+%The most successful existing solutions to kernel integrity protection and module isolation (\emph{LXFI} \cite{YMao2011}, \emph{BGI} \cite{Castro2009}, and \emph{XFI} \cite{Erlingsson2006}) require access to kernel module source code. Our approach challenges the assumption that module source code is required in order to achieve similar levels of protection. This is a good assumption to challenge because most kernel modules are developed by third party developers and are distributed as binaries. 
+
+%The main contribution of our work is to show that arbitrary kernel modules can be secured without language, compiler, or module/kernel source code changes, and without specific hardware requirements. We show how to dynamically detect the boundaries of modules linked with the kernel and use this information to isolate modules without runtime overhead when executing non-module kernel code. Finally, we show how to combine high-level type-based and functional annotations with module boundary detection and isolation  to impose runtime invariants on module code and propagate checks and type information into the module while it is running.
+
+%Our approach has been to start with the DynamoRIO Kernel (DRK) \cite{Feiner2012,Feiner2010b} DBI framework, which instruments all kernel and module code, and transform it to instrument only module code. This has required significant changes to DRK, which primarily revolve around efficiently attaching and detaching instrumentation when transitioning between modules and the kernel, and on handling interrupts and exceptions on multi-core processors. No other DBI frameworks met our requirements of instrumenting arbitrary kernel code without kernel modification, and with the ability to run in a virtualized environment.
+
+%\Sysname is loaded into the kernel as a module. It takes control of the interrupt descriptor table and positions itself to intercept the module loading process. When untrusted modules are loaded by the kernel, \sysname replaces its exported function addresses. The replaced function addresses act as initial entry points into instrumented code. When the kernel initializes the module, it invokes one of the entry points, which puts execution of the module under the control of \sysname. Execution remains under our control until the module calls a kernel function, returns control to the kernel, or until execution is interrupted by a hardware interrupt or exception.
+
+%While under our control, all direct and indirect control flow is checked. Calls to kernel functions are redirected through wrappers functions. Attempts to call non-exported kernel functions result in errors. Kernel function wrappers validate arguments according to rules specified on a function and type-specific basis. Validation involves checking and updating any function pointers that point into the module's code segment. Basic validator rules are automatically generated by a GCC plugin, and can later be extended by a programmer with domain knowledge. Wrapper functions that apply validation rules are automatically created when \sysname is compiled.
+
+% --------------------------
+% --------------------------
+
+\section{Dynamic Binary Instrumentation} \label{sec:DBI}
+
+In this section, we give a brief background on dynamic binary instrumentation (DBI) in general, and DynamoRIO Kernel (DRK) in particular. DBI is a form of binary translation. Binary translation is used for instruction set translation/emulation \cite{Qemu2005}, runtime optimization, and runtime instrumentation (analysis, security, debugging) \cite{Ford2008,NaCl,Nethercote2007a}. Binary translation is attractive when one wants to make as few assumptions about the nature of the applications being translated. On architectures like x86 where the mix of variably-sized instructions and data make static translation intractable, dynamic binary translation (DBT) is necessary. In this paper, we focus on comprehensive, dynamic instrumentation of all x86-64 binary kernel modules. Comprehensive instrumentation enables powerful tools such as memory, control-flow, and lock checkers, needed to debug, secure, and analyze kernel modules.
+
+Comprehensive instrumentation of a binary by a DBI tool requires that the DBI tool be in control of all instructions executed from that binary. DBI tools do this by operating on short sequences of straight-line instructions ending in control-flow transfer instructions (CTIs), called \emph{basic blocks}. Basic blocks are translated so as to transfer control to the tool's \emph{dispatcher} at the end of their execution. The dispatcher translates and transfers control to new basic blocks, thus emulating the behaviour of the original CTIs. Control remains with the tool to the extent that only translated versions of non-CTIs (e.g. arithmetic and memory instructions) from the original binary are executed natively, while all CTIs are emulated.
+
+Comprehensiveness also requires that a DBI tool hide and protect itself from the instrumented binary. Hiding is necessary for transparency: instrumentation should not change program semantics or behaviour. A program running with instrumentation should not be able to (easily) determine that it is being instrumented, lest it change its behaviour in response to being instrumented. Protection is necessary in the event that a module is intentionally or accidentally malicious. For example, if a malicious module subverted the control of the DBI tool then it could arbitrarily generate executable code and escape further instrumentation.
+
+%Comprehensive DBI is challenging in user space, especially when dealing with multithreaded, multiprocessing, and asynchronous execution (signals). DBI is especially challenging in kernel space: interrupts and exceptions arbitrarily alter control flow, and interrupted kernel threads can resume their execution on different CPU cores.
+
+We built our framework on top of DRK. DRK is a kernel-space port of the user-space DynamoRIO DBI framework \cite{Bruening2004}. DRK comprehensively instruments all Linux kernel and module code, including interrupt and exception handlers, and works on multi-core processors \cite{Feiner2012}. Further, DRK maintains the precise interrupt delivery semantics of the x86 architecture. DRK is loaded as a kernel module and thereafter controls the execution of all kernel code. Execution of kernel code happens only from within DRK's code caches. DRK caches instrumented kernel code on a per-CPU basis. When DRK's dispatcher is invoked to complete a control-flow transfer to a previously un-executed instruction, it stores the newly translated basic block in the code cache of the current core. As an optimization, direct control-flow transfers are optimized to transfer control between two basic blocks in the code cache, instead of returning to the dispatcher. As with DynamoRIO, DRK exports an API to \emph{clients}, thus allowing programmers to write instrumentation and translation policies. DRK takes care not to instrument user-space code: instrumentation \emph{attaches} when user code is interrupted or invokes a system call, and \emph{detaches} when execution returns to user space.
+
+% DRK handles interrupts and exceptions specially. Kernel and module code is necessarily sensitive to interrupt delivery: scheduling is dependent on interrupts, and modules often depend on interrupts to communicate with hardware. Further, the kernel and its modules can arbitrarily disable/enable interrupts, thus complicating any policy that might attempt to arbitrarily delay or discard interrupts. DRK goes to great lengths to preserve the x86 architecture's precise interrupt delivery.
+
+%manages these issues in a number of ways. Caches of translated blocks are maintained on a per-CPU basis by using CPU-private memory. This improves transparency when dealing with concurrency while also setting a fixed upper bound on the number of redundant versions of a translated basic block.
+
+
+%This design choice also necessitates transparency: any code cache address is unsafe 
+%This design choice improves transparency , while also setting a fixed upper-bound on the number of redundant 
+%sets an upper bound on the maximum number of redundant copies of a given translated basic block, while making some concurrency issues easier to handle. T
+
+%into ones that end by transferring control to the tool's dispatcher instead. The dispatcher emulates the intended control-flow transfer by locating the next sequence of instructions to execute, translating those instructions until it encounters another control-flow transfer instruction, and then transferring control to the newly translated instructions.
+
+%return control to the tool's dispatcher once the control-flow transfers are reached. DBI tools then emulate the intended control-flow transfers by means of a dis
+
+%DBI systems must control all execution of code being instrumented.
+
+%DBT is often used in cases where one wants to assume as little about the programs to static binary translation is 
+
+% involves dynamically translating all or parts of an executable (binary) while it is running. Dynamic binary translation is used for instruction set emulation \cite{Qemu2005}, runtime optimization, and instrumentation. We concern ourselves with the latter: instrumenting binaries by injecting 
+
+
+%DBI is a technique typically used to implement debugging tools \cite{Bruening2010,Seward2005}, isolation tools \cite{Ford2008}, and virtual machine monitors. \todo{cite vmware?}
+
+%DBI is used in cases where one wants to inject or rewrite code in a running program 
+
+%DBI \cite{Bruening2004} is an execution control and analysis technique that involves injecting binary code into a running program. The injected code is termed ``instrumentation''. DBI frameworks like \emph{DynamoRIO} \cite{Bruening2004}, \emph{Pin} \cite{Bungale2007}, \emph{JIFL} \cite{Olszewski2007}, \emph{KProbes} \cite{KProbes}, and \emph{KernInst} \cite{Tamches1999} provide the infrastructure needed to perform fine-grained monitoring and manipulation of existing binaries. However, none of the aforementioned frameworks provide comprehensive or exclusive instrumentation of kernel code.
+
+%\emph{DynamoRIO Kernel} (DRK) is a port of \emph{DynamoRIO} that instruments all kernel code, including module code \cite{Feiner2012,Feiner2010b}. DRK is loaded as a kernel module and takes control of all kernel code execution. DRK is able to provide the same level of fine-grained instrumentation as its user space counterpart, \emph{DynamoRIO}. 
+
+%DRK caches instrumented kernel code on a per-CPU basis to amortize the cost of (de/re)compiling parts of the kernel code. Each DRK code cache contains instrumented basic blocks: short sequences of kernel code interleaved with instrumentation code, where the original sequence of kernel code has a single entry and exit point. A basic block is eagerly inserted into DRK's code cache when it is the target of a direct branch, and lazily inserted into DRK's code cache when that block is the target of an indirect branch. Once in the code cache, execution never leaves the code cache, except for when a special ``dispatcher" function is called to find or create the next basic block to be executed.
+
+% --------------------------
+% --------------------------
+
+\section{Architecture and Design} \label{sec:arch}
+
+In this section, we describe how {\sysname} meets the goals laid out in \Secref{intro}. To do so, we describe several challenges, alternative approaches, and the solutions we chose.
+
+% --------------------------
+
+\subsection{Mixed-mode Execution}
+Our first goal of comprehensiveness requires that {\sysname} control the execution of all module code. We can achieve this goal by attaching instrumentation when some module code is first executed and leaving instrumentation attached until the next context switch. However, our second goal requires that any overhead introduced by {\sysname} only affect instrumented modules. {\Sysname} introduces overhead when it translates, caches, and executes instrumented code. If {\sysname} is left attached then it would eventually instrument kernel code and fail to meet our second goal. This interaction between our first two goals forces code to execute in one of two modes: native or instrumented. Under this lens, module code executes in instrumented mode and kernel code executes in native mode. Attaching {\sysname} causes a native-to-instrumented mode switch and detaching causes an instrumented-to-native mode switch.
+
+{\Sysname} dynamically detects when control transfers between the kernel and its modules and switches the mode accordingly. Detecting and interposing on control-flow transfers that should lead to mode switches is challenging. The obvious way to detect when to switch modes is to inspect every control-flow transfer instruction. This is easy when executing instrumented code. For example, the dispatcher can switch modes when it detects that control is transferring to the kernel. However, interposing on module entry points is non-trivial because {\sysname} has no control when kernel code is executing. Page protection is one mechanism that {\sysname} uses to detect control-flow tranfers to modules. All module code is made non-executable, and any attempt to execute module code results in a page fault exception. Page fault exceptions are first handled by {\sysname}, which chooses to attach instrumentation if the faulted instruction is a module address. Because of their cost, page faults are depended on only as a last resort. Instead, {\sysname} changes the module entry points used by the kernel, allowing for efficient entry point interposition.
+
+TODO
+
+%{\Sysname} dynamically and proactively changes module entry points before they are observed and executed by the kernel. Instrumentation attaches when the kernel executes these changed entry points. Before attaching, 
+%
+%
+%Before and after each invocation of a kernel function, {\sysname} attempts to discover and change potential module entry points.
+%
+%
+%Potential module entry points are discovered and changed each time {\sysname} detaches because of a call 
+%
+%
+%Several implementation strategies were available when considering how to avoid page faults:
+%\begin{enumerate}
+%	\item Change each indirect call in the kernel source code that has the potential to transfer control to a module. These changes can be done manually or automatically. Extensive manual changes to the kernel's source code failed to meet our third and fourth goals. Automatically changing the kernel source code (e.g. using a compiler extension) had the potential to introduce unnecessary performance overhead on indirect function calls that do not transfer control to any module.
+%\end{enumerate}
+
+
+%Dynamically changing entry points was motivated by the goals set out in \Secref{intro}. 
+
+
+%Our approach needed to work on arbitrary binary modules, and so changing how module vendors compile their modules was not an option. Our approach could not depend on significant changes to the kernel or impose unnecessary overhead to non-module kernel code. This ruled out (manually or automatically) changing how the kernel calls potential module entry points. Finally, our approach needed to be automatable.
+
+%the compiler toolchain used by module vendors was not an option. Any approach  
+%
+%The same effect can be achieved by changing the source code; we decided against changing the kernel source code for several reasons:
+%\begin{enumerate}
+%	\item Manually changing source code does not meet our third or fourth goals.
+%	\item Automatically changing the kernel source code (e.g. with a compiler) meets our fourth goal, but suffers two problems. First, such automation would require pointer analyses, which are conservative by nature. This conservatism can lead to a higher dependence on page faults for handling attaching. If the anaylses are made overly aggressive, then some invocations of kernel code by the kernel will attempt to attach {\sysname}. Both cases introduce unnecessary overhead.
+%	\item Significant changes, either to the kernel or to the compilation toolchain, are unlikely to be adopted by the greater community.
+%\end{enumerate}
+
+%Our third goal of ease of portability across kernel versions and changing APIs meant that we did
+
+%Our first goal of instrumenting arbitrary binary modules meant that we could not change modules to 
+
+
+
+%{\Sysname}'s easily detects mode-switching control-flow transfers when instrumenting a module because it's dispatcher controls the flow of execution within an instrumented module. However, when executing in native mode, {\Sysname} has no control over execution.
+
+%First, {\sysname} is not in control of native execution. Unlike native execution, all control-flow transfers are routed through {\sysname}'s dispatcher when  
+%the control-flow boundaries between modules and the kernel and interposes
+
+%Kernel and exempt module code execute natively and all other modules execute under the control of {\sysname}.
+
+%Comprehensiveness requires only that all module code is instrumented. As a result, {\sysname} must control the execution of all module code. Comprehensiveness 
+%Any attempt to execute non-exempt module code must attach {\sysname}, thus switching from native to instrumented mode. Once attached, {\sysname} 
+%Kernel code and modules exempt from instrumentation execute natively, while all other modules are instrumented. 
+%Control-flow transfer between the native and instrumented code requires mode switches. 
+%However, comprehensive instrumentation ensures that the overhead of instrumentation does not spill into native code: {\sysname} dynamically detects when to attach and detach instrumentation so that native code is not accidentally instrumented. {\Sysname} detects the 
+
+%Interposing on all mode boundaries is challenging. Any indirect control-flow transfer potentially requires a mode switch because function pointers are shared between modules and the kernel. Further, all interrupts are initially handled by the kernel, requiring at least two mode switches any time an instrumented modules is interrupted.
+
+% {\Sysname} achieves this and imposes no performance overhead on non-instrumented code.  Uninstrumented code includes user-space code, kernel code, and modules exempt from isolation. In the former case, user-space code is never instrumented. In the latter two cases,   
+
+%{\sysname} dynamically detects and detaches before transferring control from instrumented code to code that should not be instrumented. Ensuring that kernel code is not instrumented is complicated by interrupts: 
+
+%To isolate a module, {\sysname} must control 
+
+%Our first goal was to allow for comprehensive instrumentation of module execution without direct overhead to kernel or user-level code. Our second goal requires such coverage be available to arbitrary binary modules, thus module source code, language, or compiler changes were not an option. Our third goal--ease of portability across different versions of the same OS and hardware--meant that our approach could not depend on significant changes to the kernel or depend on specific hardware features (e.g. hardware protection domains, hardware-assisted virtualization). Together, these three goals have motivated the use of a novel dynamic control-flow isolation technique.
+
+%Isolating a module requires that {\sysname} takes control of the execution of all module code when invoked by the kernel, and relinquish control when execution returns to the kernel. This form of mixed-mode execution within the kernel introduces many isolation challenges, especially with interrupts and exceptions (\Secref{interrupts}). To take, maintain, and yield control of execution, direct and indirect control-flow transfers must pass through {\sysname}'s dispatcher. \note{TODO: reference a diagram that shows the dispatcher} However, taking control of execution on entry to a module requires that the kernel calls the dispatcher on our behalf. This presupposes that the kernel knows exactly which control-flow transfers enter the module. Relinquishing control to the kernel from an instrumented modules requires similar information.
+
+%Normally, when a module is loaded into the kernel, its code segment is placed into a well-defined region of executable memory. At a minimum, a module's symbol table exports the \texttt{init} and \texttt{exit} functions used by the kernel to install and uninstall the module. These and any other functions exported by the module represent natural entry points into the module. However, the functions exported in a module's symbol table are a subset of the available entry points into a module. Typically, modules register callback functions with the kernel, and these functions are not always present in the module's symbol table. As a result, any address into a module's code segment represents a potential entry point into the module.
+
+%Our approach to detecting and interposing on module entry points has been to partition the kernel's region for module code into a \emph{raw module region} and a \emph{shadow module region}. We call addresses into these regions \emph{raw addresses} and \emph{shadow addresses}, respectively. The kernel writes module code into the raw module region when loading modules. The shadow region--which is unknown to the kernel but is maintained by {\sysname}--occupies the same amount of memory as and is located at a constant offset from the raw region. This one-to-one correspondence between raw and shadow addresses is used by {\sysname} to efficiently take control of module execution.
+
+%We bootstrap {\sysname}'s control over the module by replacing each raw function address in the module's symbol table with it's associated shadow address (\Secref{shadow_module}). The shadow region occupies the same 
+
+%When the kernel attempts to install the module, it does so through the shadow \texttt{init} address, which redirects execution through {\sysname}'s dispatcher, thus taking control of module execution.
+
+% We assume that the kernel will behave in a sensible way and not attempt to call arbitrary raw module addresses. In case the kernel is misbehaving or isolation is broken, the raw module region is page protected against execution. Given this expectation, the first entry point into a module must be an address in the module's symbol table. Knowing this
+
+%In our current implementation, we have chosen to relax transparency and allow both the kernel and module to observe shadow addresses. Further transparency might be maintained by translating all shadow addresses into raw addresses so that an instrumented modules cannot any {\sysname} memory locations. Alternatively, all module addresses, including return addresses stored on the stack, could be translated to shadow addresses. While both are apparently attractive solutions, the former trades performance for transparency and the latter fails to maintain transparency for modules that inspect their own instructions.
+
+%{\Sysname} yields control of an instrumented module back to the kernel in three cases: when a module jumps to or calls a kernel address, when a module returns to a kernel address, or when an interrupt or exception occur while executing module code. When {\sysname} is controlling module execution, all direct and indirect control-flow transfers are routed through the dispatcher. The dispatcher detects kernel addresses and detaches when control transfers. In the second case, \texttt{RET} instructions are rewritten to behave like jumps, thus allowing us to re-use the same mechanism of detaching. Finally, in order to properly detach in the event of an interrupt or exception, {\sysname} is always in control of each CPU core's \empty{interrupt descriptor table} (IDT), allowing {\sysname} to detach when interrupted and arrange for execution to re-enter {\sysname}'s control after the kernel has handled the interrupt. Again, we have chosen to relax transparency in the case where the return address of interrupts does not represent actual module code addresses.
+
+% --------------------------
+
+%\subsection{Maintaining Isolation}
+%The methods described in the previous section isolate module execution up to the point where the kernel calls a raw module address. This is forbidden before a module is initialized but is common after module initialization. The primary means of extending the kernel's functionality is for a module to register (with the kernel) a data structure that implements a kernel interface. Modules register these data structures by invoking special kernel-exported functions. The kernel's interfaces typically require addresses to module functions, hence the possibility of raw module addresses leaking into the kernel. One approach to handling this case would be to augment the memory protection mechanism to trap and redirect execution of raw module addresses to their shadow equivalents. This solution hides failures in the isolation mechanism and has undesirable performance implications.
+
+%Our approach has been to recognize the importance of the kernel-exported API and its role in making raw function addresses available to the kernel. When execution transfers from the module to the kernel, {\sysname}'s dispatcher detects the uses of kernel-exported functions and redirects execution to \emph{kernel wrappers}. Kernel wrappers recursively update the data structures passed to the kernel so that they contain shadow module addresses in place of raw addresses. After wrapping all function arguments, control is transferred to the intended kernel function. Kernel wrappers dynamically maintain isolation by ``growing'' the set of known module entry points. As an optimization, we developed a method that avoids redundant wrappings when shared data has not changed (\Secref{tainted_data}). The dependence on memory protection is relegated to detecting and maintaining isolation in the presence of failures and corner cases. Such corner cases arise when modules update the shared data structures after registering them with the kernel. In practice, these cases quickly self-correct, thus minimizing the potential for excessive performance overhead.
+
+% --------------------------
+
+\subsection{Interrupts and Exceptions \label{sec:interrupts}}
+
+\begin{figure}
+\[
+\begin{matrix}
+\tt{R_1} & & & & \tt{\overset{interrupt}!} & \tt{R_2}\\
+\tt{R_1} & \tt{I_1} & \tt{\underset{interrupt}{\underset{actual}{\not{!}}}} & \tt{\underset{delay}{\underset{\xrightarrow[]{}}{I_2}}} & \tt{\underset{interrupt}{\underset{emulated}!}} & \tt{R_2}
+\end{matrix}
+\]
+\caption{%
+On the first line, an interrupt occurs between raw module instructions $\tt{R_1}$ and $\tt{R_2}$. On the second line, $\tt{R_1}$ and $\tt{R_2}$ are instrumented and instructions $\tt{I_1}$ and $\tt{I_2}$ have been injected between them. We delay interrupts occuring between $\tt{I_1}$ and $\tt{I_2}$ until $\tt{R_2}$ for the following reasons: i) $\tt{I_2}$ must eventually be executed, lest it be responsible for releasing a lock; ii) $\tt{I_2}$ must be executed before the interrupt is handled, lest it not be re-entrant (e.g. CPU-private lock), and; iii) the address of $\tt{I_2}$ cannot be meaningfully translated into a corresponding raw module address, so failure to execute $\tt{I_2}$ before handling the interrupt would likely result in never executing $\tt{I_2}$ when re-attaching {\sysname} at $\tt{R_2}$ after handling the interrupt (e.g. if $\tt{I_1}$ and $\tt{I_2}$ were injected to instrument $\tt{R_1}$).}
+\label{fig:interrupt_delay}
+\end{figure}
+
+Maintaining isolation in the presence of interrupts and exceptions is challenging, and had an impact on the design/implementation decisions of {\sysname} and DRK before us. Our requirements for isolating only module code requires that {\sysname} safely relinquish and eventually regain control on arrival and after handling any interrupt/exception in an isolated module.
+
+We define interrupts to be asynchronous events, not caused by any particular instruction, and exceptions to be synchronous events, caused by the execution of a single instruction. A key distinction between interrupts and exceptions is that interrupts can technically be handled at any point after their arrival, whereas exceptions must be handled before the triggering instruction can proceed. Like DRK, we do not queue interrupts as that can lead to inconsistent machine states, limits the diversity of supported hardware devices and drivers, and changes the original execution interleaving \cite{Feiner2012}. However, as with DRK, we sometimes delay the arrival of an individual interrupt so as to present a plausible machine state to the kernel.
+
+On x86 processors, each CPU core handles interrupts and exceptions uniformly: each kind of interrupt/exception has a handler, and handlers are found in the CPU's IDT. When an interrupt/exception arrives, the CPU locates the appropriate handler in the IDT and control transfers to the handler's address \cite{IntelVolume1}. Interrupt/exception handlers are implemented by the kernel and must not be instrumented by {\sysname}. Handlers can observe and change the state (e.g. registers, runtime stack) of interrupted code, and so presenting a plausible machine state to the kernel handlers is essential.
+
+Handling interrupts of isolated module code is tricky; there is not a one-to-one correspondence between the instructions of instrumented code (which live in {\sysname}'s code cache) and raw module code. This is partially because {\Sysname} allows extensions (called clients) to rewrite or inject code into the code cache (thus allowing for fine-grained instrumentation of modules). Client code need not be re-entrant (but must be idempotent), and can live in-between logical module instructions. Further, complex instructions such as \texttt{CALL}, \texttt{JMP}, and \texttt{RET} are emulated by instructions that interact with the dispatcher. As a result, it is important that interrupts be delivered on logical module instruction boundaries, lest some interrupted client/{\sysname} code holding a lock cause a deadlock. This requirement necessitates that the handling of some interrupts be delayed (\Figref{interrupt_delay}).
+
+Like DRK, {\sysname} delays interrupts in the code cache until the next logical module instruction boundary \cite{Feiner2012}. Exceptions cannot be delayed, and are errors if they occur on non-module instruction boundaries. Delaying allows {\sysname} to emulate x86's precise interrupt delivery, preserves transparency, and imposes fewer burdens on client code authors. However, delaying is complicated by mixed-mode execution. Interrupt handlers are kernel code and must not be isolated. When execution of an isolated module is interrupted, {\sysname} must detach for the kernel to handle interrupt, and re-attach upon return from the interrupt. Re-attaching can be slow because a partially redundant basic block must be translated to finish executing the originally interrupted basic block. These \emph{interrupt tails} have not been a memory/garbage issue; however, the delay caused by their construction motivated an important optimization (\Secref{fast_trans}).
+
+
+%Our handling of interrupts during the transitions from {\sysname} to kernel code and from {\sysname} to instrumented code is unique because of our mixed-mode considerations. In the former case, the burden of delaying an interrupt is placed on the hardware: execution continues in the kernel after the transition is complete, at which point interrupts may safely occur. Thus, interrupts are disabled until all {\sysname}-specific state has been cleaned up the machine state of the once-isolated code has been restored. 
+
+%Re-attaching af
+
+%Our treatment of the latter case was motivated by performance overhead resulting from the mismatch of mixed-mode execution under {\sysname} and single-mode execution under DRK. We observed a case where our original usage of DRK's interrupt delaying mechanism resulted in periods where no forward progress was made toward executing isolated module code (i.e. the kernel was stuck bouncing between {\sysname}'s dispatcher and handling interrupts). Solving this issue involved creating a new means of delaying interrupts and arranging for any hardware-queued interrupts to arrive in a safe ``catch-all'' region during transitions without having to re-enter the dispatcher.
+
+%Delayed interrupts are forcible re-raised by patching the originally interrupted code. Returns from interrupt handlers to module code are re-directed to dispatcher to maintain module isolation. This dispatch can cause a new (and potentially redundant) basic block to be emitted to the code cache, where the new basic block is a suffix of the interrupted basic block. As with DRK, these \emph{interrupt tails} have not been an issue in practice. Finally, the dispatcher executed with interrupts disabled because it is not re-entrant.
+
+%Consider the case where, in the process of transitioning into the code cache, an interrupt occurs. Under DRK (where the entire kernel is instrumented), the interrupt would be delayed and instead of entering the code cache for the next basic block, DRK would enter the code cache for the interrupt handler. In {\sysname}, the the extra dispatch to the interrupt handlers transitions back to native code (but with interrupts disabled). Eventually, the interrupt is handled and \texttt{IRET} is executed, which re-enables interrupts and enters the dispatcher, which again attempts to transition to the original basic block. During this transition, an interrupt arrives and no forward progress has been made toward executing the basic block. 
+
+
+% --------------------------
+% --------------------------
+
+\section{Implementation}
+
+We modified DRK \cite{Feiner2012} to instrument only module code. Instrumenting only module code required that we be able to dynamically gain control on all raw module entry-points and relinquish control when control transfers to the kernel. Because of the in-memory organization of kernel code, detecting when control should be relinquished requires checking if the target of a CTI lies within a fixed range of addresses. Without heavyweight mechanisms like page protection, it appears impossible to detect when kernel code transfers control to a raw module. This has required the development of two novel techniques for discovering and efficiently attaching instrumentation at module entry points: kernel wrappers and shadow modules.
+
+% --------------------------
+
+\subsection{Kernel Wrappers \label{sec:kernel_wrappers}}
+
+\begin{figure*}
+\lstset{language=C, tabsize=2, stepnumber=1}
+\begin{multicols}{2}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+struct device_driver {
+	...
+	int (*probe)(struct device *);
+	int (*remove)(struct device *);
+	void (*shutdown)(struct device *);
+	int (*suspend)(struct device *, pm_message_t);
+	int (*resume)(struct device *);
+	...
+	const struct dev_pm_ops *pm;
+	...
+};
+\end{lstlisting}
+\vfill
+\columnbreak
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+TYPE_WRAPPER(struct device_driver, {
+    PRE {
+        WRAP_FUNC(arg.probe);
+        WRAP_FUNC(arg.remove);
+        WRAP_FUNC(arg.shutdown);
+        WRAP_FUNC(arg.suspend);
+        WRAP_FUNC(arg.resume);
+    }
+    POST {
+        WRAP_RECURSIVE(arg.pm);
+    }
+})
+\end{lstlisting}
+\end{multicols}
+\caption[LoF entry]{Example type wrapper for the Linux \texttt{device\_driver} structure. In the above code, \texttt{arg} is an implicitly defined reference to an instance of the \texttt{device\_driver} structure. Modules typically initialize the function pointers in this structure, and so they must all be wrapped as a potential module entry points.
+
+Function argument type wrappers created using \texttt{TYPE\_WRAPPER} apply uniformly to arguments passed by value, by pointer, and by reference. In the case of pointers, a check is automatically performed to ensure that a type-based policy wrapper is not applied to a \texttt{NULL} pointer. The \texttt{pre} and \texttt{post} sections represent policies to be applied before and after the wrapped kernel function is called, respectively. This is desirable because often the kernel will initialize fields of structures.
+
+Function argument type wrappers are specified in Granary, and use the type information exported by our GCC plugin.}
+\label{fig:type_wrapper}
+\end{figure*}
+
+\begin{figure*}
+\lstset{language=C, tabsize=2, stepnumber=1}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+struct task_struct *kthread_create(threadfn thread_fun, void *data, char namefmt[], ...);
+
+FUNC_WRAPPER(kthread_create, (threadfn thread_fun, void *data, const char namefmt[], ...), {
+    struct kthread_create_info *create(0);
+    char format_buff[sizeof create->result->comm];
+    va_list args;
+    va_start(args, namefmt);
+    kern_vsnprintf(&(format_buff[0]), sizeof format_buff, namefmt, args);
+    va_end(args);
+    WRAP_FUNC(thread_fun);
+    return kthread_create(thread_fun, data, format_buff);
+})
+\end{lstlisting}
+\caption{Example function wrapper for creating Linux kernel threads. Function wrappers are useful for small functions and functions where the default, automatic argument type-based policies are insufficient. Automatic type-based policies are applied independently of one-another. In some cases, a pointer passed as a function argument is the address of the first object in an array, and the length of the array is known through another argument. These edge cases are neatly handled by function wrappers. Further, function wrappers enable stubbing-out or re-implementing kernel-exported functionality.}
+\label{fig:func_wrapper}
+\end{figure*}
+
+Detecting when control might transfer from the kernel to a raw module requires proactively changing all potential raw module entry points into behaviourally equivalent {\sysname} attach points. However, detecting these entry points requires understanding what kinds of data are passed to the kernel through function calls, and wrapping those data accordingly. Information about data types is not present in either of the module or kernel binaries. However, type information can be deduced based on the kernel API functions being used.
+
+We detect and handle potential entry points as they are exposed to the kernel through its exported API. We define type-specific argument wrapping policies and function-specific wrapping policies. Wrapper policies apply automatically when an isolated module calls a kernel API function. The policies of the wrapped API maintain isolation by discovering and changing potential raw module entry points into shadow module entry points. These policies are declared using a combination of \texttt{C++11} and the \texttt{C} pre-processor (\Figref{type_wrapper,func_wrapper}).
+
+Our goal was to automate the process of isolating new modules. To that end, we developed a GCC plugin that emits exported function and type declarations to a separate file when compiling the Linux kernel. A script automatically transforms the emitted declarations into kernel function argument type wrappers (\Figref{type_wrapper}) and kernel function wrappers (\Figref{func_wrapper}). Minor manual adjustments are needed to impose domain-specific checking and wrapping for function wrappers. At {\sysname}'s compile time, a \texttt{C++} meta-program automatically generates concrete kernel function wrappers for each of the (approx.) \numprint{6000} kernel-exported functions from the policies. Function policies are directly transformed into wrappers. For those kernel functions without specific function policies, function wrappers are generated that apply the argument-type policies to each of the kernel function's arguments.
+
+For efficiency, a mapping from kernel-exported function addresses to wrapper function addresses is stored in a minimal perfect hash table \cite{Belazzougui_Botelho_2008}. When emulating CTIs, the {\sysname} dispatcher first checks if the target of the CTI is a kernel address. If so, the kernel address is looked up in the hash table, and control transfers to the mapped kernel function wrapper after {\sysname} detaches. Execution of the wrapper ensures that isolation is maintained, even when new module entry points are indirectly exposed through function arguments.
+
+Our declarative approach and use of meta-programming has enabled two novelties:
+\begin{enumerate}
+	\item Aggressive, type-specific tainted structure tracking using function pointers and heap-allocated structure extension (\Secref{tainted_data}).
+	\item The imposition of high-level type and semantic information onto opaque module binaries and their heap-allocated data structures, without changing the kernel or the module.
+\end{enumerate}
+
+% --------------------------
+
+\subsubsection{Dynamic Kernel Wrappers \label{sec:dynamic_wrapper}}
+In some cases, wrapping only exported kernel functions is insufficient to maintain isolation. For example, when isolating network drivers, we discovered that a non-exported kernel function (\texttt{x86\_\linebreak[0]swiotlb\_\linebreak[0]alloc\_\linebreak[0]coherent}) was executed by some modules. This case was an instance of a more apparent problem: internal fields of arguments to kernel functions are sometimes initialized/altered by the kernel for explicit use by modules. To maintain isolation, it is insufficient to only wrap arguments before they are passed to the kernel. This discovery showed that we needed a way to re-wrap arguments after they were passed to a kernel function, and was the motivation for distinguishing between \texttt{PRE} and \texttt{POST} wrappers. 
+
+We handle the above case with a \texttt{POST} wrapper that dynamically compiles a partial kernel function wrapper (consistent with the type of the function pointer field). The exposed function pointer is then replaced with the address of the dynamically generated code.
+
+% --------------------------
+
+\subsection{Shadow Modules \label{sec:shadow_module}}
+
+\begin{figure}
+\lstset{language={[x86masm]Assembler},stepnumber=1}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+      CALL next
+next: JMP  attach_granary
+\end{lstlisting}
+\caption[LoF entry]{Shadow module code template for handling module entry points. When the kernel calls a shadow address, it immediately executes another \texttt{CALL} instruction. That instruction transfers control to the next instruction and also places the address of the next instruction on the stack. When the \texttt{JMP} instruction is executed, control transfers to {\sysname}. {\Sysname} inspects the return address left on the stack by the shadow \texttt{CALL} instruction and deduces the intended raw module target address. {\Sysname} attaches and begins instrumentation from the raw address.}
+\label{fig:shadow_template}
+\end{figure}
+
+Kernel wrappers must be able to efficiently detect and wrap raw module addresses, as well as ignore already wrapped raw module addresses. Further, a mechanism must be in place that--upon execution of a wrapped raw module address--discovers the original raw module address for use by {\sysname}'s dispatcher. We opted for a simple solution that meets both these needs: each raw module has a corresponding \emph{shadow module}, and there is a one-to-one mapping between raw and shadow module addresses.
+
+%, where half occupies 536MB
+
+We implemented shadow modules by partitioning the region of memory usually alloted for kernel modules into two contiguous halves: a raw and shadow half%
+\footnote{In perspective, this is not such an extreme use of memory: typical modules are small, and each CPU core already maintains a private code cache that can grow to at least the size of the modules being instrumented.}. Wrapping and unwrapping raw/shadow module addresses takes only a few instructions: we add or subtract \texttt{0x20000000} to translate a raw module address to/from a shadow address. If a raw address has not previously been encountered, then the corresponding shadow address is initialized with dynamically generated code that attaches {\sysname} (\Figref{shadow_template}).
+
+When the kernel installs a module, it initializes portions of the raw module region with that module's instructions and static data. As part of the normal installation of a module, the kernel learns about an entry points into the module: \texttt{init}. Normally, the kernel calls \texttt{init} to initialize the module and its data structures. {\Sysname} intercepts module initialization by first wrapping \texttt{init}. From here, all other module entry points are discovered and wrapped by kernel wrappers. Isolation is enforced by exposing only shadow module addresses to the kernel, and page protecting the entire raw module region against execution as a fall-back.
+
+%Wrapping a raw module address involves , and placing that code at the corresponding shadow address. As kernel wrappers discover and wrap raw module entry points, more of the shadow region is filled out, and control flow isolation is maintained.
+
+% --------------------------
+% --------------------------
+
+\section{Optimizations}
+
+In this section, we describe two optimizations to {\sysname} made possible by our use of kernel wrappers and the mixed-mode execution environment. Together, these optimizations resulted in a worst-case 50\% decrease in overhead. The first optimization, tracking tainted data, detects shallow changes to kernel data structures to avoid redundant wrappings. The second optimization, fast detach, applies when a module directly calls or returns to the kernel.
+
+% --------------------------
+
+\subsection{Tracking Tainted Data \label{sec:tainted_data}}
+
+Kernel wrappers recursively wrap arguments to kernel functions. However, these arguments can be deeply nested and linked structures (e.g. file system inodes). Continually re-wrapping deep structures each time they cross the module-kernel boundary is expensive.
+
+A partial solution to this problem limits the depth of wrapping. In the worst case, some raw module addresses escape wrapping. If invoked by the kernel, a raw module address will trigger a memory protection exception and be handled by {\sysname}. {\Sysname} re-directs control to the shadow module, thus maintaining isolation. This solution alone is undesirable as it does not correct the root problem.
+
+Ideally, every kernel object would contain and embedded hash. If this were the case, then shallow changes to an object would be detected when a wrapper compares the object's embedded hash against a re-computed hash. Again, deep changes might escape detection, but not break control-flow isolation. If the kernel invokes a raw module address, then {\sysname} would take control as before but change the seed of the hash function, thus invalidating every previously wrapped data-structure and correcting the root problem.
+
+Unfortunately, embedding hashes into kernel objects is not practical, and overwriting arbitrary object fields for storing the hash can result in data loss and corruption. However, one can change a function pointer, so long as the changed function pointer behaves as before. The restriction to function pointers is not so bad: many kernel objects reference shared virtual tables (vtables) of function pointers, and continually re-wrapping these vtables is wasteful.
+
+We track changes to objects containing at least one function pointer by designating a tracking function pointer (TFP), as shown in \Figref{tracker}. TFPs are changed to address dynamically generated code that \texttt{JMP} to the TFP's original target address, thus maintaining the same control-flow behaviour. The hash of the object is located beside the \texttt{JMP} instruction in memory. Checking for changes to an object is analogous to comparing agaisnt an embedded hash, but instead compares against the TFP hash. As before, breaches in control-flow isolation are handled by {\sysname} and invalidate all previously computed hashes.
+
+\begin{figure}
+\lstset{language=C, tabsize=2, stepnumber=1}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+struct device_driver {
+	...
+	int (*probe)(struct device *);
+	...
+};
+
+SET_TAINT_TRACKER(struct device_driver, probe);
+\end{lstlisting}
+\caption{Example of setting a function-pointer based tainted data tracker to the \texttt{device\_driver} structure (\Figref{type_wrapper}). \texttt{PRE} and \texttt{POST} wrappers are automatically compiled to transparently handle the tainted data detection protocol. Tainted data trackers specified in Granary, and use the type information exported by our GCC plugin.}
+\label{fig:tracker}
+\end{figure}
+
+% --------------------------
+
+\subsection{Fast Attach and Detach \label{sec:fast_trans}}
+Transferring control between the kernel and an isolated module is analogous to a \emph{context switch}. When the kernel invokes a shadow address, control transfers to the {\sysname} dispatcher, which executes on a CPU-private stack. Control reverts back to the kernel stack to execute instrumented code from the code cache. This stack switch--along with any dynamic code translation and lookup--is expensive but necessary for maintaining isolation. If the dispatcher executed on the kernel stack and left evidence of itself behind, then any stack-use-after-return bugs in kernel or module code could potentially corrupt {\sysname}'s internal state. Even though context switches are costly, they can be predicted and optimized.
+
+The first optimization improves attach speeds after handling interrupts. Interrupts are handled by the kernel, and so {\sysname} must detach when instrumented code is interrupted. Unfortunately, the dynamic instructions executed to context switch and re-attach after handling an interrupt cannot be avoided. Because most of the context switch and code translation is non-preemtible, a long context switch increases the likelihood of the hardware queuing interrupts for later delivery. When instrumented execution resumes, any hardware-queued interrupts are delivered, necessitating further context switching. This is particularly concerning for interrupt-driven modules like network drivers, where enough network traffic can inhibit forward progress of the interrupted module. Our solution was to create a ``catch-all'' location (a series of \texttt{NOP}s) where queued interrupts could safely arrive and be handled natively without requiring any context switches.
+
+The second optimization improves detach speeds when an isolated module makes a direct call to the kernel. Direct calls use the \texttt{CALL} instruction and encode their target addresses. These represent low-hanging fruits for detaching {\sysname}: at basic block translation time, a range check can detect that a direct call targets the kernel. We avoid context switches by changing the translation/emulation scheme of direct calls to quickly detach {\sysname}. This optimization also avoids repeated (but fast) hash table lookups for mapping kernel addresses to kernel wrappers, as the lookup need only be done during basic block translation.
+
+The final optimization improves detach speeds when returning to the kernel. This optimization is similar to the direct call optimization. For each emulated \texttt{RET} instruction, we first test if the return address targets the kernel. If so, a fast-path is taken to detach.
+
+% --------------------------
+% --------------------------
+
+\section{Evaluation}
+TODO
+
+\subsection{Microbenchmarks}
+TODO: kallsyms module, as a way to estimate performance overhead of context switches.
+
+\subsection{Macrobenchmarks}
+TODO: netperf, postmark, lmbench, IObench
+
+% --------------------------
+% --------------------------
+
+\section{Applications}
+TODO
+
+\subsection{Control-Flow Integrity}
+
+We implemented partial control-flow integrity (CFI) enforcement for all isolated modules. Full CFI enforcement requires that control flow through a program follow only those paths available through a pre-determined control-flow graph \cite{Abadi2007}. {\Sysname} enforces the following CFI policy:
+\begin{enumerate}
+	\item A isolated module can arbitrarily \texttt{JMP} to any other isolated module address.
+	\item A module can only call exported kernel functions. If a non-exported kernel function is called, then it must be one which was made available to the module by the kernel (\Secref{dynamic_wrapper}).
+	\item If a module function (either by the module or by the kernel) is called then control must resume at the next logical module/kernel instruction when control returns from the called code.
+\end{enumerate}
+
+{\Sysname} detects violations of the CFI policy in two ways: wrapper-based detection, and stack-based detection.
+
+\subsubsection{Wrapper-based Detection}
+If a module transfers control to a non-module address, then {\Sysname} checks if a kernel wrapper for that particular address exists (\Secref{kernel_wrappers}). If no wrapper exists then that address does not correspond to an exported kernel function. The only (valid) alternative is that the address points into the region of memory containing generated code for dynamic kernel wrappers (\Secref{dynamic_wrapper}). If that is not the case, then a breach of CFI is detected and the module is terminated.
+
+\subsubsection{Stack-based Detection}
+{\Sysname} maintains a thread-private CFI stack. When the kernel \texttt{CALL}s a shadow module address or when {\sysname} emulates a \texttt{CALL} instruction within the module, an entry is pushed onto the CFI stack. Each entry of the CFI stack is a tuple containing a stack pointer and an instruction pointer. The instruction pointer is the next logical module/kernel address. This address is automatically pushed onto the runtime stack by the \texttt{CALL} instruction. The stack pointer is the value of the stack pointer register (\texttt{\%rsp}) after the \texttt{CALL} instruction completes.
+
+When emulating a \texttt{RET} instruction, we check that the stack pointer register corresponds with the most recently saved stack pointer in the CFI stack. If they are not the same then the module is terminated. The return address on the runtime stack is compared against the most recently saved instruction pointer in the stack. Again, if they disagree, then the module is terminated.
+
+\subsubsection{Limitations}
+Our CFI-enforcement policy does not prevent a module from arbitrarily changing the runtime stack or kernel data structures. A module can alter return addresses stored on the stack but not shadowed by {\sysname}'s CFI stack. For example, suppose kernel function \texttt{A} calls kernel function \texttt{B}, which in turn calls a module function \texttt{M}. The CFI stack only enforces that \texttt{M} must return to the next logical instruction in \texttt{B}. However, a malicious or exploited module (e.g. buffer overflow) could  alter control-flow so that \texttt{B} does not return to \texttt{A}. A similar attack vector involves changing function pointers stored in kernel data structures. While the page protection of the raw module region reduces the practicality of both attacks, full enforcement of CFI would require implementing byte-granularity isolation \cite{Castro2009,YMao2011}.
+
+% --------------------------
+% --------------------------
+
+\section{Related Work}
+TODO
+
+%{\Sysname} then protects the newly initialized raw module code against execution as a last-resort means to maintain isolation. When instrumenting an isolated module, {\sysname} translates the instructions from the raw module region.
+
+% and is page protected against execution as a last-resort means to maintain isolation. {\Sysname} incrementally decodes and translates instructions from this region when building basic blocks. 
+
+%Each shadow address is a fixed offset  (536MB) from its corresponding raw module address, allowing for very fast translation between raw and shadow addresses.
+
+%The shadow module region is sparsely populated with {\sysname} trampolines.
+
+%\subsection{Kernel wrappers}
+%Kernel wrappers are created when {\sysname} is compiled. The set of exported kernel functions (approx. 6,000) and their addresses are used to create a minimal perfect hash table \cite{Belazzougui_Botelho_2008} mapping kernel functions to kernel wrappers. \Sysname guarantees that control flow transfers from an instrumented module to an address associated with kernel code are instead directed to the address found through a hash table lookup.
+
+%Kernel wrappers are generated at compile time using C++11 variadic templates, which are parameterized over kernel function addresses and kernel function types. Wrapper templates automatically and consistently wrap kernel functions. Our approach allows policies to be specified in terms of individual kernel function argument types, and have those policies automatically applied within the generated kernel wrappers. \Figref{pci_wrapper} provides an example of the type-based wrapper for PCI device drivers.
+
+%\section{Threat Model}
+%%This section discusses three different attack scenarios which can be used to compromise the kernel's integrity. 
+%%\begin{enumerate}
+%%	\item An attacker can gain root privileges and load a malicious module (e.g. kernel-level rootkit) into the OS kernel. 
+%%	\item An attacker can exploit a vulnerability existing in an already loaded module and inject malicious code to be executed in the kernel's address space.
+%%	\item A system administrator can load an unverified kernel module which itself contains malicious code. 
+%%\end{enumerate}
+
+%Modules can compromise the control flow integrity and data integrity of the kernel in several different ways: 
+%\begin{enumerate}
+%	\item Modules can modify kernel code or control data (e.g. system call table, interrupt descriptor table, and function pointers).
+%	\item Modules can modify non-control data (e.g. device list), instruct devices to attack the kernel via direct memory access (DMA) requests.
+%	\item Modules can manipulate the kernel stack (e.g. return-oriented attacks).
+%\end{enumerate}
+%To protect the integrity of the kernel the system needs to enforce the following properties.
+
+%\paragraph{Kernel Code/Data Integrity} Code, statically allocated data, and dynamically allocated data of the OS kernel are all protected from against prohibited modifications (that change the value being written) by untrusted modules via direct memory access or DMA.
+
+%\paragraph{Control Flow Integrity} Control transfers from untrusted modules to the OS kernel---including function calls, (in)direct jumps, and preemptions---are restricted to a set of kernel service functions pre-identified as trusted entry points into the kernel. Call-return consistency across the module and kernel interface must be strictly enforced. That is, a return from an module to the kernel must target the instruction following the associated call into the module.
+
+%\paragraph{Stack Integrity} Areas of the stack must be protected from memory writes by modules. These areas include (unless permission is explicitly given) function call return addresses, saved/spilled registers, function parameters, and the storage locations of local variables to kernel functions. Prohibited modification of stack data can result in both control flow and data integrity being violated (both locally and globally).
+
+%\section{Scope}
+%As described above, kernel modules can compromise the kernel in several ways. The scope of this project is limited to enforcing security policies that would detect control flow integrity violations by misbehaving modules. We do not address data integrity or its subset, stack integrity, both of which can influence control flow integrity. We also do not address the possibility of attacks by means of DMA.
+
+%Future goals of this project include enforcing fine-grained security policies and type safety while the module is running.
+
+%\section{Problem}
+%Detecting and interposing on control transfers between the kernel and its modules is challenging. The kernel exposes a complex interface to modules where data is freely shared. The type of data shared by the kernel and its modules can include pointers to both kernel and module code. Sometimes pointers to code sections are directly passed as function arguments; other times, these pointers are deeply embedded in other shared data. Thus, any shared data is a potential opportunity for future control transfers between the kernel and its module. Further, any shared code pointer is a potential opportunity for a malicious module to have the kernel inadvertently execute a non-exported kernel function on behalf of the module.
+
+%\section{Approach}
+%Our policies detect the use of non-exported kernel functions by modules and allow kernel developers to securely check and sanitize inputs to exported kernel functions. The mechanism used to enforce these policies is a combination of DBI and static/dynamic interface wrappers. DBI is used to interpose on all control flow transfers within kernel modules and between the kernel and its modules. The static and dynamic interface wrappers are used to attach and detach instrumentation, as well as to discover new transfer points between the kernel and its modules.
+
+%\begin{figure}[h]
+%\begin{center}
+%TODO
+%\includegraphics[width=4cm]{drk-flow.pdf}
+%\end{center}
+%\caption{Example flow of control through \sysname. Native kernel code invokes module code through module wrappers. Modules wrappers attach DRK and begin execution of the instrumented module within the code cache. The instrumented module eventually calls a kernel function and is indirected through a kernel wrapper, which detaches DRK, thus resuming native code execution.}
+%\end{figure}
+
+%\section{Approach}
+%This section describes DRK and how it is used to isolate modules and interpose on control transfers between the kernel and the isolated modules.
+
+%\pagebreak[4]
+%\pagebreak[4]
+%\section{OLD}
+
+
+%\subsection{Overview}
+%\begin{enumerate}
+%	\
+%	\item Direct control transfers to known illegal addresses are detected when code cache blocks are constructed.
+%	\item Indirect control transfers from an instrumented module to the kernel will be detected from within the DRK dispatcher.
+%	\item Indirect control transfers from the kernel to the uninstrumented module will be detected using page protection.
+%	\item Arguments to kernel exported functions will be inspected to ensure that no pointers to non-exported kernel functions are passed into the kernel.
+%\end{enumerate}
+
+%\Sysname isolates kernel modules into implicit protection domains: the code caches of DRK. When executing instrumented module from within DRK's code cache, we detect illegal control-flow transfers in four ways:
+
+%\section{Implementation}
+%\Sysname isolates modules in three conceptual steps. The first step introduces kernel wrappers. The second step introduces module wrappers for module initialization and teardown. The final step dynamically introduces module wrappers as module functions are exposed to the kernel through the kernel wrappers.
+
+%The purpose of wrappers is to attach and detach DRK to/from the module binary. While DRK is attached, the executing code is said to be isolated. Isolation is achieved by transparently checking all control flow transfers and injecting runtime checks into the code. Isolated execution stops when control transfers from isolated code (i.e. the module) to the kernel. Circumventing isolation entails control flow between the kernel and the uninstrumented module that bypasses the wrappers. Bypass attempts are detected using page protection and range detection. These techniques, as well as the wrappers, are described below.
+
+
+
+%Kernel wrappers serve three primary purposes:
+%\begin{enumerate}
+%	\item They sanitize data being sent from the instrumented module into the kernel. Sanitization is important. For example, a malicious module can coerce the kernel into calling a non-exported function on its behalf by giving the kernel a pointer to a non-exported function. Under normal circumstances, \sysname would not detect such an attack, as it would be control flow initiated by the kernel. However, by invoking \texttt{WRAP\_FUNC} on function pointers (indirectly) passed down to the kernel, we can protect against such an attack by requiring that all function pointers either address module code or kernel exported functions.
+%	\item They wrap module function pointers being (indirectly) passed into the kernel. Wrapping module code addresses is important to maintain isolation. If the kernel were made aware of a ``raw'' module code address then isolation would be circumvented, precisely because there would be an opportunity for the module to be executed natively.
+%	\item They represent instrumentation ``detach'' points, where execution transitions from instrumented to native.
+%\end{enumerate}
+
+
+
+%\subsection{Module wrappers} 
+%Conceptually, there are two kinds of module wrappers: ``root'' wrappers, and derived/dynamic wrappers. There are two root wrappers, one for module initialization, and one for module teardown. There are potentially as many dynamic wrappers as there are functions in the module. Root and dynamic wrappers differ only in how and when they are introduced.
+
+%When \sysname is loaded, a function is registered with the kernel that is called each time a new module is loaded. \Sysname replaces the the kernel-exposed addresses of a module's \texttt{init}, \texttt{exit}, and exported functions with unique wrappers when the module is loaded but before it is initialized. Within the \texttt{pre} and \texttt{post} kernel function wrappers, the \texttt{WRAP\_FUNC} macro automatically detects when a ``raw'' module function address is being exposed to the kernel, and replaces it with the address of the unique wrapper for that function.
+
+%\begin{figure}[h]
+%\begin{center}
+%TODO
+%\includegraphics[width=4cm]{drk-shadow-module.pdf}
+%\end{center}
+%\caption{Runtime memory layout of modules and their shadows. Module memory addresses are a constant distance (\texttt{0x20000000}) from their shadow addresses, enabling quick computation of a shadow address from a raw address, or a raw address from a shadow address.}
+%\label{fig:shadow_layout}
+%\end{figure}
+
+%Wrapper uniqueness is ensured by partitioning the module address space into two segments, as show in \Figref{shadow_layout}. Kernel modules are loaded within the low range, and module wrapper functions are dynamically inserted within the high range. There is a one-to-one correspondence between raw module function addresses and wrapper addresses, thus the region containing module wrappers is termed the ``shadow'' module.
+
+%Each time a raw module function address is discovered, the same 11 bytes of code are written into the shadow module (\Figref{shadow_template}) at a fixed offset from the raw module address. The 11 bytes of code represent the module function's wrapper. When called by kernel code, the wrapper code pushes the address of its second instruction (\texttt{push}) onto the runtime stack. From this address, \sysname is able to compute the intended destination address (raw module address), and jump to that address after attaching DRK.
+
+
+
+%When wrapped kernel functions apply the \texttt{WRAP\_FUNC} macro to function pointers 
+
+%\subsection{Changes to DRK}
+%\Sysname is implemented as a DRK client. Typically, DRK and its clients instrument all kernel and module code. This is done by attaching and detaching DRK at the system call boundary. One of the goals of \sysname were to not impose any performance overheads when running non-module kernel code. As such, changes needed were made to DRK that changed is default initialization behaviour. As well, changes to the DRK ``dispatcher'', which is responsible for instrumented control flow transfers, 
+
+%Module wrappers will be introduced at module load time. When an module is loaded, it invokes special kernel functions to expose function pointers to the kernel. These function pointers are the initial or root entry points to the module. Instead of invoking these module functions, the kernel will actually invoke proxies to these functions, which enter into the DRK code cache.
+
+%\paragraph{Dynamic wrappers} will be introduced when pointers to module code are passed from the module to the kernel through kernel wrappers. Dynamic wrappers behave like normal module wrappers, but are created when they are discovered. 
+
+%\subsection{Enforcing Control Flow Integrity}
+%Once our isolation mechanism has been implemented, we will detect control flow integrity violations in two ways.
+
+%\paragraph{Page protection} will be used to detect attempts to circumvent isolation by jumping to raw module code. The uninstrumented module will remain in memory as non-executable code. Any attempt by the instrumented module or by the kernel to execute code from the uninstrumented module will result in a page fault.
+
+%\paragraph{Range detection} will be used in the DRK dispatcher (invoked for indirect jumps) and in the DRK compiler (invoked when compiling basic blocks to instrumented x86) to detect attempts to circumvent isolation by jumping to raw kernel code. The only kernel functions that should be available to a module should be exported functions or functions from other instrumented modules. However, because of our role in the module linking phase, those functions are never exposed to the module; instead, kernel wrappers are exposed. As such, anything in the range of valid code addresses for the kernel is considered ``out of bounds" for modules.
+
+%\subsection{Challenges}
+
+%\paragraph{Return address consistency} Maintaining consistent return addresses from interrupts and kernel function calls is challenging for several reasons:
+%\begin{enumerate}
+%	\item Modules can be interrupted at any point during their execution. In handling an interrupt, the module's thread can be re-scheduled to another CPU. This implies that it is insufficient for CPU-private code cache addresses to be used as return addresses on the runtime stack.
+%	\item DRK must detach when executing interrupt handlers or kernel function calls. This implies that a return from an interrupt or from a kernel function call must re-attach DRK where execution should logically re-begin in the raw module.
+%\end{enumerate}
+
+%Return address consistency is complicated by running one's OS on a multicore machine. \Sysname only supports single core; however, we have plans on supporting multicore systems in the near future. For single core systems, we have addressed the issue of kernel functions return address consistency; however, interrupt return address consistency is as-of-yet unaddressed. This is not an issue now because there is no possibility for a thread to be re-scheduled to another CPU.
+
+%Our plan for supporting return address consistency is to maintain a private stack of return addresses at the bottom of each kernel thread's runtime stack. This stack will contain raw module addresses that should logically be targeted by interrupt/function returns. 
+
+%\paragraph{Direct memory access} DMA represents a threat to \sysname. For example, a device with DMA support could be instructed subvert the integrity of the kernel in a way that \sysname could not intercept. We have no plans to stop such attacks.
+
+%because modules can be interrupted at any point during their execution and because interrupts are handled by kernel code. When an instrumented module is interrupted, \sysname must be able to detach instrumentation, execute the kernel's interrupt handler natively, re-attach instrumentation, and yield execution back to the instrumented module. This process is complicated by the possibility that in the process of handling an interrupt, a module can be rescheduled to another CPU. DRK code caches are CPU-private, and so the return address from an interrupt is not guaranteed to be accurate.
+
+%We have not yet implemented a solution to this problem; however, our approach will involve maintaining a stack of raw modules addresses and storing interrupt and return addresses on this stack.
+
+%\paragraph{Function return address consistency} The consistency of instrumented function return addresses on the runtime call stack is challenging because of CPU-private code caches. Return addresses stored on the stack cannot point to code cache addresses, lest the module's execution be re-scheduled to another CPU. Our approach to handling this issue will be based on DRK's current method of handling function call returns.
+
+%\paragraph{Module-to-kernel return address consistency} The consistency of the module-to-kernel return address is an important security concern and represents an early effort toward stopping return-oriented attacks against the kernel. Our approach to handling this issue will be to store the expected return address on a shadow stack, and to check the shadow stack against the runtime stack when control returns from the module to the kernel.
+
+%\paragraph{Attach/detach consistency} Correctly handling the attach/detach protocol over the kernel-to-module interface, especially in the presence of shared data, is challenging. When module function pointers are passed down into the kernel, we have assumed that we will have the ability to detect and ``wrap" these pointers. However, a module might pass a pointer to a kernel-exported function down to the kernel. In this case, such a pointer will need to be ``unwrapped". Our approach to handling this issue will be based on range checking, i.e. seeing if an address falls in the range of addresses containing DRK code caches, in the range of wrappers, or in the range of kernel code.
+
+%\section{Evaluation}
+%We tested \sysname using a simple ``hello world'' module, a module that prints kernel symbols, the \texttt{e1000} network device driver, and the \texttt{tg3} network device driver.
+
+%To evaluate \sysname, we isolated three different modules, a simple ``hello world'' module which walks through the kernel symbol table and prints kernel symbols, the \texttt{e1000} network device driver, and the \texttt{tg3} network device driver. 
+
+%We evaluated \sysname in both a Guest virtual machine (QEMU) and natively on a 2.93GHz Intel Core\texttrademark 2 Duo CPU. All of our tests used Linux 2.6.32.
+
+%\subsection{Hypothesis}
+%Our evaluation will test three hypotheses:
+%\begin{enumerate}
+%	\item DBI can be used to enforce security policies.
+%	\begin{enumerate}
+%		\item Security policies can be enforced with similar performance penalties to systems like \emph{LXFI} and \emph{XFI}.
+%		\item Security policies can be enforced on arbitrary kernel modules.
+%	\end{enumerate}
+%	\item Instrumenting only kernel modules imposes less overhead compared to instrumenting the entire kernel and all of its modules.
+%	\item Our tool is effective at isolating kernel modules and preventing them from calling non-exported kernel functions.
+%\end{enumerate}
+
+%\subsection{Results}
+%\paragraph{Security}
+%\Sysname can be used to enforce various security policies in the kernel space. However to back our claim we still need to evaluate \sysname against kernel exploits residing in the modules. We describe some possible approaches to security by means of type deduction, type checking, ownership tracking, and capabilities in our future work section. \texttt{tg3} also proved that we detect invocations of unexported kernel functions. For example, we detected the use of the unexported function \texttt{x86\_swiotlb\_alloc\_\-coherent}.
+
+%\paragraph{Isolation} 
+%\Sysname promises to achieve complete isolation between the kernel and the modules. Our isolation testing focused on the \texttt{hello world} module, \texttt{tg3} and \texttt{e1000} network device driver. As described earlier the \texttt{hello module} was a simple module which walks through the symbol table and prints all the kernel symbols. For \texttt{tg3} and \texttt{e1000} network drivers, we verified that all module functions that were downward-exposed to the kernel were correctly wrapped by \sysname and no code for these device drivers are getting executed natively by a simple and unique technique. The verification required manually inserting function calls to the the address \texttt{0xFFFFFFFFDEADBEEF} as if it were the address of \texttt{printk} into every \texttt{tg3} and \texttt{e1000} function. Within DRK's dispatcher, we replaced \texttt{0xFFFFFFFFDEADBEEF} with the address of \texttt{printk}. Wrapped functions running from the code cache successfully invoked \texttt{printk}, whereas unwrapped module functions getting executed natively invoked by the kernel resulted in segmentation faults. By creating more type wrappers and directing \sysname to wrap more exported kernel functions, we were able to achieve full isolation ensuring all execution of device driver code happens from code cache. Extracting type information from the kernel and generating the type wrappers for the kernel function was addition task as we have done it manually. Both \texttt{tg3} and \texttt{e1000} uses mostly the same kernel functions so isolating one of them solves our purpose for the other but as our future work we need to write a \texttt{gcc} extensions which will do the job of extracting type information for the kernel during build.
+
+%\paragraph{Performance} To evaluated the performance overhead incurred by \sysname, we run \texttt{netperf}\cite{netperf_hp} to exercise the linux e1000 driver as the kernel module. We did our evaluation in the guest virtual machine (QEMU) instead of ``bare metal" device since we encountered an issue related to kernel DMA operation when running netperf with \texttt{tg3} driver on the native system. As our experimental setup we run \sysname in Guest Virtual machine (QEMU) running Linux 2.6.32 on a Host system equipped with an Intel(R) Core(TM) i7-860X 2.80 GHz CPU. For the other side of network we used two different setup: a) we run the netserver on the Host Machine and b) we used other machine equipped with 2.93GHz Intel Core\texttrademark 2 Duo CPU and running Linux 2.6.32 and is located on the same subnet mask running the server. To design our testing strategy we took the reference from \emph{LXFI} who also uses netperf to evalute their system. In our description we uesd ``TX" to represent the VM running \sysname sends packets and ``RX" to represent the VM running \sysname receive packets from the network. 
+
+%\begin{table*}[htbp]
+%\begin{center}
+%\begin{tabular}{|l|r|r|r|r|}
+%\hline
+%\multicolumn{ 1}{|c|}{Test} & \multicolumn{ 2}{c|}{Throughput} & \multicolumn{ 2}{c|}{CPU \%} \\ \cline{ 2- 5}
+%\multicolumn{ 1}{|c|}{} & \multicolumn{1}{c|}{Without Isolation} & \multicolumn{1}{c|}{With Isolation} & \multicolumn{1}{c|}{Without Isolation} & \multicolumn{1}{c|}{With Isolation } \\ \hline
+%TCP\_STREAM TX & 463.19M bits/sec & 344.95M bits/sec & 97.7 & 99.8 \\
+%TCP\_STREAM RX & 452.85M bits/sec & 331.33M bits/sec & 97.8 & 98.1 \\
+%UDP\_STREAM TX & 9.02M bits/sec & 6.91M bits/sec & 100 & 100 \\
+%UDP\_STREAM RX & 9.36M bits/sec & 7.01M bits/sec & 100 & 100 \\ \hline
+%\hline
+%TCP\_RR & 9524.04 bits/sec & 7776.16 bits/sec & 96.2 & 96.9 \\
+%UDP\_RR & 8860.22 bits/sec & 7186.20 bits/sec & 99 & 99.9 \\ \hline
+%\end{tabular}
+%\caption{Performance of \texttt{netperf} benchmarks with and without isolation enabled for e1000 driver}
+%\label{}
+%\end{center}
+%\end{table*}
+
+%Table 1 and Table 2 show the results for two different setup. Each test runs for 10 seconds and the ``CPU \%" column represents the CPU utilization by the VM running \sysname. The CPU utilization term suits better when tested with system running on ``bare metal" as incase of Vitual machine this number is not very reliable. In case of virtual machine all the network processing happens outside the context of the virtual guest and we can't acturatly say how much overhead \sysname is causing in terms of CPU utilization. In our case also the CPU utilization is always above 90\% except in the case when server runs on the system other than Host on same subnet mask.
+
+%In the table 1, the ﬁrst test, TCP STREAM, measures the TCP throughput of the e1000 driver. The test uses a send buffer of 16,384 bytes, and a receive buffer of 87,380 bytes. The message size is also set as 16,384 bytes. The table shows the throughput for both ``TX" and ``RX" kind of workloads. The drop in the throughput of e1000 driver because of isolation is close to 25\% and there is a marginal increase in the CPU utlization as it was already close to maximum.  
+
+%The UDP STREAM measures UDP throughput. In our experiment the UDP socket size was 124,928 bytes on the send side, and 116,736 bytes on the receive side. The test sends messages was set as 64 bytes and the two performance number reports the throughput for send and receive. The testing is done for both the types of workloads ``TX" and ``RX" and we see a performance drop between 20-25\% incase of UDP also. The CPU utilization in both the cases was always maximum. we also run the TCP\_RR and UDP\_RR script to measure the impact of \sysname on the latency  using a message size of 1 byte. We see a drop in througput close to 20\% incase of both TCP and UDP connections. 
+
+%In the other setup we used the similar strategy to evaluate the system. The table 2 summerizes the test result for the setup. We are only reporting the effect of \sysname on latency using a message size of one byte. Incase of both the connections we see a drop of below 15\% in the throughput and an increase of 25\% in the CPU utilization due to \sysname. In the second setup the average drop in the throughput is less compared to the first one and this is because the CPU utilization was well below the maximum and there was scope for the system to generate more packets. A more fare conclusion could have been drawn if we have evaluated \sysname with running it on ``bare metal".
+
+%To understand the source of overhead in \sysname, a contribution comes due to frequent context switching between the kernel and the modules incase of \texttt{e1000} device driver. For a control transfer from the kernel to the modules the control goes through the shadow module region and switches to dynamorio context before putting the basic block into code-cache and for a control transfer from the module to the kernel the context switch happens from dynamorio context to the native and then it goes through the kernel interface layer to wrap the kernel API's. Although we evaluated \sysname in VM, the overhead we are getting is according to our expectation and the added advantage we are getting is the security policy which we will implement with cause no overhead when kernel is running.    
+
+
+%\section{Future Work}
+%Our first goal is to make \sysname work with on multicore computers. This means addressing the issue of interrupt return address consistency, among other interrupt-related issues. There are a number of places where global data is shared in \sysname for the sake of convenience; different, more local strategies will need to be employed for \sysname to work on multiple CPUs. We have previously prototyped one such strategy with success; however, due to time constraints and feature requirements, we eventually removed that code.
+
+%Our second goal is to further automate the process of wrapping kernel exported functions. Right now, one must manually collect the necessary type information and kernel-exported function signatures into a single file. We think that a compiler extension would be particularly well suited to the task of generating the necessary type information while as a side-effect of building the Linux kernel. 
+
+%Increasing the number of wrapped functions will enable type checking of kernel exported functions. Our security policy is that modules should not be aware of non-exported kernel functions. We enforce this policy by ensuring that no non-exported function is invoked (unless it is given by the kernel to the module), and that no non-exported function is passed as a function pointer argument to a kernel-exported function. There might, however, be a case where giving an exported function's address to the kernel could compromise the kernel's integrity. We think that such scenarios can be partially mitigated by type checking all exported kernel functions being given to the kernel. This necessitates full type information about all kernel-exported functions.
+
+%Our third goal is to extend the responsibilities of \texttt{pre}/\texttt{post} wrappers. The use of C++ as a way to do type-based wrapping has worked very well for us. We think that we can further extend this feature to do runtime type assignment, type checking, object ownership, and capability passing. For example, direction of data across the kernel interface is a strong indicator of ownership. The \texttt{pre} and \texttt{post} wrappers give us the opportunity to discover the direction that data is moving, as well as the differences between the same data before and after the kernel function is called. This information can be used to assign ownership at the granularity of data structures (e.g. pointer to a \texttt{device\_driver} is passed to the kernel; deduction: the module owns this data) or at a finer granularity (e.g. the kernel changes the \texttt{pm} field of the \texttt{device\_driver} structure; deduction: the kernel owns this field).
+
+%Our final goal involves making tools to help kernel developers debug kernel modules.
+
+%\begin{table*}[htbp]
+%\begin{center}
+%\begin{tabular}{|l|r|r|r|r|}
+%\hline
+%\multicolumn{ 1}{|c|}{Test} & \multicolumn{ 2}{c|}{Throughput} & \multicolumn{ 2}{c|}{CPU \%} \\ \cline{ 2- 5}
+%\multicolumn{ 1}{|c|}{} & \multicolumn{1}{c|}{Without Isolation} & \multicolumn{1}{c|}{With Isolation} & \multicolumn{1}{c|}{Without Isolation} & \multicolumn{1}{c|}{With Isolation } \\ \hline
+%\hline
+%TCP\_RR & 3620.88 bits/sec & 3151.05 bits/sec & 42.99 & 51.3 \\
+%UDP\_RR & 3579.55 bits/sec & 3147.20 bits/sec & 46.83 & 56.2 \\ \hline
+%\end{tabular}
+%\caption{}
+%\label{}
+%\end{center}
+%\end{table*}
+
+%\subsection{Milestones}
+%This section describes our project milestones. Our milestones are based on incrementally implementing and gaining experience with the system.
+%\begin{enumerate}
+%	\item Implement a limited form of attach and detach using page protection and range detection. Page protection will protect the module binary from execution. When the kernel attempts to jump into the module, a page fault will occur, at which point we will attempt to attach DRK. Once attached, range detection will be used in the DRK dispatcher to attempt to detach when the module wants to return to the kernel. Importantly, if the module calls a kernel function or if an interrupt occurs then DRK will remain attached and parts of the kernel will be instrumented.
+
+%\item Investigate how to incrementally add simplified kernel and module wrappers. Again, we will not attempt to detach when kernel code is executed within the scope of a module.
+
+%\item Investigate and implement detach for interrupt handlers.
+
+%\item Attempt to apply similar techniques to the case where the instrumented module calls the kernel, allowing for interleaved control flow of instrumented and non-instrumented code. Importantly, page protection will remain as a back up form of attaching instrumentation in the event that stray function pointers into module code are stored by the kernel.
+
+%\item Extend the functionality of our wrappers to include checking and (un)wrapping function pointers.
+
+%\item Depend on wrappers for maintaining module isolation and on page protection and range checking for detecting attempts to circumvent isolation.
+%\end{enumerate}
+
+%\section{Evaluation}
+%\subsection{Hypotheses}
+%Our evaluation will test three hypotheses:
+%\begin{enumerate}
+%	\item DBI can be used to enforce security policies.
+%	\begin{enumerate}
+%		\item Security policies can be enforced with similar performance penalties to systems like \emph{LXFI} and \emph{XFI}.
+%		\item Security policies can be enforced on arbitrary kernel modules.
+%	\end{enumerate}
+%	\item Instrumenting only kernel modules imposes less overhead compared to instrumenting the entire kernel and all of its modules.
+%	\item Our tool is effective at preventing modules from calling non-exported kernel functions, getting the kernel to call such functions on the module's behalf, and limits return-oriented attacks against the kernel.
+%\end{enumerate}
+
+%\subsection{Experiments}
+%We will test hypothesis 1.a by using \emph{LXFI}'s \cite{YMao2011} evaluation strategy to design our experiment. We will use the SFI Micro-benchmarks to measure the security enforcement overhead caused by \sysname. \emph{LXFI} and \emph{XFI} use three SFI Michrobechmarks (\emph{hotlist}, \emph{lld}, and \emph{MD5}) to evaluate their systems. To evaluate the performance overhead when isolating kernel modules, \emph{LXFI} runs \emph{netperf} to exercise the Linux e1000 driver as the kernel modules. We will test hypothesis 1.b by running netperf with several other network drivers and modules.
+
+%We will test hypothesis 2 by comparing the performance of \sysname to that of an unmodified version of DRK running a null client on common benchmark suites such as \emph{SPECweb}, \emph{SPECsfs}, and \emph{SPECmail}. Deriving meaningful conclusions from differences in performance between an unmodified version of DRK and \sysname might be difficult; however, we hope to find out if the cost of module isolation is outweighed by the speculated benefit of not instrumenting the entire kernel. Further, we hope that a comparison between \sysname, baseline DRK, and native Linux will help provide evidence for our claim that isolation can be2.93GHz Intel Core\texttrademark 2 Duo CPU achieved with no performance overhead when running kernel code.
+
+%We will test hypothesis 3 by finding existing modules or creating modules that behave maliciously and attempt to circumvent our isolation mechanism. If time permits, we will also attempt to find existing malicious modules (e.g. rootkits) that attack the kernel in ways beyond the scope of this project and measure to what extent they are undetectable by \sysname.
+
+%\section{Related Work}
+%\Sysname draws inspiration from a variety of past research, including kernel integrity protection, kernel rootkit analysis, device driver isolation, and mandatory access control models. The goals of previous research has been to protect the kernel against, or detect the presence of, attacks that compromise the integrity of the kernel's code \cite{Srivastava_Giffin_2011, Seshadri2007}, data \cite{Srivastava2009, Baliga2008}, or control-flow \cite{Hofmann2011, Wang2009}.
+
+%\subsection{Type Checking}
+%\emph{OSck} \cite{Hofmann2011} is a hypervisor-based kernel monitoring system that uses dynamic type checking and ad-hoc checks to identify the presence of kernel rootkits. Like the virtualization-based approaches listed below, \emph{OSck} is not appropriate for non-virtualized device drivers. It's not clear to what extent \emph{OSck} depends on the availability of type information for modules, nor how a lack of availability of such information would increase the detection of false positives. Regardless, \emph{OSck} has inspired our approach in two ways. First, our wrappers  make heavy use of type information present in the kernel in order to properly detect and check for function pointers. Second, we implement similar ad-hoc integrity checks within our wrappers.
+
+%\subsection{Externalization to User Space}
+%\emph{Microdrivers} \cite{Ganapathy2005} splits modules into kernel and user space components using programmer annotations. This requires an effort from programmers to decide which part of their module they want to run in user-space. This system does not achieve full isolation as a part of a micro-driver module runs in kernel space. The performance overhead of this approach is another concern. \emph{Nexus} \cite{Williams2008} enforces stronger security policies than \emph{Microdrivers} but it requires additional hardware support.
+
+%\subsection{Virtualization}
+%Systems like \emph{Gateway} \cite{Srivastava_Giffin_2011} and \emph{HUKO} \cite{Xiong2011} use virtualization to establish strong isolation guarantees between kernel components. Unfortunately, neither system is able to isolate native device drivers, which are often distributed as loadable binary modules. 
+
+%\subsection{Hardware Protection Domains}
+%\emph{Nooks} \cite{Swift2005} and \emph{Mondrix} \cite{Witchel2005} isolate modules while running them in the kernel address space. Isolation is achieved using hardware-enforced protection domains. \emph{Nooks} was the first system to provide module isolation using hardware protection but it does not protect the kernel from malicious modules. \emph{Nooks} also suffers from high performance overheads. \emph{Mondrix} provides isolation with low overhead but requires special hardware support. \emph{Mondrix} also does not protect the kernel from abusive use of the module interface.
+ 
+%The design of \sysname's wrappers are heavily influenced by \emph{Nooks}; however, the mechanism used to achieve isolation is different. In our case, wrappers are used to attach and detach DRK. In the case of \emph{Nooks}, wrappers exist in an ``intermediate" zone where hardware protection can be added or removed to/from the kernel. In the case of \emph{Nooks}, there is nothing stopping a module from changing what memory the hardware protects.
+
+%\subsection{Software Fault Isolation}
+%\emph{BGI} \cite{Castro2009}, \emph{XFI} \cite{Erlingsson2006}, and \emph{LXFI} \cite{YMao2011} enforce software fault isolation (SFI) by implementing memory protection through access control and static and dynamic runtime checks. \emph{BGI} and \emph{LXFI} enforce fine-grained memory access permissions at the granularity of bytes. \emph{XFI} maintains coarse grained access permissions on some ranges of contiguous memory. \emph{XFI}, \emph{BGI}, and \emph{LXFI} are successful at isolating faults but lack transparency. \emph{XFI} depends on debugging information present in module binaries so that its binary rewriter can inject runtime checks, whereas \emph{BGI} and \emph{LXFI} require a special compiler to compile both the kernel and its modules. This compiler inserts permission checks before every memory write and control transfer operation.
+
+%\section{Discussion}
+%Our work relates to the material covered in class in terms of security concerns within OSes.
+
+%\paragraph{Capabilities} \emph{HYDRA} \cite{Wulf1974} enforces object permissions using a capability-based system. Capabilties determine what actions are available on certain types of objects and to whom. To some extent, the state of a kernel function being exported is a capability of a module. Through this lens, \sysname attempts to detect attempts to execute code to which modules lack the capabilities.
+
+
+% We recommend abbrvnat bibliography style.
+
+\bibliographystyle{abbrvnat}
+
+% The bibliography should be embedded for final submission.
+
+\bibliography{library}
+
+\end{document}
+
+

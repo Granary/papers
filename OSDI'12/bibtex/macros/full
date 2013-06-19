@@ -1,0 +1,17 @@
+{
+"ASPLOS" : "ACM International Conference on Architectural Support for Programming Languages and Operating Systems",
+"CGO" : "IEEE\/ACM International Symposium on Code Generation and Optimization",
+"EUROSYS" : "ACM European Conference on Computer Systems",
+"OSDI" : "USENIX Symposium on Operating Systems Design and Implementation",
+"PLDI" : "ACM SIGPLAN Conference on Programming Language Design and Implementation",
+"SOSP" : "ACM Symposium on Operating Systems Principles",
+"USENIX ATC" : "USENIX Annual Technical Conference",
+"VEE" : "ACM\/USENIX International Conference On Virtual Execution Environments",
+"TOPLAS" : "ACM Transactions on Programming Languages and Systems",
+"TISSEC" : "ACM Transactions on Information and System Security",
+"TOCS" : "ACM Transactions on Computer Systems",
+"ACM SIGOPS" : "ACM SIGOPS Operating Systems Review",
+"SP" : "IEEE Symposium on Security and Privacy",
+"ISCC" : "IEEE Symposium on Computers and Communications",
+"USENIX Security" : "USENIX Security Symposium"
+}
