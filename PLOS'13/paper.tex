@@ -38,12 +38,18 @@
 \titlespacing\section{0pt}{5pt plus 4pt minus 2pt}{5pt plus 2pt minus 2pt}        
 \titlespacing\subsection{0pt}{5pt plus 4pt minus 2pt}{5pt plus 2pt minus 2pt}   
 
-% Compressed enumerations
-\newenvironment{enumerate*}%
-  {\begin{enumerate}%
-    \setlength{\itemsep}{2pt}%
-    \setlength{\parskip}{0pt}}%
-  {\end{enumerate}}
+\usepackage{enumitem}
+\setenumerate{itemsep=2pt,topsep=2pt,parsep=0pt,partopsep=0pt}
+%
+%% Compressed enumerations
+%\newenvironment{enumerate*}%
+%  {\begin{enumerate}[topsep=0pt]%
+%    \setlength{\itemsep}{2pt}%
+%    \setlength{\topsep}{0pt}%
+%    \setlength{\partopsep}{0pt}%
+%    \setlength{\parsep}{0pt}%	
+%    \setlength{\parskip}{0pt}}%
+%  {\end{enumerate}}
 
 % Compressed bibliograpgy
 %\let\ORIGbibliography\bibliography
@@ -148,7 +154,7 @@ TODO
 
 Kernel modules extend the functionality of operating systems (OSes). Modules add support for new devices (e.g. network and graphics cards) and features (e.g. file systems). The kernel and its modules execute in a complex and dynamic environment. Understanding how modules behave in and affect this environment is important. However, analysing module behavior is challenging. Reasoning about module behaviour requires understanding the kernel/module interface (thousands of functions and shared data structures), as well as scheduling/concurrency concerns and interrupts/exceptions. Some modules are only distributed as binary executables and others cannot execute using existing virtualisation technologies.
 
-Analysing modules also has benefits: regardless of how a module is programmed, it must use (or can be restricted to use) the kernel/module interface. This interface is known ahead of time (via the kernel source code) and is used by the kernel in a predictable way. The privileged nature of the kernel environment means that interrupts can be ``tamed'' and that tools can use privileged hardware features that are not available to user space analysis tools.
+The features of kernel modules also create several opportunities for analysis tools: regardless of how a module is programmed, it must use (or can be restricted to use) the kernel/module interface. This interface is known ahead of time (via the kernel source code) and is used by the kernel in a predictable way. The privileged nature of the kernel environment means that interrupts can be ``tamed'' and that tools can use privileged hardware features that are not available to user space analysis tools.
 
 
 
@@ -164,13 +170,13 @@ Analysing modules also has benefits: regardless of how a module is programmed, i
 
 %Previous work has two limitations: 1) it has focused on complete binary instrumentation (i.e., instrumenting all code) to ensure transparency (... define transparency). In practice, we would like to have flexible instrumentation policies, that allow simply not instrumenting some code at all for efficiency, while also allowing rich/detailed instrumentation of relevant code. Example 1) only instrument module code without adding any instrumentation overhead while running normal kernel code, 2) watchpoint example, 3) instrument only shared accesses, 3) instrument differently for SIMD versus not. The second limitation of current systems is that they don't allow using static type information in the instrumentation code. Give example of why that is useful for possibly the four cases described above. Based on these limitations, our approach introduces mixed-mode execution, which enables implementing rich instrumentation policies, and a method for unifying static and dynamic instrumentation. Explain how mixed-mode execution handles transparency ...
 
-The aforementioned challenges and benefits motivated the creation of Granary: a new dynamic binary translation (DBT) framework for instrumenting Linux kernel modules. Granary has a deep understanding of the kernel/module interface, can operate on arbitrary module binaries, and does not require virtualisation to work. The goal of Granary was to create a framework that makes it easy for developers to create flexible and dynamic instrumentation tools. Previous work has three limitations:  \begin{inparaenum}[i)]
+The aforementioned challenges and opportunities motivated the creation of Granary: a new dynamic binary translation (DBT) framework for instrumenting Linux kernel modules. Granary has a deep understanding of the kernel/module interface, can operate on arbitrary module binaries, and does not require virtualisation to work. The goal of Granary was to create a framework that makes it easy for developers to create flexible and dynamic instrumentation tools. Previous work has three limitations:  \begin{inparaenum}[i)]
 	\item it has focused on instrumenting all code (e.g. the whole kernel or whole system); 
 	\item it does not allow for the instrumentation policy to change dynamically; or
 	\item it does not allow mixing static type information into the instrumentation code.
 \end{inparaenum} 
 
-Instrumenting all code (e.g. the whole kernel) imposes unnecessary performane overheads when one's goal is to analyse modules. In practice, we would like to target instrumentation at specific module code for efficiency, while also allowing rich/detailed instrumentation of the relevant code. This motivated the design of \emph{mixed-mode execution} in Granary: Granary can instrument modules without imposing any overhead on non-module kernel code by running that code natively. This is beneficial because if module code is not being actively used by the kernel then the kernel executes at full speed.
+Instrumenting all code (e.g. the whole kernel) imposes unnecessary performance overheads when one's goal is to analyse modules. In practice, we would like to target instrumentation at specific module code for efficiency, while also allowing rich and detailed instrumentation of the relevant code. This requirement motivated the design of \emph{mixed-mode execution}, which allows Granary to freely instrument module code while non-module kernel code continues to execute natively.  Since no overhead is imposed on non-module code, the kernel runs at full speed whenever it is not executing in a module.
 
 We would also like to be able to dynamically change how code is instrumented in response to changing conditions. For example,  we sometimes want to implement different ``levels'' or ``weights'' of instrumentation that apply lightweight/null instrumentation to the majority of code, and heavyweight instrumentation to only some code. This is challenging to do in existing  systems because: \begin{inparaenum}[i)]
 	\item this feature is not supported by default; and
@@ -189,19 +195,27 @@ Module analysis tools created using Granary can dynamically change how code is i
 
 Policy switching is also useful in the context of interrupts. For example, Granary provides a framework for fine-grained memory access instrumentation, called \emph{behavioural watchpoints}. Behavioural watchpoints-based tools expose tainted memory addresses to instrumented programs. If a tainted address is used to access memory then the processor raises a fault. Instead of instrumenting all code in a way that guards against such faults ($P_{watchpoints}$), Granary defaults to instrumenting basic blocks using $P_{null}$. However, when a fault is raised, Granary prevents future faults from occuring within the same basic block by patching the $P_{null}$-instrumented basic block to re-route control to a $P_{watchpoints}$-instrumented basic block.
 
-The last limitation of current systems is that they don't allow one to use static program information and instrument arbitrary, binary modules.  Existing systems for analysing modules fall into one of three categories: \begin{inparaenum}[i)]
-	\item static/dynamic binary analysis tools that give low-level access to instructions and possibly memory;
-	\item static analysis tools that give high-level access to the program's source code and semantics; and 
-	\item mixed static/dynamic tools that have both high- and low-level access to program information.
-\end{inparaenum} Systems falling into the above categories either: \begin{inparaenum}[i)]
-	\item don't give access to high-level, ``big picture'' information available to static analysis;
-	\item require source code and don't give access to low-level information (e.g. instructions, interrupts/scheduling, memory); or
-	\item require source code and changes to the compilation toolchain.
-\end{inparaenum} Despite these limitations, the benefits of static analysis motivated the design of a mixed static/dynamic analysis approach in Granary called \emph{reifying instrumentation}.
+The last limitation of current systems is that they do not allow the use of static program information while also instrumenting arbitrary, binary modules.  Existing program analysis systems fall into one of three categories:
+\begin{enumerate}
+	\item Binary analysis tools. Existing tools give low-level access to instructions and possibly memory but don't give ``big-picture'' information available source code analysis tools.
+	\item Source code analysis tools. Existing tools give high-level access to program semantics but make it challenging to reason about scheduling, interrupts, shared memory, and aliasing.
+	\item Mixed source/binary analysis tools. Existing tools give high- and low-level access to program informaiton, but require changes to the compilation toolchain and sometimes program source code.
+\end{enumerate}
 
-Granary statically analyses the Linux kernel source code to learn about  the interfaces that enable modules and the kernel to interact. Granary exposes this information to instrumentation tools in the form of type and function \emph{wrappers}. Tools can use this information to decide what policy to apply when instrumenting certain module code as well as to inspect and manipulate parts of module/kernel memory in a type-safe way.
+%	\item static/dynamic binary analysis tools that give low-level access to instructions and possibly memory;
+%	\item static analysis tools that give high-level access to the program's source code and semantics; and 
+%	\item mixed static/dynamic tools that have both high- and low-level access to program information.
+%\end{inparaenum} Systems falling into the above categories either: \begin{inparaenum}[i)]
+%	\item don't give access to high-level, ``big picture'' information available to static analysis;
+%	\item require source code and don't give access to low-level information (e.g. instructions, interrupts/scheduling, memory); or
+%	\item require source code and changes to the compilation toolchain.
+%\end{inparaenum} Despite these limitations, the benefits of static analysis motivated the design of a mixed static/dynamic analysis approach in Granary called \emph{reifying instrumentation}.
 
-For example, we are actively developing a tool that uses reifying instrumentation in conjunction with behavioural watchpoints to learn about what fields of what kernel data structures modules read from and write to over the course of their execution. This information allows us to model things like how a typical file system operates on kernel data structures in the process of opening a file. From these models, we can construct behavioural patterns about how modules use kernel data structures and functions. These patterns can be used to classify modules and identify spurious behaviour.
+The benefits of high-level static analysis information motivated its inclusion into Granary using a technique called \emph{reifying instrumentation}. Granary statically analyses the Linux kernel source code to learn about  the interfaces that enable modules and the kernel to interact. Granary exposes this information to instrumentation tools in the form of type and function \emph{wrappers}. Tools can use this information to decide what policy to apply when instrumenting certain module code as well as to inspect and manipulate parts of kernel/module memory in a type-safe way.
+
+%The benefits of high-level static analysis information make it worth it to provide that information to a binary analysis system.
+
+For example, we are actively developing a tool that uses reifying instrumentation in conjunction with behavioural watchpoints to learn about what fields of what kernel data structures are read from or written to by modules. This information allows us to model things like how a typical file system operates on kernel data structures in the process of opening a file. From these models, we can construct behavioural patterns about how modules use kernel data structures and functions. These patterns can be used to classify modules and identify spurious behaviour.
 
 %Mixed static/dynamic analysis tools, however, make the best of both worlds: a compiler can use static information and generate optimised instrumentation that cooperates with a runtime system. We appreciate the benefits of a mixed approach; however, one of Granary's goals was to enable developers to create tools that instrument arbitrary, binary modules. We also recognised that existing compiler-based mixed approaches suffer other problems such as being limited to one instrumentation policy.
 
@@ -423,11 +437,11 @@ Our goal when creating Granary was to make a flexible and efficient framework th
 
 %While designing Granary, we identified the following five features that help achieve this goal: testability, debuggability, portability, comprehensiveness, and efficiency.
 
-\paragraph{Easy to prototype:} Creating instrumentation tools that run in pre-emptive kernels on multi-core computers is challenging. Our experience is that, when possible, modelling a kernel space problem and its instrumentation in user space allows tool developers to easily test assumptions and gain insights. Therefore, we designed Granary to be also able to instrument user space code on both Linux and Mac OS X. We have found this feature very useful as a way of weeding out bugs in new instrumentation tools before applying those tools to actual kernel modules.
+\paragraph{Easy to prototype:} Creating instrumentation tools that run in pre-emptive kernels on multi-core computers is challenging. Our experience is that, when possible, modelling a kernel space problem and its instrumentation in user space allows tool developers to easily test assumptions and gain insights. Therefore, we designed Granary to be able to also instrument user space code on both Linux and Mac OS X. We have found this feature very useful as a way of weeding out bugs in new instrumentation tools before applying those tools to actual kernel modules.
 
 %We have found that testing tools in user space has the benefit of quicker turn-around time when making changes, and that the plethora of user space debugging tools enables faster.
 
-\paragraph{Easy to debug:} Debugging tools that transform and generate executable code on-the-fly can be challenging. However, Granary ameliorates the experience by providing rich debugger commands that query structured meta-data stored alongside all generated code. For example, Granary facilitates debugging by allowing a debugger to step back in time over recently executed basic blocks, inspect/query the register state on entry to those basic blocks, and see what instrumentation policies/state was used to create those basic blocks.
+\paragraph{Easy to debug:} Debugging tools that transform and generate executable code on-the-fly can be challenging. However, Granary ameliorates the experience by providing rich debugger commands that query structured meta-data stored alongside all generated code. For example, Granary facilitates debugging by allowing a debugger to step back in time over recently executed basic blocks, inspect/query the register state on entry to those basic blocks, and see what instrumentation policies and state were used to create those basic blocks.
 
 %, Granary maintains structured meta-data along with all generated executable code. Meta-data is queried by \texttt{gdb} debugger commands to provide rich debugging information.
 
@@ -442,18 +456,25 @@ Granary runs on any of Linux 2.32.x to Linux 3.9.x, compiles with both \texttt{g
 
 \subsection{Contributions}\label{sec:contrib}
 
-Our contributions are described in the following sections:
-\begin{enumerate}[i)]
-	%\item The design and implementation of three novel instrumentation techniques: policy-driven instrumentation, mixed-mode execution, and reifying instrumentation.
-	\item In \Cref{sec:policies}, we discuss a new approach to maintaining and propagating state within a DBT system through the use of instrumentation policies.
-	\item In \Cref{sec:modes}, we discuss how to implement a DBT system that is designed to frequently relinquish and regain control, while still being comprehensive. Our approach uses active and passive methods that detect and interpose on potential mode-switch boundaries.
-	\item In \Cref{sec:reify}, we discuss a new approach of unifying static and dynamic instrumentation. \comment{!!!CUT THIS BECAUSE IT BORES SYSTEMS REVIEWERS?!!!}Our approach uses static type and semantic program information known at mode switch boundaries to guide instrumentation.
+Our contributions are described in the following sections: \begin{inparaenum}[i)]
+	\item in \Cref{sec:policies}, we describe a new method for maintaining state and dynamically changing how code is instrumented;
+	\item in \Cref{sec:modes}, we describe how to efficiently implement mixed-mode execution;
+	\item in \Cref{sec:reify}, we describe how to integrate static analysis information into a DBT system;
+	\item in \Cref{sec:eval}, we evaluate Granary's performance; and
+	\item in \Cref{sec:related}, we discuss related work.
+\end{inparaenum}
 
-%a mixed-mode instrumentation through the use of static program analysis and code generation, and 
-% policy-driven instrumentation. This approach enables a DBT system to dynamically change how code is instrumented without having to worry about maintaining the consistency of any runtime state.
-	\item In \Cref{sec:env}, we discuss some of the challenges of kernel-space instrumentation, as well as some of the benefits inherent to  the environment.
-	\item In \Cref{sec:interrupts}, we depart from previous kernel-space instrumentation work and discuss a new approach to handling hardware and software interrupts occuring within translated code.
-\end{enumerate}
+%	\begin{enumerate}[i)]
+%		%\item The design and implementation of three novel instrumentation techniques: policy-driven instrumentation, mixed-mode execution, and reifying instrumentation.
+%		\item In \Cref{sec:policies}, we discuss a new approach to maintaining and propagating state within a DBT system through the use of instrumentation policies.
+%		\item In \Cref{sec:modes}, we discuss how to implement a DBT system that is designed to frequently relinquish and regain control, while still being comprehensive. Our approach uses active and passive methods that detect and interpose on potential mode-switch boundaries.
+%		\item In \Cref{sec:reify}, we discuss a new approach of unifying static and dynamic instrumentation. \comment{!!!CUT THIS BECAUSE IT BORES SYSTEMS REVIEWERS?!!!}Our approach uses static type and semantic program information known at mode switch boundaries to guide instrumentation.
+%	
+%	%a mixed-mode instrumentation through the use of static program analysis and code generation, and 
+%	% policy-driven instrumentation. This approach enables a DBT system to dynamically change how code is instrumented without having to worry about maintaining the consistency of any runtime state.
+%		\item In \Cref{sec:env}, we discuss some of the challenges of kernel-space instrumentation, as well as some of the benefits inherent to  the environment.
+%		\item In \Cref{sec:interrupts}, we depart from previous kernel-space instrumentation work and discuss a new approach to handling hardware and software interrupts occuring within translated code.
+%	\end{enumerate}
 
 \section{Instrumentation Policies}\label{sec:policies}
 
@@ -483,11 +504,11 @@ A developer prototyping a module analysis tool that uses multiple policies will 
 
 \subsection{Creating Tools with Policies}
 
-Tool developers must implement three functions for each policy: \begin{enumerate*}
+Tool developers must implement three functions for each policy: \begin{enumerate}
 	\item one that instruments a basic block of module code.
 	\item one that instruments a basic block of kernel code.
 	\item one that handles an interrupt in instrumented code.
-\end{enumerate*}
+\end{enumerate}
 
 The majority of tools will focus on implementing (1); however, we have found (2) useful when implementing \emph{data-driven instrumentation} and (3) useful when implementing multiple weights of instrumentation in response to interrupt behaviour. 
 
@@ -576,9 +597,9 @@ Granary enables instrumentation tools to blah blah blah.
 
 \section{Reifying Instrumentation}\label{sec:reify}
 
-\section{Environment}\label{sec:env}
+%\section{Environment}\label{sec:env}
 
-\subsection{Interrupts and Exceptions}\label{sec:interrupts}
+%\subsection{Interrupts and Exceptions}\label{sec:interrupts}
 
 \section{Evaluation}\label{sec:eval}
 
