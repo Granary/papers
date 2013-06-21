@@ -95,7 +95,7 @@ University of Toronto
 } % end author
 
 
-\maketitle
+\twocolumn[\maketitle]
 \subsection*{Abstract}
 TODO
 
@@ -519,9 +519,7 @@ Granary encodes policy information into the meta-data and CTIs of basic blocks. 
 %When a new basic block is translated and stored in the global code cache, the mapping between the basic block and the nativ
 %\paragraph{Instrumentation policies:}
 
-\section{Mixed-Mode Execution}\label{sec:modes}
-
-\begin{figure*}[t]
+\begin{figure*}[t!]
 \lstset{language=C, tabsize=2, stepnumber=1}
 \begin{multicols}{2}
 \begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
@@ -537,7 +535,6 @@ struct device_driver {
 	...
 };
 \end{lstlisting}
-\vfill
 \columnbreak
 \begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
 TYPE_WRAPPER(struct device_driver, {
@@ -557,9 +554,47 @@ TYPE_WRAPPER(struct device_driver, {
 \label{fig:type_wrapper}
 \end{figure*}
 
-Mixed-mode execution allows Granary to efficiently switch between native (uninstrumented) and instrumented code at well-defined \emph{detach} and \emph{attach} points. The benefit of this feature is that tools have the option to run some code without overhead by not instrumenting that code. The value of this feature is that instrumentation tools can target and instrument specific code without negatively affecting overall system performance.\comment{!!!Qualify me!!!} Granary implements mixed-mode execution by relinquishing control at detach points and regaining control at attach points. This makes Granary \emph{comprehensive}: it controls/instruments all execution of any code of interest.
+\section{Mixed-Mode Execution}\label{sec:modes}
+Granary supports two modes of execution: instrumented and native. Instrumented code runs under Granary's control and native code runs outside of Granary's control. Mode switches occur at well-defined \emph{attach} and \emph{detach} points. Detaching occurs when execution transfers from instrumented code to native code, and attaching occurs when execution transfers from native code to instrumented code. The benefit of detaching is that tools are given the option of run some code without overhead by not instrumenting that code. This is valuable because module analysis tools can operate without negatively affecting the kernel's performance.
 
-A detach point is any valid kernel function, and an attach point is any module code executed by the kernel. Granary static analyses the kernel source code to learn about detach points and their specifications. Granary dynamically ``learns'' about attach points by observing module code addresses as they cross the module/kernle interface in the form of shared function pointers. Granary detects shared function pointers by recursively inspecting the data passed over the kernel/module interface using type wrappers (\Cref{fig:type_wrapper}).
+%The benefit of this feature is that tools have the option to run some code without overhead by not instrumenting that code. The value of this feature is that instrumentation tools can target and instrument specific code without negatively affecting overall system performance.\comment{!!!Qualify me!!!} Granary implements mixed-mode execution by relinquishing control at detach points and regaining control at attach points. This makes Granary \emph{comprehensive}: it controls/instruments all execution of any code of interest.
+
+Detaching is implicit when instrumented module code is interrupted or returns to kernel code, and explicit when module code invokes a kernel function. Instrumented module code invokes kernel function \emph{wrappers} in place of kernel functions. A kernel function wrapper is an automatically generated intermediary function between instrumented modules and the kernel. Kernel function wrappers give Granary and its tools access to the arguments and return values of wrapped functions. Inspecting arguments and return values at the kernel/module boundary is safe because it is a point where modules (regardless of their internal programming) must follow the kernel ABI and agree on data structures.
+
+Granary uses kernel function wrappers to actively find attach points. Attach points are exposed as function pointers stored in data structures that modules share with the kernel. For example, a device driver module registers itself with the kernel by sharing a pointer to a \texttt{struct device\_driver} object. This object contains several function pointers (e.g. \texttt{probe}, \texttt{remove}, etc.) back into the module's code. Granary finds these attach points and converts then into wrapped module functions. The mechanism used to find and wrap module function pointers is called type wrapping (\Cref{fig:type_wrapper}). A type wrapper defines functions applied to argument to before and after mode
+
+ and is applied to each argumented to a wrapped kernel function.
+
+
+%If the kernel directly invokes one of these function pointers then Granary is required to attach and instrument the invoked code.
+
+%If the kernel were to directly invoke one of these function pointers then 
+
+%when a device driver (a kind of module) registers itself with the kernel, it shares a \texttt{struct device\_driver} object 
+
+
+%occurs when instrumented module code invokes a kernel function (explicit), returns to kernel code (implicit), or is interrupted (implicit). If module code invokes a kernel function, then the instrumented version of that module code will invoke a wrapped version of the kernel function. 
+% Internally, Granary uses this ability to optimise re-attaching.
+
+%Wrapped kernel functions are automatically created by Granary. They give Granary and its tools access to the arguments and return values of the functions being wrapped. Internally, Granary uses wrappers to inspect  function arguments and objects that they may reference in order to find function pointers leading back to uninstrumented module code.
+
+
+%The effect of detaching is an implicit relinquishing of control: instrumented code directly transfers control to native kernel or to a wrapped kernel function. Granary creates small copies of every kernel function, called kernel wrappers, that invoke the original kernel functions. 
+
+Attaching occurs when the kernel invokes or returns to module code. Attaching takes three forms: \begin{enumerate}
+	\item Implicit attaching, where the kernel returns to instrumented module code.
+	\item Fast attaching, where the kernel invokes a wrapped module function. If the kernel invokes a wrapped module function then, depending on the defined wrapping policies, the arguments to the module function may be inspected or altered by the instrumentation tool.
+	\item Heavyweight attaching, where the kernel faults when trying to invoke page-protected module code. In this case, Granary handles the fault by returning execution to the instrumented version of the faulting module code.
+\end{enumerate}
+
+\subsection{Transparency}
+
+
+%A detach point is any kernel code called by instrumented module code. An attach point is module code that is 
+
+%A detach point is any kernel function and an attach point is any module code executed by the kernel. Granary statically analyses the kernel source code to learn about detach points and their specifications. Granary dynamically ``learns'' about attach points by observing module code addresses as they cross the module/kernel interface. A typed attach point is a
+
+% in the form of shared function pointers. Granary detects shared function pointers by recursively inspecting the data passed over the kernel/module interface using type wrappers (\Cref{fig:type_wrapper}).
 
 
 
