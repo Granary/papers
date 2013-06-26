@@ -482,7 +482,14 @@ For example, tools built with Granary's behavioural watchpoints framework expose
 % instrument as much or as little of the kernel as they want in response to this fault.
 %Instrumentation policies expose three functions: one to instrument module code, one to instrument kernel code, and one to handle an interrupt in instrumented code.
 
-$F_{module}$ and $F_{kernel}$ can abitrarily manipulate instructions and policy properties before they are packaged into basic blocks. These functions decide what the ``next'' policy should be for each CTI within the basic block. For example, if $P_1$'s $F_{module}$ sets the policy of a CTI in the basic block to policy $P_2$, then any module code targeted by the changed CTI will be translated and instrumented by $P_2$'s function $F_{module}$. 
+\begin{figure}[t]
+\begin{center}
+\epsfig{file=diagrams/policy-switching-entry-tracking.eps,width=1.8in}
+\end{center}
+\caption{\label{fig:policy_switching}Example of policy switching that ensures that some instrumentation ($P_{call\_entry}$) executes once at the beginning of a function, regardless of if the first basic block of a function is re-executed. Basic block (1) is instrumented by both $P_{call\_entry}$ and $P_{after\_entry}$, and basic blocks (2) and (3) are instrumented by $P_{after\_entry}$.}
+\end{figure}
+
+$F_{module}$ and $F_{kernel}$ can abitrarily manipulate instructions and policy properties before they are packaged into basic blocks. These functions decide what the ``next'' policy should be for each CTI within the basic block. For example, if $P_{call\_entry}$'s $F_{module}$ sets the policy of a CTI in the basic block to policy $P_{after\_entry}$, then any module code targeted by the changed CTI will be translated and instrumented by $P_{after\_entry}$'s function $F_{module}$ (\Cref{fig:policy_switching}). 
 
 %Because Granary depends on DynamoRIO's instruction encoder/decoder, the full range of DynamoRIO instruction/operand manipulation functions can be applied to instructions within a basic block.
 
