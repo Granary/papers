@@ -6,6 +6,9 @@
 \usepackage{textcomp} % for tilde
 \usepackage{paralist} % for in-paragraph lists
 
+% For drawing FSMs
+\usepackage{tikz}
+\usetikzlibrary{arrows,automata}
 
 % Used for code snippets
 \usepackage{listings,courier}
@@ -64,6 +67,16 @@
     \vspace{-5pt}%
     \ORIGcaption[#1]{#2}%
     \vspace{-12pt}}
+
+% Add listing language for assembly
+\lstdefinelanguage
+   [x64]{Assembler}     % add a "x64" dialect of Assembler
+   [x86masm]{Assembler} % based on the "x86masm" dialect
+   % with these extra keywords:
+   {morekeywords={CDQE,CQO,CMPSQ,CMPXCHG16B,JRCXZ,LODSQ,MOVSXD, %
+                  POPFQ,PUSHFQ,SCASQ,STOSQ,IRETQ,RDTSCP,SWAPGS, %
+                  rax,rdx,rcx,rbx,rsi,rdi,rsp,rbp, %
+                  r8,r8d,r8w,r8b,r9,r9d,r9w,r9b}} % etc.
 
 % Decrease spacing before \paragraphs
 \titlespacing{\paragraph}{%
@@ -183,7 +196,7 @@ The goal of Granary was to create a framework that makes it easy for developers 
 %	\item it does not allow mixing static type information into the instrumentation code.
 %\end{inparaenum} 
 
-Instrumenting all code (e.g. the whole kernel) imposes unnecessary performance overheads when only a subset of code the code is being analysed (e.g. modules). In practice, we would like to target instrumentation at specific module code for efficiency, while also allowing rich and detailed instrumentation of the relevant code. This requirement motivated the design of \emph{mixed-mode execution}, which allows Granary to instrument module code while non-module kernel code executes with zero overhead.
+Instrumenting all code (e.g. the whole kernel) imposes unnecessary performance overheads when only a subset of the code is being analysed (e.g. modules). In practice, we would like to target instrumentation at specific module code for efficiency, while also allowing rich and detailed instrumentation of the relevant code. This requirement motivated the design of \emph{mixed-mode execution}, which allows Granary to instrument module code while non-module kernel code executes with zero overhead.
 
 Granary also supports dynamically changing how code is instrumented in response to changing conditions. For example,  we sometimes want to implement different ``levels'' or ``weights'' of instrumentation that apply lightweight/null instrumentation to the majority of code, and heavyweight instrumentation to only some code. This is challenging to do in existing  systems because: \begin{inparaenum}[i)]
 	\item this feature is not supported by default; and
@@ -441,6 +454,23 @@ In \Cref{sec:policies}, we describe a new method for maintaining state and dynam
 %		\item In \Cref{sec:interrupts}, we depart from previous kernel-space instrumentation work and discuss a new approach to handling hardware and software interrupts occuring within translated code.
 %	\end{enumerate}
 
+\section{Dynamic Binary Translation}\label{sec:dbt}
+
+In this section, we give a brief background on dynamic binary translation in general, and Granary in particular. Binary translation is used for instruction set translation/emulation \cite{QEMU}, runtime optimization \cite{DynamoRIOOptimisation}, and runtime instrumentation (analysis, security, debugging) \cite{Vx32,NaCl,Valgrind}. Binary translation is attractive when few assumptions can be made about the nature of the programs being translated. On architectures like \texttt{x86} where the mix of variably-sized instructions and data make static translation intractable, dynamic binary translation (DBT) is necessary.
+
+A DBT system is \emph{comprehensive} if it controls the execution of all instructions from a binary targeted for instrumentation. DBT systems ensure comprehensiveness by only allowing a translated copy of some original code to execute. This copied code continually yields control back to the DBT system, thus maintaining control.
+
+Comprehensive instrumentation of a binary by a DBT tool requires that the DBT tool be in control of all instructions executed from that binary. DBT tools do this by operating on short sequences of straight-line instructions ending in control-flow transfer instructions (CTIs), called \emph{basic blocks}. Basic blocks are translated so as to yield control to the DBT system so that the DBT system can direct execution to the next basic block. The dispatcher translates and transfers control to new basic blocks, thus emulating the behaviour of the original CTIs. Control remains with the tool to the extent that only translated versions of non-CTIs (e.g. arithmetic and memory instructions) from the original binary are executed natively, while all CTIs are emulated.
+
+Comprehensiveness also requires that a DBI tool hide and protect itself from the instrumented binary. Hiding is necessary for transparency: instrumentation should not change program semantics or behaviour. A program running with instrumentation should not be able to (easily) determine that it is being instrumented, lest it change its behaviour in response to being instrumented. Protection is necessary in the event that a module is intentionally or accidentally malicious. For example, if a malicious module subverted the control of the DBI tool then it could arbitrarily generate executable code and escape further instrumentation.
+
+%Comprehensive DBI is challenging in user space, especially when dealing with multithreaded, multiprocessing, and asynchronous execution (signals). DBI is especially challenging in kernel space: interrupts and exceptions arbitrarily alter control flow, and interrupted kernel threads can resume their execution on different CPU cores.
+
+We built our framework on top of DynamoRIO Kernel (DRK). DRK is a kernel-space port of the user-space DynamoRIO DBI framework \cite{Bruening2004}. DRK comprehensively instruments all Linux kernel and module code, including interrupt and exception handlers, and works on multi-core processors \cite{Feiner2012}. Further, DRK maintains the precise interrupt delivery semantics of the x86 architecture.
+
+DRK is loaded as a kernel module and thereafter controls the execution of all kernel code. Execution of kernel code happens only from within DRK's code caches. DRK caches instrumented kernel code on a per-CPU basis. When DRK's dispatcher is invoked to complete a control-flow transfer to a previously un-executed instruction, it stores the newly translated basic block in the code cache of the current core. As an optimization, direct control-flow transfers are optimized to transfer control between two basic blocks in the code cache, instead of returning to the dispatcher. As with DynamoRIO, DRK exports an API to \emph{clients}, which allows programmers to plug their own instrumentation and translation policies into DRK. DRK takes care not to instrument user-space code: instrumentation \emph{attaches} when user code is interrupted or invokes a system call, and \emph{detaches} when execution returns to user space.
+
+
 \section{Instrumentation Policies}\label{sec:policies}
 
 New module analysis tools are created by implementing one or more interacting instrumentation policies. Module analysis tools use policies to track state (called \emph{policy properties}) and decide how to instrument code.
@@ -482,12 +512,50 @@ For example, tools built with Granary's behavioural watchpoints framework expose
 % instrument as much or as little of the kernel as they want in response to this fault.
 %Instrumentation policies expose three functions: one to instrument module code, one to instrument kernel code, and one to handle an interrupt in instrumented code.
 
-\begin{figure}[t]
-\begin{center}
-\epsfig{file=diagrams/policy-switching-entry-tracking.eps,width=1.8in}
-\end{center}
-\caption{\label{fig:policy_switching}Example of policy switching that ensures that some instrumentation ($P_{call\_entry}$) executes once at the beginning of a function, regardless of if the first basic block of a function is re-executed. Basic block (1) is instrumented by both $P_{call\_entry}$ and $P_{after\_entry}$, and basic blocks (2) and (3) are instrumented by $P_{after\_entry}$.}
-\end{figure}
+\begin{figure*}[t!]
+\begin{multicols}{3}
+\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=2.5cm]
+  \node[state] 		(A)      {$P_{after\_entry}$};
+  \node[state]         	(C) [right of=A]  {$P_{call\_entry}$};
+ 
+ 
+  \path[->] 	(A)	edge 	[loop above] 	node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)
+            			edge         [bend left] 	node {{\footnotesize\ttfamily\bf call}} (C)
+ 			(C)	edge	[bend left]	node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)
+			(C)	edge	[loop above]	node {{\footnotesize\ttfamily\bf call}} (C);
+\end{tikzpicture}
+%\begin{program}
+%\PROC P_{after\_entry}::F_{module} \BODY
+%  \FOR |each instruction|\ I\ |in a basic block|
+%    \IF I\ |is a call instruction| 
+%       \THEN Policy(I) \gets P_{call\_entry}
+%     \ELSE Policy(I) \gets P_{after\_entry}
+%\end{program}
+%\vspace{-2em}
+%\begin{program}
+%\PROC P_{call\_entry}::F_{module} \BODY
+%  \FOR |each instruction|\ I\ |in a basic block|
+%    Policy(I) \gets P_{after\_entry}
+%\end{program}
+\columnbreak
+\lstset{language=[x64]Assembler}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+1: mov    (%rdi), %rax
+   jmp    .2
+2: mov    %rax, (%rsi)
+   test   %rax
+   jz     .4
+3: inc    %rsi
+   inc    %rdi
+   jmp    .1
+4: ret
+\end{lstlisting}
+\columnbreak
+\hspace{-4em}
+\epsfig{file=diagrams/policy-switching-entry-tracking.eps,width=2.5in}
+\end{multicols}
+\caption{\label{fig:policy_switching}Example policy switching protocol that ensures that instrumentation ($P_{call\_entry}$) is performed only once on entry to every function, regardless of if that basic block is re-executed. Basic block (1) is instrumented by both $P_{call\_entry}$ and $P_{after\_entry}$, and basic blocks (2) and (3) are instrumented by $P_{after\_entry}$.}
+\end{figure*}
 
 $F_{module}$ and $F_{kernel}$ can abitrarily manipulate instructions and policy properties before they are packaged into basic blocks. These functions decide what the ``next'' policy should be for each CTI within the basic block. For example, if $P_{call\_entry}$'s $F_{module}$ sets the policy of a CTI in the basic block to policy $P_{after\_entry}$, then any module code targeted by the changed CTI will be translated and instrumented by $P_{after\_entry}$'s function $F_{module}$ (\Cref{fig:policy_switching}). 
 
