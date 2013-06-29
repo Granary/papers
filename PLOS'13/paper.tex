@@ -1,7 +1,7 @@
 \documentclass[letterpaper,twocolumn,10pt]{article}
 \usepackage{usenix,endnotes,multirow}
 \usepackage{cleveref,amsmath,chngcntr}
-\usepackage{epsfig,subfigure,framed}
+\usepackage{framed}
 \usepackage{multicol,tabularx}
 \usepackage{textcomp} % for tilde
 \usepackage{paralist} % for in-paragraph lists
@@ -20,10 +20,15 @@
 \usepackage{caption3} % load caption package kernel first
 \DeclareCaptionOption{parskip}[]{} % disable "parskip" caption option
 \usepackage[small]{caption}
+%\usepackage{subfigure,epsfig}
+%\captionsetup*[subfigure]{position=bottom}
+\usepackage{subcaption}
+\captionsetup{compatibility=false}
+\usepackage{epsfig}
 
 % Make sure that figure numbers are continuous through the document
-\counterwithout{figure}{section}
-\counterwithout{figure}{subsection}
+%\counterwithout{figure}{section}
+%\counterwithout{figure}{subsection}
 
 % Settings on code listings.
 \lstset{language=C,
@@ -60,7 +65,9 @@
 
 % Add a horizontal rule above captions, and make captions closer to their figures
 \DeclareCaptionFormat{ruled_caption}{#1#2#3\hrulefill}
+\DeclareCaptionFormat{unruled_caption}{#3}
 \captionsetup[figure]{format=ruled_caption}
+\captionsetup[subfigure]{format=unruled_caption}
 \let\ORIGcaption\caption
 \renewcommand{\caption}[2][\compressedcaption]{%
 \def\compressedcaption{#2}%
@@ -473,6 +480,48 @@ DRK is loaded as a kernel module and thereafter controls the execution of all ke
 
 \section{Instrumentation Policies}\label{sec:policies}
 
+
+\lstset{language=[x64]Assembler}
+\begin{figure*}[ht!]
+\centering
+\begin{subfigure}[b]{0.33\textwidth}
+\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=2.5cm,scale=0.8, every node/.style={scale=0.8}]
+  \node[initial,state] 		(A)      {$P_{after\_entry}$};
+  \node[state]         	(C) [right of=A]  {$P_{call\_entry}$};
+ 
+ 
+  \path[->] 	(A)	edge 	[loop above] 	node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)
+            			edge         [bend left] 	node {{\footnotesize\ttfamily\bf call}} (C)
+ 			(C)	edge	[bend left]	node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)
+			(C)	edge	[loop above]	node {{\footnotesize\ttfamily\bf call}} (C);
+\end{tikzpicture}
+\ORIGcaption{Policy Switching Protocol}
+\end{subfigure}%
+~
+\begin{subfigure}[b]{0.33\textwidth}%
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+1: mov    (%rdi), %rax
+   jmp    .2
+2: mov    %rax, (%rsi)
+   test   %rax
+   jz     .4
+3: inc    %rsi
+   inc    %rdi
+   jmp    .1
+4: ret
+\end{lstlisting}
+\ORIGcaption{Uninstrumented Code}
+\end{subfigure}%
+~
+\begin{subfigure}[b]{0.33\textwidth}%
+\hspace{-3em}
+\epsfig{file=diagrams/policy-switching-entry-tracking.eps,width=2.5in}
+\ORIGcaption{Instrumented Basic Blocks}
+\end{subfigure}
+\caption{\label{fig:policy_switching}Example policy switching protocol that ensures that instrumentation ($P_{call\_entry}$) is performed only once on entry to every function, regardless of if that basic block is re-executed. Basic block (1) is instrumented by both $P_{call\_entry}$ and $P_{after\_entry}$, and basic blocks (2) and (3) are instrumented by $P_{after\_entry}$.}
+\end{figure*}
+
+
 New module analysis tools are created by implementing one or more interacting instrumentation policies. Module analysis tools use policies to track state (called \emph{policy properties}) and decide how to instrument code.
 
 Policies also serve a broader role in Granary itself. Granary maintains internal policy properties to optimise its performance and to track certain kinds of control flow. One example of a policy property used by Granary to optimise its user space performance is SIMD register tracking. When Granary detects the usage of a SIMD register, it sets the associated property. This property is inherited through the call chain, and informs Granary on whether or not the SIMD registers must be saved/restored when instrumented code yields to Granary. We say that an execution of a function $F$ is in the context of a usage of a SIMD register when the SIMD property is set. If $F$ is later executed by instrumented code where the SIMD property is not set, then a second instrumented version of $F$ (absent the SIMD property) will be stored in the code cache.
@@ -512,50 +561,6 @@ For example, tools built with Granary's behavioural watchpoints framework expose
 % instrument as much or as little of the kernel as they want in response to this fault.
 %Instrumentation policies expose three functions: one to instrument module code, one to instrument kernel code, and one to handle an interrupt in instrumented code.
 
-\begin{figure*}[t!]
-\begin{multicols}{3}
-\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=2.5cm]
-  \node[state] 		(A)      {$P_{after\_entry}$};
-  \node[state]         	(C) [right of=A]  {$P_{call\_entry}$};
- 
- 
-  \path[->] 	(A)	edge 	[loop above] 	node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)
-            			edge         [bend left] 	node {{\footnotesize\ttfamily\bf call}} (C)
- 			(C)	edge	[bend left]	node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)
-			(C)	edge	[loop above]	node {{\footnotesize\ttfamily\bf call}} (C);
-\end{tikzpicture}
-%\begin{program}
-%\PROC P_{after\_entry}::F_{module} \BODY
-%  \FOR |each instruction|\ I\ |in a basic block|
-%    \IF I\ |is a call instruction| 
-%       \THEN Policy(I) \gets P_{call\_entry}
-%     \ELSE Policy(I) \gets P_{after\_entry}
-%\end{program}
-%\vspace{-2em}
-%\begin{program}
-%\PROC P_{call\_entry}::F_{module} \BODY
-%  \FOR |each instruction|\ I\ |in a basic block|
-%    Policy(I) \gets P_{after\_entry}
-%\end{program}
-\columnbreak
-\lstset{language=[x64]Assembler}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
-1: mov    (%rdi), %rax
-   jmp    .2
-2: mov    %rax, (%rsi)
-   test   %rax
-   jz     .4
-3: inc    %rsi
-   inc    %rdi
-   jmp    .1
-4: ret
-\end{lstlisting}
-\columnbreak
-\hspace{-4em}
-\epsfig{file=diagrams/policy-switching-entry-tracking.eps,width=2.5in}
-\end{multicols}
-\caption{\label{fig:policy_switching}Example policy switching protocol that ensures that instrumentation ($P_{call\_entry}$) is performed only once on entry to every function, regardless of if that basic block is re-executed. Basic block (1) is instrumented by both $P_{call\_entry}$ and $P_{after\_entry}$, and basic blocks (2) and (3) are instrumented by $P_{after\_entry}$.}
-\end{figure*}
 
 $F_{module}$ and $F_{kernel}$ can abitrarily manipulate instructions and policy properties before they are packaged into basic blocks. These functions decide what the ``next'' policy should be for each CTI within the basic block. For example, if $P_{call\_entry}$'s $F_{module}$ sets the policy of a CTI in the basic block to policy $P_{after\_entry}$, then any module code targeted by the changed CTI will be translated and instrumented by $P_{after\_entry}$'s function $F_{module}$ (\Cref{fig:policy_switching}). 
 
