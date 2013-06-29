@@ -465,17 +465,45 @@ In \Cref{sec:policies}, we describe a new method for maintaining state and dynam
 
 In this section, we give a brief background on dynamic binary translation in general, and Granary in particular. Binary translation is used for instruction set translation/emulation \cite{QEMU}, runtime optimization \cite{DynamoRIOOptimisation}, and runtime instrumentation (analysis, security, debugging) \cite{Vx32,NaCl,Valgrind}. Binary translation is attractive when few assumptions can be made about the nature of the programs being translated. On architectures like \texttt{x86} where the mix of variably-sized instructions and data make static translation intractable, dynamic binary translation (DBT) is necessary.
 
-A DBT system is \emph{comprehensive} if it controls the execution of all instructions from a binary targeted for instrumentation. DBT systems ensure comprehensiveness by only allowing a translated copy of some original code to execute. This copied code continually yields control back to the DBT system, thus maintaining control.
+A dynamic binary translator is a binary-to-binary compiler: executable code is consumed as input, then decoded, translated, instrumented, and finally re-encoded.  We define translation and instrumentation as follows: \begin{description}
+	\item[Translation] involves modifying (and potentially adding) instructions so that execution behaviour is maintained. For example, some instructions cannot be arbitrarily relocated (e.g. instruction pointer-relative memory loads) without minor adjustment. Translation involves ``fixing'' these instructions so that they will work as expected when executed.
+	\item[Instrumentation] involves adding instructions to the program. Instructions are added during the instrumentation phase to augment the program to achieve some secondary goal (e.g. profiling, debugging).
+\end{description}
 
-Comprehensive instrumentation of a binary by a DBT tool requires that the DBT tool be in control of all instructions executed from that binary. DBT tools do this by operating on short sequences of straight-line instructions ending in control-flow transfer instructions (CTIs), called \emph{basic blocks}. Basic blocks are translated so as to yield control to the DBT system so that the DBT system can direct execution to the next basic block. The dispatcher translates and transfers control to new basic blocks, thus emulating the behaviour of the original CTIs. Control remains with the tool to the extent that only translated versions of non-CTIs (e.g. arithmetic and memory instructions) from the original binary are executed natively, while all CTIs are emulated.
+DBT systems are dynamic insofar as compilation occurs at runtime instead of ahead-of-time. Granary employs a just-in-time (JIT) compilation strategy: input executable code is compiled one basic block at a time. Compilation occurs on-demand: a basic block from the input code is only translated when an attempt is made to execute that block (assuming it has not already been translated). This approach is ideal for \texttt{x86} architectures, where instructions can be overlayed or mixed with data, because Granary will ``discover'' the entrypoints to basic blocks in the input code as the program attempts to execute those basic blocks.
 
-Comprehensiveness also requires that a DBI tool hide and protect itself from the instrumented binary. Hiding is necessary for transparency: instrumentation should not change program semantics or behaviour. A program running with instrumentation should not be able to (easily) determine that it is being instrumented, lest it change its behaviour in response to being instrumented. Protection is necessary in the event that a module is intentionally or accidentally malicious. For example, if a malicious module subverted the control of the DBI tool then it could arbitrarily generate executable code and escape further instrumentation.
+%This approach is ideal for \texttt{x86} architectures because basic blocks in the control-flow graph are ``discovered'' as execution traverses that graph. Attempting to translate the entire control-flow graph before executing it is non-trivial because \texttt{x86} instructions can be overlayed or mixed with data.
 
+
+%A JIT-based strategy is ideal for the \texttt{x86} architecture because instructions and data can be mixed, and instructions can be overlayed on top of eachother. These two issues make determining the full control-flow graph of an abitrary executable intractable.
+%which makes it intractible to statically determine the full set of executable instructions within a given binary.
+% because overlayed instructions and mixed instructions/data make it impossible to know ahead of time.
+% might contain a prefix of another instruction, which can be the target of 
+
+Generally, DBT systems attempt to maintain two properties: comprehensiveness, transparency, and efficiency
+
+\paragraph{Comprehensiveness} A DBT system is comprehensive if translated/instrumented code always executes in place of original code. Comprehensiveness is related to control: a DBT system must control of the execution of all instrumented code. If control is relinquished (i.e. execution enters native, uninstrumented code) then comprehensiveness is at risk. In \Cref{sec:modes}, we describe how Granary maintains comprehensiveness, even when control is relinquished.
+
+%For example, if control is relinquished and some natively executing code is allowed to execute some 
+
+% if some native code attempts to execute some input code meant for instrumentation then comprehensiveness is lost if the DBT system is unable to regain control and direct execution to the instrumented version of the input code. 
+
+\paragraph{Transparency} A DBT system is transparent if instrumented and uninstrumented code behave in the same way given the same inputs and initial state. By default, Granary operates under a relaxed transparency model (\Cref{sec:transparency}); however, the higher levels of transparency can be enabled to the detriment of flexibility.
+
+\paragraph{Efficiency} A DBT system is efficient if the additional overhead resulting from instruction translation (absent instrumentation) is minimized. A discussion of all of the techniques employed by Granary to reduce its overhead is beyond the scope of this paper.
+
+%In \Cref{sec:modes}, we describe how Granary maintains 
+%DBT systems translate all or parts of a program binary into an instrumented binary, and ensure that only the instrumented binary ever execute.
+%DBT systems are dynamic insofar as translation occurs at runtime, not ahead-of-time. 
+%Granary is a just-in-time (FIT) based DBT system, which means that it incrementally translates a program binary into an instrumented binary. The benefits of JIT-based DBT systems are: \begin{inparaenum}[i)]
+%	\item if some code is 
+%\end{inparaenum}
+%A DBT system is \emph{comprehensive} if it controls the execution of all instructions from a binary targeted for instrumentation. DBT systems ensure comprehensiveness by only allowing a translated copy of some original code to execute. This copied code continually yields control back to the DBT system, thus maintaining control.
+%Comprehensive instrumentation of a binary by a DBT tool requires that the DBT tool be in control of all instructions executed from that binary. DBT tools do this by operating on short sequences of straight-line instructions ending in control-flow transfer instructions (CTIs), called \emph{basic blocks}. Basic blocks are translated so as to yield control to the DBT system so that the DBT system can direct execution to the next basic block. The dispatcher translates and transfers control to new basic blocks, thus emulating the behaviour of the original CTIs. Control remains with the tool to the extent that only translated versions of non-CTIs (e.g. arithmetic and memory instructions) from the original binary are executed natively, while all CTIs are emulated.
+%Comprehensiveness also requires that a DBI tool hide and protect itself from the instrumented binary. Hiding is necessary for transparency: instrumentation should not change program semantics or behaviour. A program running with instrumentation should not be able to (easily) determine that it is being instrumented, lest it change its behaviour in response to being instrumented. Protection is necessary in the event that a module is intentionally or accidentally malicious. For example, if a malicious module subverted the control of the DBI tool then it could arbitrarily generate executable code and escape further instrumentation.
 %Comprehensive DBI is challenging in user space, especially when dealing with multithreaded, multiprocessing, and asynchronous execution (signals). DBI is especially challenging in kernel space: interrupts and exceptions arbitrarily alter control flow, and interrupted kernel threads can resume their execution on different CPU cores.
-
-We built our framework on top of DynamoRIO Kernel (DRK). DRK is a kernel-space port of the user-space DynamoRIO DBI framework \cite{Bruening2004}. DRK comprehensively instruments all Linux kernel and module code, including interrupt and exception handlers, and works on multi-core processors \cite{Feiner2012}. Further, DRK maintains the precise interrupt delivery semantics of the x86 architecture.
-
-DRK is loaded as a kernel module and thereafter controls the execution of all kernel code. Execution of kernel code happens only from within DRK's code caches. DRK caches instrumented kernel code on a per-CPU basis. When DRK's dispatcher is invoked to complete a control-flow transfer to a previously un-executed instruction, it stores the newly translated basic block in the code cache of the current core. As an optimization, direct control-flow transfers are optimized to transfer control between two basic blocks in the code cache, instead of returning to the dispatcher. As with DynamoRIO, DRK exports an API to \emph{clients}, which allows programmers to plug their own instrumentation and translation policies into DRK. DRK takes care not to instrument user-space code: instrumentation \emph{attaches} when user code is interrupted or invokes a system call, and \emph{detaches} when execution returns to user space.
+%We built our framework on top of DynamoRIO Kernel (DRK). DRK is a kernel-space port of the user-space DynamoRIO DBI framework \cite{Bruening2004}. DRK comprehensively instruments all Linux kernel and module code, including interrupt and exception handlers, and works on multi-core processors \cite{Feiner2012}. Further, DRK maintains the precise interrupt delivery semantics of the x86 architecture.
+%DRK is loaded as a kernel module and thereafter controls the execution of all kernel code. Execution of kernel code happens only from within DRK's code caches. DRK caches instrumented kernel code on a per-CPU basis. When DRK's dispatcher is invoked to complete a control-flow transfer to a previously un-executed instruction, it stores the newly translated basic block in the code cache of the current core. As an optimization, direct control-flow transfers are optimized to transfer control between two basic blocks in the code cache, instead of returning to the dispatcher. As with DynamoRIO, DRK exports an API to \emph{clients}, which allows programmers to plug their own instrumentation and translation policies into DRK. DRK takes care not to instrument user-space code: instrumentation \emph{attaches} when user code is interrupted or invokes a system call, and \emph{detaches} when execution returns to user space.
 
 
 \section{Instrumentation Policies}\label{sec:policies}
@@ -684,7 +712,7 @@ Attaching occurs in one of three ways: \begin{enumerate}
 
 Fast and slow attaching transfer control instrumented module code. Fast attaching is ``fast'' because the instrumented code address is computed once and emitted as part of the module function wrapper. Slow attaching is ``slow'' because Granary looks up the instrumented address associated with the faulting native address each time the fault occurs.
 
-\subsection{Transparency}
+\subsection{Transparency}\label{sec:transparency}
 An instrumentation system is transparent if the instrumented and uninstrumented versions of a program behave in the same way given the same inputs \cite{Transparency}. By default, Granary operates under a relaxed transparency model: certain artifacts of Granary existence (e.g. instrumented code addresses, changes in timing) are exposed to the kernel and to instrumented modules. Some artifacts are unavoidable. For example, instrumented code (typically) executes more slowly than native code because of additional indirection added by Granary. Granary also requires memory to operate---memory that once allocated becomes unavailable for other uses. Some artifacts that break transparency can be avoided; however, the mechanisms required to maintain transparency in these cases introduce additional overheads.
 
 The trade-off between transparency and overhead motivated the inclusion of configurable levels of transparency in Granary. Granary defaults to being non-transparent for efficiency and flexibility, and if transparency is needed to instrument a module then transparency can be enabled at the cost of increased overheads. By default, Granary exposes the following artifacts: \begin{enumerate}
@@ -733,6 +761,10 @@ The trade-off between transparency and overhead motivated the inclusion of confi
 %Granary enables instrumentation tools to blah blah blah.
 
 \section{Reifying Instrumentation}\label{sec:reify}
+
+%Granary uses a technique that we call reifying instrumentation in order to 
+
+Reifying instrumentation is the process of using static program information known at mode-switch boundaries to guide the application of different instrumentation policies. Reifying instrumentation allows tools to inspect and manipulate a portion of program memory at attach and detach points and in a well-defined way. This is useful because it helps the instrumentation system learn more about the execution of an otherwise opaque binary. The value of this feature is that users can create low-level instrumentation tools that operate on programs in a high-level way. The key insight of reifying instrumentation is that even arbitrary binaries must follow conventions and APIs to correctly interact with other programs.
 
 %\section{Environment}\label{sec:env}
 
