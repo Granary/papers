@@ -676,6 +676,8 @@ Granary supports two modes of execution: instrumented and native. Instrumented c
 
 %The benefit of this feature is that tools have the option to run some code without overhead by not instrumenting that code. The value of this feature is that instrumentation tools can target and instrument specific code without negatively affecting overall system performance.\comment{!!!Qualify me!!!} Granary implements mixed-mode execution by relinquishing control at detach points and regaining control at attach points. This makes Granary \emph{comprehensive}: it controls/instruments all execution of any code of interest.
 
+TODO TODO TODO: Describe the ``first attach'' by saying how Granary interposes on module initialisation.
+
 \subsection{Detaching}
 
 Granary detaches when control transfers from instrumented code to native (uninstrumented) code. If module code invokes a kernel function then the associated instrumented version of the module code will detach when the call executes. In this case, detaching is explicit because Granary knows that control will transfer to native code. Implicit detaches occur when instrumented module code returns to kernel code or is interrupted. Detaching is implicit in this case because instrumented module code does not know when it will be interrupted or if it was invoked by a kernel function (unless a tool tracks this using policies). 
