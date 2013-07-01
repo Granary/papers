@@ -764,12 +764,55 @@ The trade-off between transparency and overhead motivated the inclusion of confi
 
 \section{Reifying Instrumentation}\label{sec:reify}
 
+Granary extracts type and function declarations from the Linux source code and exposes that information to tool writers. This information can be used by tool-authors to inspect data at mode-switch boundaries (kernel and module wrappers) and to dynamically change the instrumentation policy used to instrument module code.
+
+We call the technique of using static analysis information in Granary ``reifying instrumentation'' because:
+\begin{enumerate}
+	\item Static type information is not present in module binaries. Granary re-introduces type information into ``typeless'' module binaries because modules use kernel functions and data structures to interact with the kernel.
+	\item Static program information can guide runtime instrumentation decisions. For example, the policy used to instrument code can be changed based on:
+	\begin{enumerate}
+		\item A memory access to data of a particular type.
+		\item The usage of a particular interface (kernel function or function pointer field within a kernel data structure).
+		\item The presence of an object of a particular type being passed as an argument to a module function.
+	\end{enumerate}
+	\item Runtime type information can be dynamically learned. For example, if a module allocates some memory then that memory is initially typeless. However, if a Granary tool observes that the allocated object is reachable from an argument to a module or kernel function wrapper then a type can be assigned to that memory.
+\end{enumerate}
+
+For example, we are actively developing a tool that uses reifying instrumentation to create models of module behaviour. Reifying instrumentation has two roles in this tool. First, we use assign kernel types to module allocated memory that is shared across the module/kernel interface. Type assignment plays a critical role because it allows us to correlate memory reads and writes within an object to the exact structure fields of that object. Second, we use the kernel and module function wrappers to generate compressed call graphs of a module's execution from the perspective of the kernel.  When combined, this information allows us to say when and where specific parts of kernel data structures are accessed.
+
+The information derived from multiple ``trusted'' modules (e.g. mature, open-source file systems) is combined to construct models of typical module behaviour. We hope that these models will help us to automatically generate new tools that identify spurious module behaviour.
+
+
+%By combining this information from multiple ``trusted'' modules (e.g. mature, open-source file systems), we hope to be able to create instrumentation that discovers spurious module behaviour 
+
+%For example, we can use the static information available to Granary to create a tool that generates code that, when executed, checks that it is 
+
+%kernel and module wrappers can be combined with policy-switching to enforce some API usage integrity constraints. For example, policy switching can be used to accept or reject an execution of module code by observ
+
+%most useful at mode-switching boundaries, where 
+
+%Static program information is available to Granary tools in the form of kernel types and function declarations. Tools can operate on this information with meta-programs, as well as observe 
+
+%Tools can use this information to interface with the kernel or to 
+
+%We use this information in several novel ways:
+%\begin{enumerate}
+%	\item 
+%\end{enumerate}
+
+%Tools can use meta-programs to operate on this information and generate code (at the tool's compile time) that coordinates with the tool's dynamic analyses in order to learn more about module code. 
+
+%This technique, which we call ``reifying instrumentation'', is distinct from typical dynamic analysis
+%We call the technique of mixing static program information into a DBT system ``reifying instrumentation'' because it takes abstract information (e.g. type information) which is absent from module binaries and re-introduces it as actionable data. This data is actionable insofar as the 
+
+%Granary exposes static program information to instrumentation tools in the form of 
+%Granary tools can use static program information 
+%Reifying instrumentation is the process of using static program information known at mode-switch boundaries to guide the application of different instrumentation policies. The key insight of reifying instrumentation is that the execution of attach and detach points (kernel wrappers) give clues as to how modules and the kernel are interacting.
+%Reifying instrumentation allows tools to inspect and manipulate a portion of program memory at attach (module wrappers) and detach points and in a well-defined way. 
+%This is useful because it helps the instrumentation system learn more about the execution of an otherwise opaque binary. The value of this feature is that users can create low-level instrumentation tools that operate on programs in a high-level way. 
 %Granary uses a technique that we call reifying instrumentation in order to 
-
-Reifying instrumentation is the process of using static program information known at mode-switch boundaries to guide the application of different instrumentation policies. Reifying instrumentation allows tools to inspect and manipulate a portion of program memory at attach and detach points and in a well-defined way. This is useful because it helps the instrumentation system learn more about the execution of an otherwise opaque binary. The value of this feature is that users can create low-level instrumentation tools that operate on programs in a high-level way. The key insight of reifying instrumentation is that even arbitrary binaries must follow conventions and APIs to correctly interact with other programs.
-
+%The key insight of reifying instrumentation is that even arbitrary binaries must follow conventions and APIs to correctly interact with other programs.
 %\section{Environment}\label{sec:env}
-
 %\subsection{Interrupts and Exceptions}\label{sec:interrupts}
 
 \section{Evaluation}\label{sec:eval}
