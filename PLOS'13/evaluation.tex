@@ -1,4 +1,34 @@
-Granary is designed to comprehensively instrument kernel modules. We first evaluated the performance of Granary framework alone by running it with different kernel modules. We ran the experiment on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ i7-860 2.80 GHz CPU, 8GB memory, and an Intel 82578DM Gigabit Ethernet card. We used IOzone filesystem benchmark to exercise ext3 module while running it with Granary. Iozone is a useful benchmark for testing data throughput with number of different access pattern. we avoided bottleneck for disk I/O by partitioning main memory to load ext3 module. To compare the throughput of Granary with existing kernel instrumentation framework, we modified DRK to instrument only kernel modules. We implemented similar attach/detach mechanism for DRK at module interface. The framework uses similar kernel wrappers for fast attach and page protection as fall back mechanism to gain control. For initial evaluation of Granary, we developed null policy client and enabled some of the optimizations.
+Granary is designed to comprehensively instrument kernel modules. We first evaluated the performance of Granary framework alone by running it with different kernel modules. We ran the experiment on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ 2 Duo 2.93 GHz CPU, 4GB memory, and an Intel 82598EB 10 Gigabit Ethernet controller. We used IOzone filesystem benchmark to exercise ext3 module while running it with Granary. Iozone is a useful benchmark for testing data throughput with number of different access pattern. we avoided bottleneck for disk I/O by partitioning main memory to load ext3 module. To compare the throughput of Granary with existing kernel instrumentation framework, we modified DRK to instrument only kernel modules. We implemented similar attach/detach mechanism for DRK at module interface. The framework uses similar kernel wrappers for fast attach and page protection as fall back mechanism to gain control. For initial evaluation of Granary, we developed null policy client and enabled wrap depth optimization by limiting it to 2.
+
+
+\begin{table*}[thp!]
+\caption{Iozone Throughput for different filesystem operations}
+% title of Table
+\centering
+% used for centering table
+\begin{tabular}{c c c c}
+% centered columns (4 columns)
+\hline\hline
+%inserts double horizontal lines
+Workload & Native & Granary & Modified DRK  \\ [0.5ex]
+% inserts table
+%heading
+\hline
+% inserts single horizontal line
+Write & 184669.69 & 152223.03 & 55134.09 \\
+% inserting body of the table
+Read & 1577591.69 & 1648645.02 & 1421037.96 \\
+Random Write  & 552380.48 & 412069.48 & 162847.34 \\
+Random Read & 1644573.29 & 1597321.54 & 1636472.14 \\
+
+Mixed Workload & 1168804.11 & 929383.54 & 915196.76 \\[1ex]
+% [1ex] adds vertical space
+\hline
+%inserts single line
+\end{tabular}
+\label{table:nonlin}
+% is used to refer this table in the text
+\end{table*}
 
 %wrapping mechanism for DRK to attach and detach the framework at module interface.
 
