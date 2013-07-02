@@ -485,14 +485,34 @@ In \Cref{sec:policies}, we describe a new method for maintaining state and dynam
 
 \section{Dynamic Binary Translation}\label{sec:dbt}
 
-In this section, we give a brief background on dynamic binary translation in general, and Granary in particular. Binary translation is used for instruction set translation/emulation \cite{QEMU}, runtime optimization \cite{DynamoRIOOptimisation}, and runtime instrumentation (analysis, security, debugging) \cite{Vx32,NaCl,Valgrind}. Binary translation is attractive when few assumptions can be made about the nature of the programs being translated. On architectures like \texttt{x86} where the mix of variably-sized instructions and data make static translation intractable, dynamic binary translation (DBT) is necessary.
+%In this section, we give a brief background on dynamic binary translation in general, and Granary in particular.
 
-A dynamic binary translator is a binary-to-binary compiler: executable code is consumed as input, then decoded, translated, instrumented, and finally re-encoded.  We define translation and instrumentation as follows: \begin{description}
-	\item[Translation] involves modifying (and potentially adding) instructions so that execution behaviour is maintained. For example, some instructions cannot be arbitrarily relocated (e.g. instruction pointer-relative memory loads) without minor adjustment. Translation involves ``fixing'' these instructions so that they will work as expected when executed.
-	\item[Instrumentation] involves adding instructions to the program. Instructions are added during the instrumentation phase to augment the program to achieve some secondary goal (e.g. profiling, debugging).
-\end{description}
+Granary uses a technique called dynamic binary translation (DBT) to instrument Linux kernel modules \cite{DynamoRIO}. DBT is used for instruction set translation/emulation \cite{QEMU}, runtime optimization \cite{DynamoRIOOptimisation}, and runtime instrumentation (analysis, security, debugging) \cite{Vx32,NaCl,Valgrind}. DBT is attractive when few assumptions can be made about the nature of the programs being translated. On architectures like \texttt{x86} where the mix of variably-sized instructions and data make static binary translation intractable, DBT is necessary.
 
-DBT systems are dynamic insofar as compilation occurs at runtime instead of ahead-of-time. Granary employs a just-in-time (JIT) compilation strategy: input executable code is compiled one basic block at a time. Compilation occurs on-demand: a basic block from the input code is only translated when an attempt is made to execute that block (assuming it has not already been translated). This approach is ideal for \texttt{x86} architectures, where instructions can be overlayed or mixed with data, because Granary will ``discover'' the entrypoints to basic blocks in the input code as the program attempts to execute those basic blocks.
+Granary interposes on the module loading process of the Linux kernel. When a kernel module is loaded, Granary replaces the pointer to the module's initialisation function with a pointer to the translated version of the initialisation function's first basic block. The translation process begins when the kernel initialises the module by invoking the translated module code.
+
+Granary translates and instruments module binaries one basic block at a time. That is, new basic blocks are decoded and translated as execution ``discovers'' those basic blocks. Translated basic blocks are linked together and stored in a globally accessible \emph{code cache}. The implication of this approach is that code executing from the code cache will sometimes yield control to Granary to request the address of the next basic block to execute. When instrumented code yields to Granary, a ``context switch'' occurs that transfers execution to a CPU-private stack where Granary operates. Granary will context-switch back to instrumented module code when the next basic block has been found or translated so that instrumented execution may continue. Granary uses caching and hotpatching to reduce the number of context switches. Our observation is that a translated modules stabilise very quickly: context switches stop happening after most module basic blocks have been translated.
+
+Basic blocks in Granary's code cache contain \texttt{x86-64} binary instructions as well as meta-data. The meta-data that Granary records about each basic block includes: \begin{inparaenum}[i)]
+	\item the length in bytes of the original and translated basic blocks;
+	\item the address of the first instruction in the original basic block; and
+	\item the policy information used to instrument the basic block.
+\end{inparaenum} This meta-data is queried by interrupt handlers when deciding how to handle interrupts in instrumented code, as well as by debuggers (e.g. \texttt{gdb}) to give contextual information about a translated basic block. Granary tools can extend and query this meta-data for their own uses as well. For example, Granary's CFG-building tool represents each node in the inter- and intra-procedural CFGs as an extension of the meta-information stored for each basic block.
+
+
+
+%The implication of this approach is that code executing from
+
+%Granary employs a just-in-time (JIT) translation strategy: input executable code is translated one basic block at a time. Translation occurs on-demand: a basic block from the input code is only translated when an attempt is made to execute that block (assuming it has not already been translated). 
+
+%This approach is ideal for \texttt{x86} architectures, where instructions can be overlayed or mixed with data, because Granary will ``discover'' the entrypoints to basic blocks in the input code as the program attempts to execute those basic blocks.
+
+%A dynamic binary translator is a binary-to-binary compiler: executable code is consumed as input, then decoded, translated, instrumented, and finally re-encoded.  We define translation and instrumentation as follows: \begin{description}
+%	\item[Translation] involves modifying (and potentially adding) instructions so that execution behaviour is maintained. For example, some instructions cannot be arbitrarily relocated (e.g. instruction pointer-relative memory loads) without minor adjustment. Translation involves ``fixing'' these instructions so that they will work as expected when executed.
+%	\item[Instrumentation] involves adding instructions to the program. Instructions are added during the instrumentation phase to augment the program to achieve some secondary goal (e.g. profiling, debugging).
+%\end{description}
+
+%DBT systems are dynamic insofar as compilation occurs at runtime instead of ahead-of-time. 
 
 %This approach is ideal for \texttt{x86} architectures because basic blocks in the control-flow graph are ``discovered'' as execution traverses that graph. Attempting to translate the entire control-flow graph before executing it is non-trivial because \texttt{x86} instructions can be overlayed or mixed with data.
 
@@ -502,17 +522,17 @@ DBT systems are dynamic insofar as compilation occurs at runtime instead of ahea
 % because overlayed instructions and mixed instructions/data make it impossible to know ahead of time.
 % might contain a prefix of another instruction, which can be the target of 
 
-Generally, DBT systems attempt to maintain two properties: comprehensiveness, transparency, and efficiency
+%Generally, DBT systems attempt to maintain two properties: comprehensiveness, transparency, and efficiency
 
-\paragraph{Comprehensiveness} A DBT system is comprehensive if translated/instrumented code always executes in place of original code. Comprehensiveness is related to control: a DBT system must control of the execution of all instrumented code. If control is relinquished (i.e. execution enters native, uninstrumented code) then comprehensiveness is at risk. In \Cref{sec:modes}, we describe how Granary maintains comprehensiveness, even when control is relinquished.
+%\paragraph{Comprehensiveness} A DBT system is comprehensive if translated/instrumented code always executes in place of original code. Comprehensiveness is related to control: a DBT system must control of the execution of all instrumented code. If control is relinquished (i.e. execution enters native, uninstrumented code) then comprehensiveness is at risk. In \Cref{sec:modes}, we describe how Granary maintains comprehensiveness, even when control is relinquished.
 
 %For example, if control is relinquished and some natively executing code is allowed to execute some 
 
 % if some native code attempts to execute some input code meant for instrumentation then comprehensiveness is lost if the DBT system is unable to regain control and direct execution to the instrumented version of the input code. 
 
-\paragraph{Transparency} A DBT system is transparent if instrumented and uninstrumented code behave in the same way given the same inputs and initial state. By default, Granary operates under a relaxed transparency model (\Cref{sec:transparency}); however, the higher levels of transparency can be enabled to the detriment of flexibility.
+%\paragraph{Transparency} A DBT system is transparent if instrumented and uninstrumented code behave in the same way given the same inputs and initial state. By default, Granary operates under a relaxed transparency model (\Cref{sec:transparency}); however, the higher levels of transparency can be enabled to the detriment of flexibility.
 
-\paragraph{Efficiency} A DBT system is efficient if the additional overhead resulting from instruction translation (absent instrumentation) is minimized. A discussion of all of the techniques employed by Granary to reduce its overhead is beyond the scope of this paper.
+%\paragraph{Efficiency} A DBT system is efficient if the additional overhead resulting from instruction translation (absent instrumentation) is minimized. A discussion of all of the techniques employed by Granary to reduce its overhead is beyond the scope of this paper.
 
 %In \Cref{sec:modes}, we describe how Granary maintains 
 %DBT systems translate all or parts of a program binary into an instrumented binary, and ensure that only the instrumented binary ever execute.
@@ -605,6 +625,8 @@ Tool developers must implement three functions for each policy: \begin{enumerate
 \end{enumerate}
 
 The majority of tools will focus on implementing $F_{module}$; however, we have found $F_{kernel}$ useful when implementing \emph{data-driven instrumentation} and $F_{interupt}$ useful when implementing multiple weights of instrumentation in response to interrupt behaviour. 
+
+%Granary provides a framework for fine-grained memory access instrumentation, called \emph{behavioural watchpoints}. Behavioural watchpoints-based tools expose tainted memory addresses to instrumented programs. If a tainted address is used to access memory then the processor raises a fault. Instead of instrumenting all code in a way that guards against such faults ($P_{watchpoints}$), Granary defaults to instrumenting basic blocks using $P_{null}$. However, when a fault is raised, Granary prevents future faults from occuring within the same basic block by patching the $P_{null}$-instrumented basic block to re-route control to a $P_{watchpoints}$-instrumented basic block.
 
 For example, tools built with Granary's behavioural watchpoints framework expose tainted memory addresses to instrumented modules. Modules and the kernel freely share data, making it almost inevitable for  tainted addresses to ``leak'' into the kernel. If the kernel attempts to access the memory referenced by a tainted address then the processor will raise a fault. We handle this fault by applying $F_{kernel}$ to instrument the faulting kernel code using a policy that protects against such faults ($P_{watchpoints}$). $F_{interupt}$ is also used to optimise the execution of tools using behavioural watchpoints by initially assuming that code will not dereference a tainted address ($P_{null}$) and upgrading to $P_{watchpoints}$ if a fault on a tainted address occurs within a $P_{null}$-instrumented basic block.
 
