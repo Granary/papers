@@ -70,11 +70,11 @@
 \captionsetup[figure]{format=ruled_caption}
 \captionsetup[subfigure]{format=unruled_caption}
 \let\ORIGcaption\caption
-\renewcommand{\caption}[2][\compressedcaption]{%
-\def\compressedcaption{#2}%
-    \vspace{-5pt}%
-    \ORIGcaption[#1]{#2}%
-    \vspace{-12pt}}
+%\renewcommand{\caption}[2][\compressedcaption]{%
+%\def\compressedcaption{#2}%
+%    \vspace{-1em}%
+%    \ORIGcaption[#1]{#2}%
+%    \vspace{-4em}}
 
 % Add listing language for assembly
 \lstdefinelanguage
@@ -793,32 +793,6 @@ WATCH_WRITE(struct file_operations, ioctl, {
 
 \section{Instrumentation Policies}\label{sec:policies}
 
-Giving Granary tools the ability to dynamically switch the policy used to instrument code was a natural extension of mixed-mode execution. Just as instrumenting only module code allows Granary to specialise the execution of native code, so does policy switching allow tools to specialise the execution of instrumented code. In fact, optimising the performance of an early Granary tool was the original motivation for policy switching.
-
-We developed a Granary tool that detects several Read-Copy-Update (RCU) API misuses in module code. As an optimisation, we wanted our heavyweight API-checking instrumentation to apply only when the code executing was within the context of a read-critical section. At the time, implementing this optimisation was challenging because we didn't have a reliable way to know whether or not some code being translated was executing within a read-critical section. That is, instrumented module code executing within a read-critical section may have originally been translated while executing outside of the context of a read-critical section. If that lightweight-instrumented code was executed within the context of a read-critical section, then our bug detection scheme would not have been comprehensive. Our solution to this problem was to allow different versions of the same module code to co-exist within Granary's code cache.
-
-
-
-TODOs \begin{itemize}
-	\item It turned out that part of the problem we were trying to solve was tracking/propagating state, and so policies and switching was a really good mechanism of doing this.
-	\item New paragraph about policy info being encoded in basic blocks, and starting to introduce policy state, etc.
-	\item Perhaps use the RCU example as a way of also motivating the SIMD saving / restoring?
-\end{itemize}
-
-%translated 
-%Recall that Granary translates basic blocks on demand.
-%At a high level, an instrumentation policy is a function that decides how to instrument decoded instructions before they are encoded and packaged into a basic blocks in Granary's code cache. A policy switch is declared when one policy marks the target of a CTI as being instrumented by another policy. The actual switch occurs when code is executed: 
-% occur across control-transfer instructions.
-%Granary defines an initial policy that Granary uses to instrument module code. However, the initial policy 
-%Despite being one of Granary's most dynamic features, policy switching is implemented in a ``static'' way. Policy information (for documenting the current policy and for switching policies) is embedded directly into basic blocks and control-transferring instructions. Thus, the policy of a newly emitted basic block and the policies of any basic blocks translated as a result of executing CTIs within the new basic block are fixed.
-%Granary encodes policy information directly into basic block meta-data and the control-transferring instructions (CTIs) of basic blocks. Thus, 
-%While designing Granary's dynamic policy switching mechanism, it quickly became clear that a static approach was needed to 
-%When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. 
-% Granary depends on these inputs alone as a means of ensuring consistency: Granary cannot ``lose track'' of state concerning the execution of some code because the code itself maintains that state.  This enables arbitrary pre-emption and resumption of instrumented code without negatively affecting how as-of-yet uninstrumented code will be instrumented. The value of this approach is that it simplifies the process of creating instrumentation tools that run in OS kernels.
-%Like mode-switching, Granary also allows tools to switch how code itself is instrumented. 
-%As Granary was being developed, it became clear that 
-%Our original goal with Granary was to instrument only Linux kernel modules. This was a natural extension from DRK: 
-%When developing new module instrumentation tools, a common thought 
 
 \lstset{language=[x64]Assembler}
 \newsavebox\asmbox
@@ -856,6 +830,95 @@ TODOs \begin{itemize}
 \ORIGcaption{\label{fig:policy_switching}Example policy switching protocol that ensures that instrumentation ($P_{call\_entry}$) is performed only once on entry to every function, regardless of if that basic block is re-executed. Basic block (1) is instrumented by both $P_{call\_entry}$ and $P_{after\_entry}$, and basic blocks (2) and (3) are instrumented by $P_{after\_entry}$.}
 \end{figure*}
 
+Giving Granary tools the ability to dynamically switch the policy used to instrument code was a natural extension of mixed-mode execution. Just as instrumenting only module code allows Granary to specialise the execution of native code, so does policy switching allow tools to specialise the execution of instrumented code. In fact, optimising the performance of an early Granary tool was the original motivation for policy switching.
+
+We developed a Granary tool that detects several Read-Copy-Update (RCU) API misuses in module code. As an optimisation, we wanted our heavyweight API-checking instrumentation to apply only when the code executing was within the context of a read-critical section. At the time, implementing this optimisation was challenging because we didn't have a reliable way to know whether or not some code being translated was or would execute within a read-critical section. That is, instrumented module code executing within a read-critical section may have originally been translated while executing outside of a read-critical section. If that lightweight-instrumented code was later executed within a read-critical section, then our bug detection scheme would not have been comprehensive. 
+
+To implement our optimisation, we solved a more fundamental problem: tailoring instrumentation to the context in which the instrumented code will execute. Our solution to this problem was to allow different versions of the same module code to co-exist within Granary's code cache. That is, a different version of each of a module's basic blocks exists in Granary's code cache  for each encountered execution context. In the case of our RCU checker tool, there were two execution contexts: \begin{inparaenum}[(1)]
+	\item in a read-critical section; and
+	\item not in a read-critical section.
+\end{inparaenum} If the same module basic block executed in both contexts, then Granary's code cache would contain two different instrumented versions of that basic block. The way that Granary distinguishes between both execution contexts is with \emph{instrumentation policies}. 
+
+An instrumentation policy is both a name for an execution context, as well as a function that decides how to instrument basic blocks that will execute within that context. All tools define an initial policy that Granary uses to instrument module code. Tools are not limited to one policy though: any policy can declare a policy switch that will take effect when a selected control-transferring instruction (CTI) is executed. For example, our RCU tool invokes a policy switch from policy $P_{null}$ to policy $P_{read\_critical}$ when $P_{null}$'s instrumentation function observes a \texttt{call} instruction to the \texttt{rcu\_read\_lock} Linux kernel function.
+
+Because policies name an execution context, they also represent states in a finite state machine. That is, a module's execution is in the state named by a policy if the code executing was instrumented by that policy. A state transition occurs when control transfers from code instrumented by one policy to code instrumented by another policy. An early limitation with this approach was that a single state does not encode the sequence of previous states that led to execution being the current state. For example, RCU permits nested read-critical sections. If two read-critical sections were nested then switching from $P_{read\_critical}$ to $P_{null}$ on the first \texttt{call} to \texttt{rcu\_read\_unlock} would mean that our tool woild lose track of being in the context the outer read-critical section. We solved this early limitation by observing that, in most cases, function returns are natural policy reverting points. This is because the runtime call stack encodes both the context in which the current code is executing, as well as the continuation of the current executing code.
+
+Granary implements policy tracking and switching by encoding policy information into the meta-data and CTIs of basic blocks. When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. Because every CTI encodes policy information, and because Granary's translation mechanism depends only on CTI policy and target information, Granary is able to ensure that policy information is never lost or corrupted, even in the face of concurrent executions of the same module code, arbitrary pre-emption, and abitrary resumption.
+
+% Our approach makes tools that use policies to track states of a module's execution resilient against abitrary pre-emption and resumption because once cached, the policy-switching behaviour of a basic block cannot be accidentally corrupted or lost (e.g. due to concurrency bugs). 
+
+One drawback of Granary's policy implementation is code cache bloat. We feel that this is a well made trade-off because \begin{inparaenum}[i)]
+	\item tool authors are not required to use more than one policy if bloat is a concern; and
+	\item things that are challenging to do with only one policy are often simpler to do with multiple coordinating policies.
+\end{inparaenum} For example, Granary's CFG tool uses coordinating policies to dynamically construct runtime call graphs. A single policy approach to the problem of call graph construction might add edges to the call graph only at every \texttt{call} site. However, this single policy approach is insufficient in the face of mixed-mode execution. If an instrumented function $F$ contains no function calls and is invoked by a native function, then $F$ will not appear as a root node in the call graph. A two-policy solution easily solves the missing root problem by instrumenting both function call sites as well as function entrypoints. The CFG tool distinguishes between the first execution of a function's first basic block ($P_{call\_entry}$), and all other basic blocks executed within the function, including later executions of the first basic block ($P_{after\_entry}$). Function call sites are instrumented to set up the source node of an edge in the call graph. On entry to a function, we identify the current function as either a sink node connected to a source node (instrumented call), or as a root node if no source is present (native call). The distinction between entrypoints and non-entrypoints is achieved with minor bloat: the first basic block appears twice in Granary's code cache, but instrumented by two different policies (\Cref{fig:policy_switching}).
+
+%Because of mixed-mode execution, a given function's caller might have been executing natively, therefore we cannot depend on 
+
+%needs to distinguish between the first execution of a function's first basic block and later executions of that basic block (e.g. because of backward branches within the function).
+
+%Granary depends on these inputs alone as a means of ensuring consistency.
+%: Granary cannot ``lose track'' of state concerning the execution of some code because the code itself maintains that state.  This enables arbitrary pre-emption and resumption of instrumented code without negatively affecting how as-of-yet uninstrumented code will be instrumented. The value of this approach is that it simplifies the process of creating instrumentation tools that run in OS kernels.
+%Our experience with policy switching has been that they are a robust way of tracking state about the execution of a module. This is especially true in the
+%For example, we created a tool that uses policies to implement different weights of instrumentation. Unfortunately, execution got ``stuck'' in a heavyweight policy after the first policy switch from light to heavyweight. We also didn't want to abitrarily switch from a heavyweight to a lightweight policy, lest the switch occur too early. 
+%function returns were the best indicator of when to revert to a previous policy.
+%the best indicator of when to revert to a previous policy/context was
+%because while a policy names an execution context but made no 
+%, and contexts
+%While designing module analysis tools, we realised that it is valuable to be able to revert to a previous state. For example, 
+
+%Switching policies based on CTIs fits well with Granary's JIT-based translation mechanism for two reasons. First, a tool cannot be certain about when a given CTI will first be executed. For example, Granary translates a single conditional branch into two CTIs: one conditional branch, and a fall-through \texttt{jmp} to the next basic block. If the tested condition is always true then the fall-through basic block might never be instrumented. However, if a failure of the tested condition indicates a context switching scenario, then 
+
+%For example, the fall-through basic block after a conditional branch may never be executed if the tested condition is always true. 
+
+%Because of this, the basic block targeted by the CTI that connects the testing basic block to the fall-through basic block
+
+%Our experience with implementing policy swithc
+
+
+
+%
+
+%; however, most Granary tools define more than one interacting policies.
+
+% By default, all module code is instrumented by the initial policy. However, if a tool wants to declare an execution context switch (e.g. entering into a read-critical section) then the active
+
+
+%However, any policy (including the initial policy) may declare that a policy switch will occur at a control-flow transferring instruction (CTI). The effect of declaring a policy switch at a CTI is that 
+
+%a tool tells Granary to switch policies. A policy switch can occur at control-flow instructions.
+
+% is a function that decides how to instrument a basic block of module code that will execute within the execution context named by that policy.
+%An instrumentation policy is a name that a tool gives to an execution context. A policy decides how to instrument a basic block of module code that is executing within 
+
+%for each encountered execution context , a new version of the basic block tailored to that context.
+% is handled by a different \emph{instrumentation policy}.
+%Granary solves the problem of context-aware instrumentation using a technique that we call policy-driven instrumentation. An instrumentation 
+%The underlying problem that we solved was to change the behaviour of instrumentation based on the context in which code executes.
+%The underlying problem that we needed to solve in order to implement our RCU checking optimisation was: \begin{inparaenum}
+%was that a basic block should have some notion of the context in which its executing.
+
+%TODOs \begin{itemize}
+%	\item It turned out that part of the problem we were trying to solve was tracking/propagating state, and so policies and switching was a really good mechanism of doing this.
+%	\item New paragraph about policy info being encoded in basic blocks, and starting to introduce policy state, etc.
+%	\item Perhaps use the RCU example as a way of also motivating the SIMD saving / restoring?
+%\end{itemize}
+
+%translated 
+%Recall that Granary translates basic blocks on demand.
+%At a high level, an instrumentation policy is a function that decides how to instrument decoded instructions before they are encoded and packaged into a basic blocks in Granary's code cache. A policy switch is declared when one policy marks the target of a CTI as being instrumented by another policy. The actual switch occurs when code is executed: 
+% occur across control-transfer instructions.
+%Granary defines an initial policy that Granary uses to instrument module code. However, the initial policy 
+%Despite being one of Granary's most dynamic features, policy switching is implemented in a ``static'' way. Policy information (for documenting the current policy and for switching policies) is embedded directly into basic blocks and control-transferring instructions. Thus, the policy of a newly emitted basic block and the policies of any basic blocks translated as a result of executing CTIs within the new basic block are fixed.
+%Granary encodes policy information directly into basic block meta-data and the control-transferring instructions (CTIs) of basic blocks. Thus, 
+%While designing Granary's dynamic policy switching mechanism, it quickly became clear that a static approach was needed to 
+%When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. 
+% Granary depends on these inputs alone as a means of ensuring consistency: Granary cannot ``lose track'' of state concerning the execution of some code because the code itself maintains that state.  This enables arbitrary pre-emption and resumption of instrumented code without negatively affecting how as-of-yet uninstrumented code will be instrumented. The value of this approach is that it simplifies the process of creating instrumentation tools that run in OS kernels.
+%Like mode-switching, Granary also allows tools to switch how code itself is instrumented. 
+%As Granary was being developed, it became clear that 
+%Our original goal with Granary was to instrument only Linux kernel modules. This was a natural extension from DRK: 
+%When developing new module instrumentation tools, a common thought 
+
+
 
 %New module analysis tools are created by implementing one or more interacting instrumentation policies. Module analysis tools use policies to track state (called \emph{policy properties}) and decide how to instrument code.
 
@@ -881,35 +944,35 @@ TODOs \begin{itemize}
 %	%	\item tracking and propagating state/context using \emph{policy properties}.
 %	%\end{inparaenum}
 
-\subsection{Creating Tools with Policies}
-
-Tool developers must implement three functions for each policy: \begin{enumerate}
-	\item $F_{module}$ instruments a basic block of module code.
-	\item $F_{kernel}$ instruments a basic block of kernel code.
-	\item $F_{interrupt}$ handles an interrupt in instrumented code.
-\end{enumerate}
-
-The majority of tools will focus on implementing $F_{module}$; however, we have found $F_{kernel}$ useful when implementing \emph{data-driven instrumentation} and $F_{interupt}$ useful when implementing multiple weights of instrumentation in response to interrupt behaviour. 
+%\subsection{Creating Tools with Policies}
+%
+%Tool developers must implement three functions for each policy: \begin{enumerate}
+%	\item $F_{module}$ instruments a basic block of module code.
+%	\item $F_{kernel}$ instruments a basic block of kernel code.
+%	\item $F_{interrupt}$ handles an interrupt in instrumented code.
+%\end{enumerate}
+%
+%The majority of tools will focus on implementing $F_{module}$; however, we have found $F_{kernel}$ useful when implementing \emph{data-driven instrumentation} and $F_{interupt}$ useful when implementing multiple weights of instrumentation in response to interrupt behaviour. 
 
 %Granary provides a framework for fine-grained memory access instrumentation, called \emph{behavioural watchpoints}. Behavioural watchpoints-based tools expose tainted memory addresses to instrumented programs. If a tainted address is used to access memory then the processor raises a fault. Instead of instrumenting all code in a way that guards against such faults ($P_{watchpoints}$), Granary defaults to instrumenting basic blocks using $P_{null}$. However, when a fault is raised, Granary prevents future faults from occuring within the same basic block by patching the $P_{null}$-instrumented basic block to re-route control to a $P_{watchpoints}$-instrumented basic block.
 
-For example, tools built with Granary's behavioural watchpoints framework expose tainted memory addresses to instrumented modules. Modules and the kernel freely share data, making it almost inevitable for  tainted addresses to ``leak'' into the kernel. If the kernel attempts to access the memory referenced by a tainted address then the processor will raise a fault. We handle this fault by applying $F_{kernel}$ to instrument the faulting kernel code using a policy that protects against such faults ($P_{watchpoints}$). $F_{interupt}$ is also used to optimise the execution of tools using behavioural watchpoints by initially assuming that code will not dereference a tainted address ($P_{null}$) and upgrading to $P_{watchpoints}$ if a fault on a tainted address occurs within a $P_{null}$-instrumented basic block.
+%For example, tools built with Granary's behavioural watchpoints framework expose tainted memory addresses to instrumented modules. Modules and the kernel freely share data, making it almost inevitable for  tainted addresses to ``leak'' into the kernel. If the kernel attempts to access the memory referenced by a tainted address then the processor will raise a fault. We handle this fault by applying $F_{kernel}$ to instrument the faulting kernel code using a policy that protects against such faults ($P_{watchpoints}$). $F_{interupt}$ is also used to optimise the execution of tools using behavioural watchpoints by initially assuming that code will not dereference a tainted address ($P_{null}$) and upgrading to $P_{watchpoints}$ if a fault on a tainted address occurs within a $P_{null}$-instrumented basic block.
 
 % instrument as much or as little of the kernel as they want in response to this fault.
 %Instrumentation policies expose three functions: one to instrument module code, one to instrument kernel code, and one to handle an interrupt in instrumented code.
 
 
-$F_{module}$ and $F_{kernel}$ can abitrarily manipulate instructions and policy properties before they are packaged into basic blocks. These functions decide what the ``next'' policy should be for each CTI within the basic block. For example, if $P_{call\_entry}$'s $F_{module}$ sets the policy of a CTI in the basic block to policy $P_{after\_entry}$, then any module code targeted by the changed CTI will be translated and instrumented by $P_{after\_entry}$'s function $F_{module}$ (\Cref{fig:policy_switching}). 
+%$F_{module}$ and $F_{kernel}$ can abitrarily manipulate instructions and policy properties before they are packaged into basic blocks. These functions decide what the ``next'' policy should be for each CTI within the basic block. For example, if $P_{call\_entry}$'s $F_{module}$ sets the policy of a CTI in the basic block to policy $P_{after\_entry}$, then any module code targeted by the changed CTI will be translated and instrumented by $P_{after\_entry}$'s function $F_{module}$ (\Cref{fig:policy_switching}). 
 
 %Because Granary depends on DynamoRIO's instruction encoder/decoder, the full range of DynamoRIO instruction/operand manipulation functions can be applied to instructions within a basic block.
 
-\subsection{Managing State with Policies}
+%\subsection{Managing State with Policies}
 
-Policies encode state in the form of properties. A policy property describes an aspect of the environment in which the instructions of a basic block execute. Properties are tested, set, and unset by Granary and tool-specific policies over the course of decoding, instrumenting, and packaging instructions into basic blocks. By default, properties are propagated across all control-flow transfers except for return instructions. Property propagation through function call instructions enables inheritance of contextual information through the function call chain. The lack of propagation through function returns enables execution to return to a previous context.
+%Policies encode state in the form of properties. A policy property describes an aspect of the environment in which the instructions of a basic block execute. Properties are tested, set, and unset by Granary and tool-specific policies over the course of decoding, instrumenting, and packaging instructions into basic blocks. By default, properties are propagated across all control-flow transfers except for return instructions. Property propagation through function call instructions enables inheritance of contextual information through the function call chain. The lack of propagation through function returns enables execution to return to a previous context.
 
-Granary encodes policy information into the meta-data and CTIs of basic blocks. When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. Granary depends on these inputs alone as a means of ensuring consistency: Granary cannot ``lose track'' of state concerning the execution of some code because the code itself maintains that state.  This enables arbitrary pre-emption and resumption of instrumented code without negatively affecting how as-of-yet uninstrumented code will be instrumented. The value of this approach is that it simplifies the process of creating instrumentation tools that run in OS kernels.
+%Granary encodes policy information into the meta-data and CTIs of basic blocks. When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. Granary depends on these inputs alone as a means of ensuring consistency: Granary cannot ``lose track'' of state concerning the execution of some code because the code itself maintains that state.  This enables arbitrary pre-emption and resumption of instrumented code without negatively affecting how as-of-yet uninstrumented code will be instrumented. The value of this approach is that it simplifies the process of creating instrumentation tools that run in OS kernels.
 
-Granary's approach to managing state was motivated by our experience of trying to analyse modules with DRK. DRK maintains control over the execution of instrumented code by tracking what code is executing on each CPU. However, maintaining the consistency of this state is challenging: interrupts and exceptions introduce re-entrancy issues that are solved on a case-by-case basis. The complexities of managing the existing state increased when we modified DRK to only instrument modules and not the kernel. We found that our modified DRK sometimes ``got lost'' because of the interaction between interrupt handling, state management, and patching of translated code.
+%Granary's approach to managing state was motivated by our experience of trying to analyse modules with DRK. DRK maintains control over the execution of instrumented code by tracking what code is executing on each CPU. However, maintaining the consistency of this state is challenging: interrupts and exceptions introduce re-entrancy issues that are solved on a case-by-case basis. The complexities of managing the existing state increased when we modified DRK to only instrument modules and not the kernel. We found that our modified DRK sometimes ``got lost'' because of the interaction between interrupt handling, state management, and patching of translated code.
 
 %We found that DRK sometimes ``got lost''  when analysing modules because the mechanism 
 %because of the interaction of interrupt-handling, state-management, and patching of translated code.
