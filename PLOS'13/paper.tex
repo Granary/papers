@@ -1,5 +1,5 @@
-\documentclass[letterpaper,twocolumn,10pt]{article}
-\usepackage{usenix,endnotes,multirow}
+\documentclass{sigplanconf}
+\usepackage{endnotes,multirow}
 \usepackage{cleveref,amsmath,chngcntr}
 \usepackage{framed}
 \usepackage{multicol,tabularx}
@@ -14,16 +14,17 @@
 \usepackage{listings,courier}
 
 % Used for changing the spacing after the title, sections, and subsections.
-\usepackage{titlesec,titling}
+%\usepackage{titlesec,titling}
 
 % Make text in figure captions small
-\usepackage{caption3} % load caption package kernel first
-\DeclareCaptionOption{parskip}[]{} % disable "parskip" caption option
-\usepackage[small]{caption}
-%\usepackage{subfigure,epsfig}
+%\usepackage{caption3} % load caption package kernel first
+%\DeclareCaptionOption{parskip}[]{} % disable "parskip" caption option
+%\usepackage[small]{caption}
+\usepackage{subfig,epsfig}
+\DeclareCaptionType{copyrightbox}
 %\captionsetup*[subfigure]{position=bottom}
-\usepackage{subcaption}
-\captionsetup{compatibility=false}
+%\usepackage{subcaption}
+%\captionsetup{compatibility=false}
 \usepackage{epsfig}
 
 % Make sure that figure numbers are continuous through the document
@@ -39,12 +40,12 @@
         framesep=0pt}
 
 % Modify spacing before/after title, sections, and subsections.
-\setlength{\droptitle}{-3em} 
-\posttitle{\par\end{center}\vspace{-1.5em}}
+%\setlength{\droptitle}{-3em} 
+%\posttitle{\par\end{center}\vspace{-1.5em}}
 
 
-\titlespacing\section{0pt}{5pt plus 4pt minus 2pt}{5pt plus 2pt minus 2pt}        
-\titlespacing\subsection{0pt}{5pt plus 4pt minus 2pt}{5pt plus 2pt minus 2pt}   
+%\titlespacing\section{0pt}{5pt plus 4pt minus 2pt}{5pt plus 2pt minus 2pt}        
+%\titlespacing\subsection{0pt}{5pt plus 4pt minus 2pt}{5pt plus 2pt minus 2pt}   
 
 \usepackage{enumitem}
 \setenumerate{itemsep=2pt,topsep=2pt,parsep=0pt,partopsep=0pt}
@@ -60,8 +61,8 @@
 %  {\end{enumerate}}
 
 % Compressed bibliograpgy
-\let\ORIGbibliography\bibliography
-\renewcommand{\bibliography}[1]{{\footnotesize \ORIGbibliography{#1}}}
+%\let\ORIGbibliography\bibliography
+%\renewcommand{\bibliography}[1]{{\footnotesize \ORIGbibliography{#1}}}
 
 % Add a horizontal rule above captions, and make captions closer to their figures
 \DeclareCaptionFormat{ruled_caption}{#1#2#3\hrulefill}
@@ -86,13 +87,13 @@
                   r8,r8d,r8w,r8b,r9,r9d,r9w,r9b}} % etc.
 
 % Decrease spacing before \paragraphs
-\titlespacing{\paragraph}{%
-  0pt}{%              left margin
-  0.25\baselineskip}{% space before (vertical)
-  1em}%               space after (horizontal)
+%\titlespacing{\paragraph}{%
+%  0pt}{%              left margin
+%  0.25\baselineskip}{% space before (vertical)
+%  1em}%               space after (horizontal)
 
 % Prevent footnotes from spanning multiple pages
-\interfootnotelinepenalty=10000
+%\interfootnotelinepenalty=10000
 
 % For leaving some comments in the draft.
 \newcommand{\comment}[1]{}
@@ -103,19 +104,18 @@
 \begin{document}
 
 %don't want date printed
-\date{}
+%\date{}
 
 %make title bold and 14 pt font (Latex default is non-bold, 16 pt)
-\title{\Large \bf Granary: A Sane Framework for Instrumenting an Insane Environment}
+\title{Granary: A Sane Framework for Instrumenting an Insane Environment}
 
 %for single author (just remove % characters)
-\author{
-{\rm Peter Goodman} \hspace{1.5em} {\rm Akshay Kumar} \hspace{1.5em} {\rm Angela Demke Brown} \hspace{1.5em} {\rm Ashvin Goel}\\
-University of Toronto
-} % end author
+\authorinfo{Peter Goodman \and Akshay Kumar \and Angela Demke Brown \and Ashvin Goel}
+{University of Toronto}{}
+% end authorinfo
 
 
-\twocolumn[\maketitle]
+\maketitle
 \subsection*{Abstract}
 TODO
 
@@ -582,7 +582,7 @@ TYPE_WRAPPER(struct device_driver, {
 })
 \end{lstlisting}
 \end{multicols}
-\caption[LoF entry]{Example type wrapper for the Linux \texttt{device\_driver} structure. In the above code, \texttt{arg} is a reference to a \texttt{struct device\_driver} object passed as or referenced by an argument to a kernel or module function. Granary automatically applies type wrappers to function arguments passed over the kernel/module interface. Type wrappers are applied recursively (e.g. \texttt{POST\_WRAP}) up to a pre-defined depth. \texttt{PRE\_}, \texttt{POST\_}, and \texttt{RETURN\_} define wrapping policies applied before, after, or to the return value of a function used transfer control to/from the kernel or the module, respectively. The \texttt{\_IN} and \texttt{\_OUT} suffixes define the direction of data: \texttt{\_IN} wrappers apply to data going from the kernel into the module, and \texttt{\_OUT} wrappers apply to data leaving the module.}
+\ORIGcaption[LoF entry]{Example type wrapper for the Linux \texttt{device\_driver} structure. In the above code, \texttt{arg} is a reference to a \texttt{struct device\_driver} object passed as or referenced by an argument to a kernel or module function. Granary automatically applies type wrappers to function arguments passed over the kernel/module interface. Type wrappers are applied recursively (e.g. \texttt{POST\_WRAP}) up to a pre-defined depth. \texttt{PRE\_}, \texttt{POST\_}, and \texttt{RETURN\_} define wrapping policies applied before, after, or to the return value of a function used transfer control to/from the kernel or the module, respectively. The \texttt{\_IN} and \texttt{\_OUT} suffixes define the direction of data: \texttt{\_IN} wrappers apply to data going from the kernel into the module, and \texttt{\_OUT} wrappers apply to data leaving the module.}
 \label{fig:type_wrapper}
 \end{figure*}
 
@@ -724,7 +724,7 @@ WATCH_WRITE(struct file_operations, ioctl, {
   }
 })
 \end{lstlisting}
-\caption{\label{fig:field_invariant_check}This code generates a function that is automatically invoked every time memory with the type \texttt{struct file\_operations} is accessed. The generated function checks invariant 1(h) from \cite{GibraltarKernelInvariants}. The invariant checked prevents a (potential) kernel rootkit from installing its own \texttt{ioctl} handler into the Real-Time Clock. Anti-virus programs depend on this built-in \texttt{ioctl} handler to periodically schedule virus scans. Replacing this handler can prevent such scans from being scheduled, thus allowing the rootkit to go undetected.}
+\ORIGcaption{\label{fig:field_invariant_check}This code generates a function that is automatically invoked every time memory with the type \texttt{struct file\_operations} is accessed. The generated function checks invariant 1(h) from \cite{GibraltarKernelInvariants}. The invariant checked prevents a (potential) kernel rootkit from installing its own \texttt{ioctl} handler into the Real-Time Clock. Anti-virus programs depend on this built-in \texttt{ioctl} handler to periodically schedule virus scans. Replacing this handler can prevent such scans from being scheduled, thus allowing the rootkit to go undetected.}
 \end{figure}
 
 
@@ -799,23 +799,9 @@ Frameworks that operate on Granary's static analysis information can also be cre
 
 
 \lstset{language=[x64]Assembler}
-\begin{figure*}[ht!]
-\centering
-\begin{subfigure}[b]{0.33\textwidth}
-\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=2.5cm,scale=0.8, every node/.style={scale=0.8}]
-  \node[initial,state] 		(A)      {$P_{after\_entry}$};
-  \node[state]         	(C) [right of=A]  {$P_{call\_entry}$};
- 
- 
-  \path[->] 	(A)	edge 	[loop above] 	node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)
-            			edge         [bend left] 	node {{\footnotesize\ttfamily\bf call}} (C)
- 			(C)	edge	[bend left]	node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)
-			(C)	edge	[loop above]	node {{\footnotesize\ttfamily\bf call}} (C);
-\end{tikzpicture}
-\ORIGcaption{Policy Switching Protocol}
-\end{subfigure}%
-~
-\begin{subfigure}[b]{0.33\textwidth}%
+\newsavebox\asmbox
+\begin{lrbox}{\asmbox}
+\begin{minipage}[b]{4cm}
 \begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
 1: mov    (%rdi), %rax
    jmp    .2
@@ -827,15 +813,25 @@ Frameworks that operate on Granary's static analysis information can also be cre
    jmp    .1
 4: ret
 \end{lstlisting}
-\ORIGcaption{Uninstrumented Code}
-\end{subfigure}%
-~
-\begin{subfigure}[b]{0.33\textwidth}%
-\hspace{-3em}
+\end{minipage}
+\end{lrbox}
+
+\begin{figure*}[ht!]
+\centering
+\subfloat[Policy Switching Protocol]{
+\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=3cm,scale=0.8, every node/.style={scale=0.8}]
+  \node[initial,state]          (A)      {$P_{after\_entry}$};
+  \node[state]          (C) [right of=A]  {$P_{call\_entry}$}; 
+  \path[->]     (A)     edge    [loop above]    node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)                                edge         [bend left]        node {{\footnotesize\ttfamily\bf call}} (C)                        (C) edge    [bend left]     node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)                        (C)     edge    [loop above]    node {{\footnotesize\ttfamily\bf call}} (C);
+\end{tikzpicture}
+}
+\hfill
+ \subfloat[Uninstrumented Code]{\usebox\asmbox}
+\hfill
+ \subfloat[Instrumented Basic Blocks]{
 \epsfig{file=diagrams/policy-switching-entry-tracking.eps,width=2.5in}
-\ORIGcaption{Instrumented Basic Blocks}
-\end{subfigure}
-\caption{\label{fig:policy_switching}Example policy switching protocol that ensures that instrumentation ($P_{call\_entry}$) is performed only once on entry to every function, regardless of if that basic block is re-executed. Basic block (1) is instrumented by both $P_{call\_entry}$ and $P_{after\_entry}$, and basic blocks (2) and (3) are instrumented by $P_{after\_entry}$.}
+ }
+\ORIGcaption{\label{fig:policy_switching}Example policy switching protocol that ensures that instrumentation ($P_{call\_entry}$) is performed only once on entry to every function, regardless of if that basic block is re-executed. Basic block (1) is instrumented by both $P_{call\_entry}$ and $P_{after\_entry}$, and basic blocks (2) and (3) are instrumented by $P_{after\_entry}$.}
 \end{figure*}
 
 
