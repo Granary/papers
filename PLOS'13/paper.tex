@@ -797,6 +797,32 @@ Frameworks that operate on Granary's static analysis information can also be cre
 
 \section{Instrumentation Policies}\label{sec:policies}
 
+Giving Granary tools the ability to dynamically switch the policy used to instrument code was a natural extension of mixed-mode execution. Just as instrumenting only module code allows Granary to specialise the execution of native code, so does policy switching allow tools to specialise the execution of instrumented code. In fact, optimising the performance of an early Granary tool was the original motivation for policy switching.
+
+We developed a Granary tool that detects several Read-Copy-Update (RCU) API misuses in module code. As an optimisation, we wanted our heavyweight API-checking instrumentation to apply only when the code executing was within the context of a read-critical section. However, implementing this optimisation was tricky because we didn't have a reliable way to know whether or not some code being translated was executing within a read-critical section. That is, instrumented module code executing within a read-critical section may have originally been translated while executing outside of the context of a read-critical section. Our solution to this problem was to allow different versions of the same module code to co-exist within Granary's code cache.
+
+
+
+TODOs \begin{itemize}
+	\item It turned out that part of the problem we were trying to solve was tracking/propagating state, and so policies and switching was a really good mechanism of doing this.
+	\item New paragraph about policy info being encoded in basic blocks, and starting to introduce policy state, etc.
+	\item Perhaps use the RCU example as a way of also motivating the SIMD saving / restoring?
+\end{itemize}
+
+%translated 
+%Recall that Granary translates basic blocks on demand.
+%At a high level, an instrumentation policy is a function that decides how to instrument decoded instructions before they are encoded and packaged into a basic blocks in Granary's code cache. A policy switch is declared when one policy marks the target of a CTI as being instrumented by another policy. The actual switch occurs when code is executed: 
+% occur across control-transfer instructions.
+%Granary defines an initial policy that Granary uses to instrument module code. However, the initial policy 
+%Despite being one of Granary's most dynamic features, policy switching is implemented in a ``static'' way. Policy information (for documenting the current policy and for switching policies) is embedded directly into basic blocks and control-transferring instructions. Thus, the policy of a newly emitted basic block and the policies of any basic blocks translated as a result of executing CTIs within the new basic block are fixed.
+%Granary encodes policy information directly into basic block meta-data and the control-transferring instructions (CTIs) of basic blocks. Thus, 
+%While designing Granary's dynamic policy switching mechanism, it quickly became clear that a static approach was needed to 
+%When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. 
+% Granary depends on these inputs alone as a means of ensuring consistency: Granary cannot ``lose track'' of state concerning the execution of some code because the code itself maintains that state.  This enables arbitrary pre-emption and resumption of instrumented code without negatively affecting how as-of-yet uninstrumented code will be instrumented. The value of this approach is that it simplifies the process of creating instrumentation tools that run in OS kernels.
+%Like mode-switching, Granary also allows tools to switch how code itself is instrumented. 
+%As Granary was being developed, it became clear that 
+%Our original goal with Granary was to instrument only Linux kernel modules. This was a natural extension from DRK: 
+%When developing new module instrumentation tools, a common thought 
 
 \lstset{language=[x64]Assembler}
 \begin{figure*}[ht!]
@@ -839,11 +865,11 @@ Frameworks that operate on Granary's static analysis information can also be cre
 \end{figure*}
 
 
-New module analysis tools are created by implementing one or more interacting instrumentation policies. Module analysis tools use policies to track state (called \emph{policy properties}) and decide how to instrument code.
+%New module analysis tools are created by implementing one or more interacting instrumentation policies. Module analysis tools use policies to track state (called \emph{policy properties}) and decide how to instrument code.
 
-Policies also serve a broader role in Granary itself. Granary maintains internal policy properties to optimise its performance and to track certain kinds of control flow. One example of a policy property used by Granary to optimise its user space performance is SIMD register tracking. When Granary detects the usage of a SIMD register, it sets the associated property. This property is inherited through the call chain, and informs Granary on whether or not the SIMD registers must be saved/restored when instrumented code yields to Granary. We say that an execution of a function $F$ is in the context of a usage of a SIMD register when the SIMD property is set. If $F$ is later executed by instrumented code where the SIMD property is not set, then a second instrumented version of $F$ (absent the SIMD property) will be stored in the code cache.
+%Policies also serve a broader role in Granary itself. Granary maintains internal policy properties to optimise its performance and to track certain kinds of control flow. One example of a policy property used by Granary to optimise its user space performance is SIMD register tracking. When Granary detects the usage of a SIMD register, it sets the associated property. This property is inherited through the call chain, and informs Granary on whether or not the SIMD registers must be saved/restored when instrumented code yields to Granary. We say that an execution of a function $F$ is in the context of a usage of a SIMD register when the SIMD property is set. If $F$ is later executed by instrumented code where the SIMD property is not set, then a second instrumented version of $F$ (absent the SIMD property) will be stored in the code cache.
 
-A developer prototyping a module analysis tool that uses multiple policies will automatically benefit from Granary's SIMD-tracking optimisation. Properties apply equally to all policies, and are inherited if/when a control-flow transfer effects a policy switch. However, not every control-flow transferring instruction (CTI) can explicitly change the policy used to instrument code: policies and their properties are not inherited across function returns. The motivation for this asymmetry is that conditions (e.g. SIMD register usage) present in a function $F$ might not be present in $F$'s caller. Because of this, function returns act as a natural mechanism for restoring instrumentation to a previous context. For example, Granary's SIMD register tracking is an effective optimisation because it limits the scope of saving/restoring the SIMD registers to only those yields performed in the context of a SIMD register, and not to all yields performed after the first usage of a SIMD register.
+%A developer prototyping a module analysis tool that uses multiple policies will automatically benefit from Granary's SIMD-tracking optimisation. Properties apply equally to all policies, and are inherited if/when a control-flow transfer effects a policy switch. However, not every control-flow transferring instruction (CTI) can explicitly change the policy used to instrument code: policies and their properties are not inherited across function returns. The motivation for this asymmetry is that conditions (e.g. SIMD register usage) present in a function $F$ might not be present in $F$'s caller. Because of this, function returns act as a natural mechanism for restoring instrumentation to a previous context. For example, Granary's SIMD register tracking is an effective optimisation because it limits the scope of saving/restoring the SIMD registers to only those yields performed in the context of a SIMD register, and not to all yields performed after the first usage of a SIMD register.
 
 %.... set properties / properties naturally revert / etc. explain why no inheritance through RETs.
 
