@@ -685,6 +685,115 @@ The trade-off between transparency and overhead motivated the inclusion of confi
 
 \paragraph{Module function wrappers} Granary does not maintain transparency when its type wrappers replace pointers to module functions with pointers to wrapped module functions. This is perhaps the riskiest break in transparency within Granary because a module might treat a function pointer as being representative of the module being in some particular state. The benefit of enabling module function wrappers is that they give instrumentation tools more information about the executing module (e.g. shared data structures, which interfaces are used by the kernel). If Granary is configured to use transparent module function pointer addresses in shared data structures then fast attaching is disabled and tools will not have access to the same level of static program information.
 
+\section{Reifying Instrumentation}\label{sec:reify}
+
+Granary's approach to mixed-mode instrumentation exposes a lot of static analysis information to instrumentation tools. For example, we are actively using wrapper information to create a tool that generates models of typical module behaviour. The wrapper information available to all tools serves two roles in our tool. First, we use type wrappers to assign type-specific IDs to module allocated memory that is shared across the module/kernel interface. Type ID assignment plays a critical role because it allows us to match memory reads and writes to specific kernel data structure fields. Second, we use the kernel and module function wrappers to generate call graphs of a module's execution. This call graph models module behaviour (according to the kernel) because we label module code nodes with kernel data structure and function pointer field names. This labelling allows us to generalise across similar modules. For example, code reached by calling the \texttt{ext4\_mount} and \texttt{btrfs\_mount} functions from the \texttt{ext4} and \texttt{btrfs} modules, respectively, are both labelled as \texttt{file\_system\_type::mount}. The combined records from executing multiple ``trusted'' modules (e.g. mature, open-source file systems) will model the behaviour of typical kernel modules. We hope that these models will help us to automatically generate new tools that classify and identify spurious module behaviour.
+
+
+%We compress these call graphs by treating internal module function calls as 
+
+%The call graphs we generate are compressed to view internal module activity as not containing function calls. The compressed graphs remain meaningful because we label module code according to the entrypoints
+
+%This call graph is compress
+
+% from the perspective of the kernel because we name the entrypoints into the module
+
+%, while we do not know the names of binary module functions, we do know the kernel names for those functions because those are the names of function pointer fields in kernel data structures.
+
+%Together, the recorded information tells us when and where specific parts of kernel data structures are accessed and modified. Finally, we combine the information recorded from executing multiple ``trusted'' modules (e.g. mature, open-source file systems) and construct models of typical module behaviour. We hope that these models will help us to automatically generate new tools that identify spurious module behaviour.
+
+%Existing program analysis systems fall into one of three categories:
+%\begin{enumerate}
+%	\item Binary analysis tools. Existing tools give low-level access to instructions and possibly memory but don't give ``big-picture'' information available source code analysis tools \cite{DRK,DynamoRIO,Pin,PinOS,QEMU,Valgrind}.
+%	\item Source code analysis tools. Existing tools give high-level access to program semantics but make it challenging to reason about scheduling, interrupts, shared memory, and aliasing [TODO: cite Sparse, Smatch].
+%	\item Mixed source/binary analysis tools. Existing tools give high- and low-level access to program informaiton, but require changes to the compilation toolchain and sometimes program source code \cite{NaCl,AddressSanitizer,ThreadSanitizer}.
+%\end{enumerate}
+
+We realised that an imporant missing feature of existing low-level instrumentation tools is the ``big picture'' view that one gets from static analysis information. Similarly, static analysis tools lack access to instructions, memory, and processor-specific behaviours that are only available to low-level runtime instrumentation tools. Existing mixed static/dynamic analysis tools \cite{NaCl,AddressSanitizer,ThreadSanitizer} appear to get the best of both worlds, but sacrifice on runtime flexibility by commiting to a single instrumentation policy at a program's compile time.
+
+The benefits of high-level static analysis information motivated its inclusion into Granary using a technique we call reifying instrumentation. Granary extracts type and function declarations from the Linux kernel source code and exposes that information to tool developers. Tools can use this information to inspect data in wrappers and dynamically change the instrumentation policy based on either static or runtime information. 
+
+\begin{figure}[t]
+\begin{lstlisting}[language=C,basicstyle=\footnotesize\ttfamily]
+// Invariant: rtc_fops->ioctl == &rtc_ioctl
+WATCH_WRITE(struct file_operations, ioctl, {
+  if(&rtc_fops  == base_address
+  && &rtc_ioctl != ioctl) {
+    // potential attack: prevent an anti-
+    // virus scan from being scheduled!
+  }
+})
+\end{lstlisting}
+\caption{\label{fig:field_invariant_check}This code generates a function that is automatically invoked every time memory with the type \texttt{struct file\_operations} is accessed. The generated function checks invariant 1(h) from \cite{GibraltarKernelInvariants}. The invariant checked prevents a (potential) kernel rootkit from installing its own \texttt{ioctl} handler into the Real-Time Clock. Anti-virus programs depend on this built-in \texttt{ioctl} handler to periodically schedule virus scans. Replacing this handler can prevent such scans from being scheduled, thus allowing the rootkit to go undetected.}
+\end{figure}
+
+
+Frameworks that operate on Granary's static analysis information can also be created. For example, we developed a framework that allows tools to interpose on and associate writes to memory with specific kernel data structure fields. Using this framework, we developed a tool that precisely detects if/when a module violates a kernel data structure invariant (\Cref{fig:field_invariant_check}).
+
+
+%generates another tool that detects Linux kernel invariant violations. In particular, our tool interposed on memory accesses at the granularity of Linux kernel data structure fields, and checked that values being written to those fields maintained data-structure-specific invariants }.
+
+
+%Another use of Granary's static analysis information is meta-tools: tools that generate tools based off of static analysis information.
+
+%Tools can also use meta-programs that operate on the static analysis information to automatically generate new tools 
+
+%For example, 
+
+%We say that static type information is \emph{reified} because Granary re-introduces it into module binaries by using it to discover attach and detach points. Type information reified by Granary can guide runtime instrumentation decisions. For example, a tool can switch the instrumentation policy based on memory accesses to data of a particular type or based on the usage of a particular module/kernel interface. Tools can also dynamically learn the runtime types of module-allocated objects by observing pointers to those objects as they cross the module/kernel interface.
+
+%Granary \emph{reifies} static type information by using it to guide attaching and detaching, as well as by allowing tools to base runtime instrumentation decisions 
+%
+%re-introducing it into ``typeless'' module binaries.  Granary understands the module/kernel boundary using attach (kernel wrappers) and detach (module wrappers) points.
+%
+%at the module/kernel boundary
+%
+%We call the technique of using static analysis information in Granary ``reifying instrumentation'' because:
+%\begin{enumerate}
+%	\item Static type information is not present in module binaries. Granary re-introduces type information into ``typeless'' module binaries because modules use kernel functions and data structures to interact with the kernel.
+%	\item Static program information can guide runtime instrumentation decisions. For example, the policy used to instrument code can be changed based on:
+%	\begin{enumerate}
+%		\item A memory access to data of a particular type.
+%		\item The usage of a particular interface (kernel function or function pointer field within a kernel data structure).
+%		\item The presence of an object of a particular type being passed as an argument to a module function.
+%	\end{enumerate}
+%	\item Runtime type information can be dynamically learned. For example, if a module allocates some memory then that memory is initially typeless. However, if a Granary tool observes that the allocated object is reachable from an argument to a module or kernel function wrapper then a type can be assigned to that memory.
+%\end{enumerate}
+
+%We are actively developing a tool that uses reifying instrumentation to create models of module behaviour. 
+
+%By combining this information from multiple ``trusted'' modules (e.g. mature, open-source file systems), we hope to be able to create instrumentation that discovers spurious module behaviour 
+
+%For example, we can use the static information available to Granary to create a tool that generates code that, when executed, checks that it is 
+
+%kernel and module wrappers can be combined with policy-switching to enforce some API usage integrity constraints. For example, policy switching can be used to accept or reject an execution of module code by observ
+
+%most useful at mode-switching boundaries, where 
+
+%Static program information is available to Granary tools in the form of kernel types and function declarations. Tools can operate on this information with meta-programs, as well as observe 
+
+%Tools can use this information to interface with the kernel or to 
+
+%We use this information in several novel ways:
+%\begin{enumerate}
+%	\item 
+%\end{enumerate}
+
+%Tools can use meta-programs to operate on this information and generate code (at the tool's compile time) that coordinates with the tool's dynamic analyses in order to learn more about module code. 
+
+%This technique, which we call ``reifying instrumentation'', is distinct from typical dynamic analysis
+%We call the technique of mixing static program information into a DBT system ``reifying instrumentation'' because it takes abstract information (e.g. type information) which is absent from module binaries and re-introduces it as actionable data. This data is actionable insofar as the 
+
+%Granary exposes static program information to instrumentation tools in the form of 
+%Granary tools can use static program information 
+%Reifying instrumentation is the process of using static program information known at mode-switch boundaries to guide the application of different instrumentation policies. The key insight of reifying instrumentation is that the execution of attach and detach points (kernel wrappers) give clues as to how modules and the kernel are interacting.
+%Reifying instrumentation allows tools to inspect and manipulate a portion of program memory at attach (module wrappers) and detach points and in a well-defined way. 
+%This is useful because it helps the instrumentation system learn more about the execution of an otherwise opaque binary. The value of this feature is that users can create low-level instrumentation tools that operate on programs in a high-level way. 
+%Granary uses a technique that we call reifying instrumentation in order to 
+%The key insight of reifying instrumentation is that even arbitrary binaries must follow conventions and APIs to correctly interact with other programs.
+%\section{Environment}\label{sec:env}
+%\subsection{Interrupts and Exceptions}\label{sec:interrupts}
+
 
 \section{Instrumentation Policies}\label{sec:policies}
 
@@ -840,74 +949,6 @@ Granary's approach to managing state was motivated by our experience of trying t
 
 
 %Granary enables instrumentation tools to blah blah blah.
-
-\section{Reifying Instrumentation}\label{sec:reify}
-
-Existing program analysis systems fall into one of three categories:
-\begin{enumerate}
-	\item Binary analysis tools. Existing tools give low-level access to instructions and possibly memory but don't give ``big-picture'' information available source code analysis tools \cite{DRK,DynamoRIO,Pin,PinOS,QEMU,Valgrind}.
-	\item Source code analysis tools. Existing tools give high-level access to program semantics but make it challenging to reason about scheduling, interrupts, shared memory, and aliasing [TODO: cite Sparse, Smatch].
-	\item Mixed source/binary analysis tools. Existing tools give high- and low-level access to program informaiton, but require changes to the compilation toolchain and sometimes program source code \cite{NaCl,AddressSanitizer,ThreadSanitizer}.
-\end{enumerate}
-
-The benefits of high-level static analysis information motivated its inclusion into Granary using a technique we call reifying instrumentation. Granary extracts type and function declarations from the Linux kernel source code and exposes that information to tool developers. Because of this, tools can inspect data at mode-switch boundaries (kernel and module wrappers) and dynamically change the instrumentation policy based on type information.
-
-We say that static type information is \emph{reified} because Granary re-introduces it into module binaries by using it to discover attach and detach points. Type information reified by Granary can guide runtime instrumentation decisions. For example, a tool can switch the instrumentation policy based on memory accesses to data of a particular type or based on the usage of a particular module/kernel interface. Tools can also dynamically learn the runtime types of module-allocated objects by observing pointers to those objects as they cross the module/kernel interface.
-
-%Granary \emph{reifies} static type information by using it to guide attaching and detaching, as well as by allowing tools to base runtime instrumentation decisions 
-%
-%re-introducing it into ``typeless'' module binaries.  Granary understands the module/kernel boundary using attach (kernel wrappers) and detach (module wrappers) points.
-%
-%at the module/kernel boundary
-%
-%We call the technique of using static analysis information in Granary ``reifying instrumentation'' because:
-%\begin{enumerate}
-%	\item Static type information is not present in module binaries. Granary re-introduces type information into ``typeless'' module binaries because modules use kernel functions and data structures to interact with the kernel.
-%	\item Static program information can guide runtime instrumentation decisions. For example, the policy used to instrument code can be changed based on:
-%	\begin{enumerate}
-%		\item A memory access to data of a particular type.
-%		\item The usage of a particular interface (kernel function or function pointer field within a kernel data structure).
-%		\item The presence of an object of a particular type being passed as an argument to a module function.
-%	\end{enumerate}
-%	\item Runtime type information can be dynamically learned. For example, if a module allocates some memory then that memory is initially typeless. However, if a Granary tool observes that the allocated object is reachable from an argument to a module or kernel function wrapper then a type can be assigned to that memory.
-%\end{enumerate}
-
-
-
-We are actively developing a tool that uses reifying instrumentation to create models of module behaviour. Reifying instrumentation serves two roles in this tool. First, we use type information known at mode-switch boundaries to assign kernel types to module allocated memory that is shared across the module/kernel interface. Type assignment plays a critical role because it allows us to correlate memory reads and writes within an object to the exact structure fields of that object. Second, we use the kernel and module function wrappers to generate compressed call graphs of a module's execution from the perspective of the kernel.  When combined, this information allows us to say when and where specific parts of kernel data structures are accessed and modified. Finally, we combine the information recorded from executing multiple ``trusted'' modules (e.g. mature, open-source file systems) and construct models of typical module behaviour. We hope that these models will help us to automatically generate new tools that identify spurious module behaviour.
-
-
-%By combining this information from multiple ``trusted'' modules (e.g. mature, open-source file systems), we hope to be able to create instrumentation that discovers spurious module behaviour 
-
-%For example, we can use the static information available to Granary to create a tool that generates code that, when executed, checks that it is 
-
-%kernel and module wrappers can be combined with policy-switching to enforce some API usage integrity constraints. For example, policy switching can be used to accept or reject an execution of module code by observ
-
-%most useful at mode-switching boundaries, where 
-
-%Static program information is available to Granary tools in the form of kernel types and function declarations. Tools can operate on this information with meta-programs, as well as observe 
-
-%Tools can use this information to interface with the kernel or to 
-
-%We use this information in several novel ways:
-%\begin{enumerate}
-%	\item 
-%\end{enumerate}
-
-%Tools can use meta-programs to operate on this information and generate code (at the tool's compile time) that coordinates with the tool's dynamic analyses in order to learn more about module code. 
-
-%This technique, which we call ``reifying instrumentation'', is distinct from typical dynamic analysis
-%We call the technique of mixing static program information into a DBT system ``reifying instrumentation'' because it takes abstract information (e.g. type information) which is absent from module binaries and re-introduces it as actionable data. This data is actionable insofar as the 
-
-%Granary exposes static program information to instrumentation tools in the form of 
-%Granary tools can use static program information 
-%Reifying instrumentation is the process of using static program information known at mode-switch boundaries to guide the application of different instrumentation policies. The key insight of reifying instrumentation is that the execution of attach and detach points (kernel wrappers) give clues as to how modules and the kernel are interacting.
-%Reifying instrumentation allows tools to inspect and manipulate a portion of program memory at attach (module wrappers) and detach points and in a well-defined way. 
-%This is useful because it helps the instrumentation system learn more about the execution of an otherwise opaque binary. The value of this feature is that users can create low-level instrumentation tools that operate on programs in a high-level way. 
-%Granary uses a technique that we call reifying instrumentation in order to 
-%The key insight of reifying instrumentation is that even arbitrary binaries must follow conventions and APIs to correctly interact with other programs.
-%\section{Environment}\label{sec:env}
-%\subsection{Interrupts and Exceptions}\label{sec:interrupts}
 
 \section{Evaluation}\label{sec:eval}
 \input{evaluation}
