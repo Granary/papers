@@ -710,7 +710,7 @@ Granary's approach to mixed-mode instrumentation exposes a lot of static analysi
 
 We realised that an imporant missing feature of existing low-level instrumentation tools is the ``big picture'' view that one gets from static analysis information. Similarly, static analysis tools lack access to instructions, memory, and processor-specific behaviours that are only available to low-level runtime instrumentation tools. Existing mixed static/dynamic analysis tools \cite{NaCl,AddressSanitizer,ThreadSanitizer} appear to get the best of both worlds, but sacrifice on runtime flexibility by commiting to a single instrumentation policy at a program's compile time.
 
-The benefits of high-level static analysis information motivated its inclusion into Granary using a technique we call reifying instrumentation. Granary extracts type and function declarations from the Linux kernel source code and exposes that information to tool developers. Tools can use this information to inspect data in wrappers and dynamically change the instrumentation policy based on either static or runtime information. 
+The benefits of high-level static analysis information motivated its inclusion into Granary using a technique we call reifying instrumentation. Granary extracts type and function declarations from the Linux kernel source code and exposes that information to tool developers. Tools can use this information to inspect data in wrappers and dynamically change the instrumentation policy based on either static or runtime information. For example, we developed a tool that interposes on and associate writes to memory with specific kernel data structure fields. We used this tool to precisely detect if/when a module violates a kernel data structure invariant (\Cref{fig:field_invariant_check}).
 
 \begin{figure}[t]
 \begin{lstlisting}[language=C,basicstyle=\footnotesize\ttfamily]
@@ -725,9 +725,6 @@ WATCH_WRITE(struct file_operations, ioctl, {
 \end{lstlisting}
 \ORIGcaption{\label{fig:field_invariant_check}This code generates a function that is automatically invoked every time memory with the type \texttt{struct file\_operations} is accessed. The generated function checks invariant 1(h) from \cite{GibraltarKernelInvariants}. The invariant checked prevents a (potential) kernel rootkit from installing its own \texttt{ioctl} handler into the Real-Time Clock. Anti-virus programs depend on this built-in \texttt{ioctl} handler to periodically schedule virus scans. Replacing this handler can prevent such scans from being scheduled, thus allowing the rootkit to go undetected.}
 \end{figure}
-
-
-Frameworks that operate on Granary's static analysis information can also be created. For example, we developed a framework that allows tools to interpose on and associate writes to memory with specific kernel data structure fields. Using this framework, we developed a tool that precisely detects if/when a module violates a kernel data structure invariant (\Cref{fig:field_invariant_check}).
 
 
 %generates another tool that detects Linux kernel invariant violations. In particular, our tool interposed on memory accesses at the granularity of Linux kernel data structure fields, and checked that values being written to those fields maintained data-structure-specific invariants }.
@@ -798,7 +795,7 @@ Frameworks that operate on Granary's static analysis information can also be cre
 
 Giving Granary tools the ability to dynamically switch the policy used to instrument code was a natural extension of mixed-mode execution. Just as instrumenting only module code allows Granary to specialise the execution of native code, so does policy switching allow tools to specialise the execution of instrumented code. In fact, optimising the performance of an early Granary tool was the original motivation for policy switching.
 
-We developed a Granary tool that detects several Read-Copy-Update (RCU) API misuses in module code. As an optimisation, we wanted our heavyweight API-checking instrumentation to apply only when the code executing was within the context of a read-critical section. However, implementing this optimisation was tricky because we didn't have a reliable way to know whether or not some code being translated was executing within a read-critical section. That is, instrumented module code executing within a read-critical section may have originally been translated while executing outside of the context of a read-critical section. Our solution to this problem was to allow different versions of the same module code to co-exist within Granary's code cache.
+We developed a Granary tool that detects several Read-Copy-Update (RCU) API misuses in module code. As an optimisation, we wanted our heavyweight API-checking instrumentation to apply only when the code executing was within the context of a read-critical section. At the time, implementing this optimisation was challenging because we didn't have a reliable way to know whether or not some code being translated was executing within a read-critical section. That is, instrumented module code executing within a read-critical section may have originally been translated while executing outside of the context of a read-critical section. If that lightweight-instrumented code was executed within the context of a read-critical section, then our bug detection scheme would not have been comprehensive. Our solution to this problem was to allow different versions of the same module code to co-exist within Granary's code cache.
 
 
 
