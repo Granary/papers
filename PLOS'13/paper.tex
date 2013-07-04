@@ -647,7 +647,7 @@ Granary first attaches to a module when that module is loaded into the Linux ker
 Granary detaches when control transfers from instrumented code to native (uninstrumented) code. Detaching occurs is one of three ways: \begin{enumerate}
 	\item {\bf Implict detaching:} instrumented module code returns to the original kernel, or is interrupted.
 	\item {\bf Wrapped detaching:} intrumented module code invokes a kernel wrapper, which later transfers control to the kernel.
-	\item {\bf Direct detaching:} instrumented module code invokes a kernel function directly. This happens when a tool---as part of its instrumentation---injects an unwrapped \texttt{call} or \texttt{jmp} to a kernel function.
+	\item {\bf Unwrapped detaching:} instrumented module code invokes a kernel function directly. This happens when a tool---as part of its instrumentation---injects an unwrapped \texttt{call} or \texttt{jmp} to a kernel function.
 \end{enumerate}
 
 
