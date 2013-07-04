@@ -186,7 +186,7 @@ Operating system (OS) kernels present an apparently insane environment for a tra
 
 The challenges and opportunities of the kernel environment motivated the creation of Granary \cite{GranaryAtOSDI,GranaryAtASPLOS}. Granary is a new binary instrumentation framework designed for the Linux kernel environment, with a particular focus on the analysis of kernel modules. Granary is the first system that allows developers to create flexible and dynamic module analysis tools that can analyse arbitrary Linux kernel module binaries. Our goal when creating Granary was to make it easy to create efficient, low-level analysis tools (e.g. to analyse memory accesses, instructions, basic blocks, or control flow) that integrate high-level static analysis information (e.g. figuring out which data structure fields are associated with each memory access). Granary uses dynamic binary translation (DBT) to just-in-time decode, instrument, and encode \texttt{x86-64} binary module instructions. Unlike other binary analysis systems, Granary tools can use kernel static analysis information to change how code is instrumented and to provide meaning to otherwise typeless instructions/memory. 
 
-The goal of Granary was to create a framework that makes it easy for developers to create flexible and dynamic instrumentation tools. Granary addresses three limitations of existing program analysis systems that restrict the flexibility of their tools: \begin{inparaenum}[(1)]
+Granary addresses three limitations of existing program analysis systems: \begin{inparaenum}[(1)]
 	\item they have focused on instrumenting all code (e.g. the whole kernel or whole system) \cite{DRK,QEMU,PinOS}; 
 	\item they do not allow for the instrumentation policy to change dynamically \cite{Pin,DynamoRIO,QEMU}; and
 	\item they do not allow mixing static type information into the instrumentation code  \cite{PinOS,Pin,DRK,DynamoRIO,QEMU}.
@@ -238,7 +238,7 @@ Granary also supports dynamically changing the policy used to instrument code, c
 
 %Policy switching is also useful in the context of interrupts. For example, Granary provides a framework for fine-grained memory access instrumentation, called \emph{behavioural watchpoints}. Behavioural watchpoints-based tools expose tainted memory addresses to instrumented programs. If a tainted address is used to access memory then the processor raises a fault. Instead of instrumenting all code in a way that guards against such faults ($P_{watchpoints}$), Granary defaults to instrumenting basic blocks using $P_{null}$. However, when a fault is raised, Granary prevents future faults from occuring within the same basic block by patching the $P_{null}$-instrumented basic block to re-route control to a $P_{watchpoints}$-instrumented basic block.
 
-The last limitation of current systems is that they do not allow the use of static program information while also instrumenting arbitrary, binary modules. This is unfortunate because static program analysis provides ``big picture'' information that is sorely missing when doing instruction-level instrumentation. The benefits of high-level static analysis information motivated its inclusion into Granary using a technique we call \emph{reifying instrumentation}. Granary statically analyses the Linux kernel source code to learn about  the interfaces that enable modules and the kernel to interact. Granary exposes this information to instrumentation tools in the form of type and function \emph{wrappers}. Tools can use this information to decide what policy to apply when instrumenting certain module code as well as to inspect and manipulate parts of kernel/module memory in a type-safe way.
+The last limitation of current systems is that they do not allow the use of static program information while also instrumenting arbitrary, binary modules. This is unfortunate because static program analysis provides ``big picture'' information that is sorely missing when doing instruction-level instrumentation. The benefits of high-level static analysis motivated its inclusion into Granary using a technique we call \emph{reifying instrumentation}. Granary statically analyses the Linux kernel source code to learn about  the interfaces that enable modules and the kernel to interact. Granary exposes this information to instrumentation tools in the form of type and function \emph{wrappers}. Tools can use this information to decide what policy to apply when instrumenting certain module code as well as to inspect and manipulate parts of kernel/module memory in a type-safe way.
 
 %Existing program analysis systems fall into one of three categories:
 %\begin{enumerate}
@@ -397,7 +397,7 @@ For example, we are actively developing a tool that uses reifying instrumentatio
 %Dynamic analysis of kernel modules is challenging because existing tools are either too coarse grained (TODO CITE: DRK, PinOS, QEMU, KVM) or are optimised for performance at the cost of expresive/flexible tooling.
 %Static analysis of module source code is difficult because of the tight interaction between modules and the kernel. Some modules, however, are only distributed in a binary format, which makes static analysis intractable. 
 
-\comment{!!!This might narrow the usefulnesss of Granary down by making it seem like we're only useful where static analysis fails, or like we're only useful when source code is unavailable.!!!}
+%\comment{!!!This might narrow the usefulnesss of Granary down by making it seem like we're only useful where static analysis fails, or like we're only useful when source code is unavailable.!!!}
 
 %\iffalse
 %	\subsection{Novelties}
@@ -441,10 +441,10 @@ For example, we are actively developing a tool that uses reifying instrumentatio
 
 Our goal when creating Granary was to make a flexible and efficient framework that developers can use to create tools that analyse arbitrary, binary modules. In pursuit of this goal, we designed Granary so that its tools would be \begin{inparaenum}[i)]
 	%\item easy to prototype;
-	\item easy to debug;
 	%\item portable;
-	\item comprehensive; and
-	\item efficient.
+	\item comprehensive;
+	\item efficient; and
+	\item easy to debug.
 \end{inparaenum}
 
 
@@ -453,8 +453,6 @@ Our goal when creating Granary was to make a flexible and efficient framework th
 %\paragraph{Easy to prototype:} Creating instrumentation tools that run in pre-emptive kernels on multi-core computers is challenging. Our experience is that, when possible, modelling a kernel space problem and its instrumentation in user space allows tool developers to easily test assumptions and gain insights. Therefore, we designed Granary to be able to also instrument user space code on both Linux and Mac OS X. We have found this feature very useful as a way of weeding out bugs in new instrumentation tools before applying those tools to actual kernel modules.
 
 %We have found that testing tools in user space has the benefit of quicker turn-around time when making changes, and that the plethora of user space debugging tools enables faster.
-
-\paragraph{Easy to debug:} Debugging the tools that transform and generate executable code on-the-fly can be challenging. However, Granary ameliorates the experience by providing rich debugger commands that query structured meta-data stored alongside all generated code. For example, Granary facilitates debugging by allowing a debugger to step back in time over recently executed basic blocks, inspect/query the register state on entry to those basic blocks, and see what instrumentation policies and state were used to create those basic blocks.
 
 %, Granary maintains structured meta-data along with all generated executable code. Meta-data is queried by \texttt{gdb} debugger commands to provide rich debugging information.
 
@@ -465,6 +463,10 @@ Our goal when creating Granary was to make a flexible and efficient framework th
 \paragraph{Comprehensive:} Granary is comprehensive in two ways. First, if code is meant to be instrumented then it always executes under Granary's control. Second, Granary does not depend on hardware virtualisation or module source code. This enables Granary to instrument any binary kernel module.
 
 \paragraph{Efficient:} Mixed-mode execution enables some code to run without overhead by executing that code natively. When instrumenting Linux kernel modules, Granary imposes no performance overheads on non-module kernel code.
+
+%\paragraph{Easy to interpret
+
+\paragraph{Easy to debug:} Debugging the tools that transform and generate executable code on-the-fly can be challenging. However, Granary ameliorates the experience by providing rich debugger commands that query structured meta-data stored alongside all generated code. For example, Granary facilitates debugging by allowing a debugger to step back in time over recently executed basic blocks, inspect/query the register state on entry to those basic blocks, and see what instrumentation policies and state were used to create those basic blocks.
 
 
 \subsection{Contributions}\label{sec:contrib}
@@ -486,7 +488,7 @@ In \Cref{sec:modes}, we describe how to efficiently implement mixed-mode executi
 
 %In this section, we give a brief background on dynamic binary translation in general, and Granary in particular.
 
-Granary uses a technique called dynamic binary translation (DBT) to instrument Linux kernel modules \cite{DynamoRIO}. DBT is used for instruction set translation/emulation \cite{QEMU}, runtime optimization \cite{DynamoRIOOptimisation}, and runtime instrumentation (analysis, security, debugging) \cite{Vx32,NaCl,Valgrind}. DBT is attractive when few assumptions can be made about the nature of the programs being translated. On architectures like \texttt{x86} where the mix of variably-sized instructions and data make static binary translation intractable, DBT is necessary.
+Granary uses dynamic binary translation (DBT) to instrument Linux kernel modules \cite{DynamoRIO}. DBT is used for instruction set translation/emulation \cite{QEMU}, runtime optimization \cite{DynamoRIOOptimisation}, and runtime instrumentation (analysis, security, debugging) \cite{Vx32,NaCl,Valgrind}. DBT is attractive when few assumptions can be made about the nature of the programs being translated. On architectures like \texttt{x86} where the mix of variably-sized instructions and data make static binary translation intractable, DBT is necessary.
 
 Granary interposes on the module loading process of the Linux kernel. When a kernel module is loaded, Granary replaces the pointer to the module's initialisation function with a pointer to the translated version of the initialisation function's first basic block. The translation process begins when the kernel initialises the module by invoking the translated module code.
 
@@ -581,7 +583,7 @@ TYPE_WRAPPER(struct device_driver, {
 })
 \end{lstlisting}
 \end{multicols}
-\ORIGcaption[LoF entry]{Example type wrapper for the Linux \texttt{device\_driver} structure. In the above code, \texttt{arg} is a reference to a \texttt{struct device\_driver} object passed as or referenced by an argument to a kernel or module function. Granary automatically applies type wrappers to function arguments passed over the kernel/module interface. Type wrappers are applied recursively (e.g. \texttt{POST\_WRAP}). \texttt{PRE\_}, \texttt{POST\_}, and \texttt{RETURN\_} define wrapping policies applied before, after, or to the return value of a function used to transfer control to/from the kernel or the module, respectively. The \texttt{\_IN} and \texttt{\_OUT} suffixes define the direction of data: \texttt{\_IN} wrappers apply to data going from the kernel into the module, and \texttt{\_OUT} wrappers apply to data leaving the module.}
+\ORIGcaption[LoF entry]{Example type wrapper for the Linux \texttt{device\_driver} structure. In the above code, \texttt{arg} is a reference to a \texttt{struct device\_driver} object passed as, or referenced by, an argument to a kernel or module function. Granary automatically applies type wrappers to function arguments passed over the kernel/module interface. Type wrappers are applied recursively (e.g. \texttt{POST\_WRAP}). \texttt{PRE\_}, \texttt{POST\_}, and \texttt{RETURN\_} define wrapping policies applied before, after, or to the return value of a function used to transfer control to/from the kernel or the module, respectively. The \texttt{\_IN} and \texttt{\_OUT} suffixes define the direction of data: \texttt{\_IN} wrappers apply to data going from the kernel into the module, and \texttt{\_OUT} wrappers apply to data leaving the module.}
 \label{fig:type_wrapper}
 \end{figure*}
 
@@ -595,7 +597,7 @@ Our original design for mode-switching used hardware page protection to trap att
 
 Granary's approach to mixed-mode execution is based on the observation that modules tell the kernel about their interfaces by registering functions with the kernel. We expect that at least some of the registered functions will be executed by the kernel because this is the mechanism by which modules extend the kernel's functionality. To Granary, registered module functions represent potential future \emph{attach} points, where a mode switch from native to instrumented code will occur. Unless otherwise specified, all kernel functions are treated as \emph{detach} points, where a mode switch from instrumented to native code will occur. It is at these attach and detach points that Granary is able to discover additional attach points by observing module function pointers that are passed across the kernel/module boundary.
 
-Granary is able to dynamically discover attach and detach points by wrapping the kernel/module interface. Kernel functions are wrapped by \emph{kernel wrappers} that inspect and traverse argument pointers in search of module function pointers. If a pointer to a module function is discovered (a future attach point) then Granary replaces that pointer with a function-specific \emph{module wrapper}. Granary inspects and modifies arguments to modules wrappers in the same way. Finally, Granary redirects execution to the appropriate kernel or instrumented module function after wrapping has occured.
+Granary is able to dynamically discover attach and detach points by wrapping the kernel/module interface. Kernel functions are wrapped by \emph{kernel wrappers} that inspect and traverse argument pointers in search of module function pointers. If a pointer to a module function is discovered (a future attach point) then Granary replaces that pointer with a function-specific \emph{module wrapper}. Granary inspects and modifies arguments to module wrappers in the same way. Finally, Granary redirects execution to the appropriate kernel or instrumented module function after wrapping has occured.
 
 Kernel and module wrappers invoke \emph{type wrappers} to find and wrap pointers to module functions that are (in)directly referenced by kernel/module function arguments (\Cref{fig:type_wrapper}). A type wrapper is a function that recursively  traverses the in-memory object graph and converts pointers to module code into pointers to wrapped module functions.  Granary automatically applies the correct type wrapper to the arguments of kernel/module wrappers.
 
@@ -628,9 +630,9 @@ Fast and slow attaching transfer control to instrumented module code. Fast attac
 \subsection{Detaching}
 
 Granary detaches when control transfers from instrumented code to native (uninstrumented) code. Detaching occurs is one of three ways: \begin{enumerate}
-	\item {\bf Implict detaching:} instrumented module code returns to the original kernel.
+	\item {\bf Implict detaching:} instrumented module code returns to the original kernel, or is interrupted.
 	\item {\bf Wrapped detaching:} intrumented module code invokes a kernel wrapper, which later transfers control to the kernel.
-	\item {\bf Direct detaching:} instrumented module code invokes a kernel function directly. This happens when a tool marks a kernel function as not needing any wrapping, or when a tool---as part of its instrumentation---injects an unwrapped \texttt{call} or \texttt{jmp} to a kernel function. In the former case, tools must be explicit about what kernel functions should not be wrapped because Granary defaults to automatically wrapping all kernel functions.
+	\item {\bf Direct detaching:} instrumented module code invokes a kernel function directly. This happens when a tool---as part of its instrumentation---injects an unwrapped \texttt{call} or \texttt{jmp} to a kernel function.
 \end{enumerate}
 
 
@@ -679,7 +681,7 @@ The trade-off between transparency and overhead motivated the inclusion of confi
 
 \paragraph{Function return addresses}\label{para:return_address_transparency} By default, Granary does not maintain return address transparency. Return addresses to instrumented code are exposed to instrumented functions and kernel functions. The benefit of not maintaining return address transparency is efficiency: Granary will not do extra work (i.e. an indirect branch lookup) to resolve the target of a \texttt{ret} (return from procedure) instruction. If Granary is configured to use transparent return addresses, then implicit attaching and detaching are disabled. Granary will fall back to depending on slow attaching and performing an indirect branch lookup before executing \texttt{ret} instructions.
 
-\paragraph{Interrupt return addresses} Kernel interrupts are not sensitive to return addresses, except in the case of page faults occuring within specific kernel functions that access user space data. Therefore, maintaining return address transparency with respect to interrupts in instrumented module code has no value. Granary treats faults in kernel code that accesses user space data as a special case and handles those kinds of interrupts in a similar way to the kernel.
+\paragraph{Interrupt return addresses} Kernel interrupts are not sensitive to return addresses, except in the case of page faults occuring within specific kernel functions that access user space data. Granary handles this exceptional case in similar way to the kernel. Therefore, maintaining return address transparency with respect to interrupts in instrumented module code has no value.
 
 %The benefit of this approach is that interrupts are never delayed, unless explicitly requested by tool developers.  Our experience with writing module analysis tools using DRK motivated Granary's lack of interrupt return address transparency. DRK-based analysis tools that want to maintain transparency are restricted by DRK's approach to handling interrupts. DRK limits tools to 
 
@@ -687,7 +689,7 @@ The trade-off between transparency and overhead motivated the inclusion of confi
 
 \section{Reifying Instrumentation}\label{sec:reify}
 
-Granary's approach to mixed-mode instrumentation exposes a lot of static analysis information to instrumentation tools. For example, we are actively using wrapper information to create a tool that generates models of typical module behaviour. The wrapper information available to all tools serves two roles in our tool. First, we use type wrappers to assign type-specific IDs to module allocated memory that is shared across the module/kernel interface. Type ID assignment plays a critical role because it allows us to match memory reads and writes to specific kernel data structure fields. Second, we use the kernel and module function wrappers to generate call graphs of a module's execution. This call graph models module behaviour (according to the kernel) because we label module code nodes with kernel data structure and function pointer field names. This labelling allows us to generalise across similar modules. For example, code reached by calling the \texttt{ext4\_mount} and \texttt{btrfs\_mount} functions from the \texttt{ext4} and \texttt{btrfs} modules, respectively, are both labelled as \texttt{file\_system\_type::mount}. The combined records from executing multiple ``trusted'' modules (e.g. mature, open-source file systems) will model the behaviour of typical kernel modules. We hope that these models will help us to automatically generate new tools that classify and identify spurious module behaviour.
+Granary's mixed-mode instrumentation exposes a lot of static analysis information to instrumentation tools. For example, we are actively using wrapper information to create a tool that generates models of typical module behaviour. The wrapper information available to all tools serves two roles in our tool. First, we use type wrappers to assign type-specific IDs to module allocated memory that is shared across the module/kernel interface. Type ID assignment plays a critical role because it allows us to match memory reads and writes to specific kernel data structure fields. Second, we use the kernel and module function wrappers to generate call graphs of a module's execution. This call graph models module behaviour (according to the kernel) because we label module code nodes with kernel data structure and function pointer field names. This labelling allows us to generalise across similar modules. For example, code reached by calling the \texttt{ext4\_mount} and \texttt{btrfs\_mount} functions from the \texttt{ext4} and \texttt{btrfs} modules, respectively, are both labelled as \texttt{file\_system\_type::mount}. The combined records from executing multiple ``trusted'' modules (e.g. mature, open-source file systems) will model the behaviour of typical kernel modules. We hope that these models will help us to automatically generate new tools that classify and identify spurious module behaviour.
 
 
 %We compress these call graphs by treating internal module function calls as 
