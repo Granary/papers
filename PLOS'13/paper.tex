@@ -202,9 +202,14 @@ Granary addresses three limitations of existing program analysis systems: \begin
 %	\item it does not allow mixing static type information into the instrumentation code.
 %\end{inparaenum} 
 
-Instrumenting all code (e.g. the whole kernel) imposes unnecessary performance overheads when only a subset of the code is being analysed (e.g. modules). In practice, we would like to target instrumentation at specific modules for efficiency, while also allowing rich and detailed instrumentation of the relevant code. This requirement motivates the design of \emph{mixed-mode execution}, which allows Granary to instrument module code while non-module kernel code executes with zero overhead.
+Instrumenting all code (e.g. the whole kernel) imposes unnecessary performance overheads when only a subset of the code is being analysed (e.g. modules). In practice, we would like to target instrumentation at specific modules for efficiency, while also allowing rich and detailed instrumentation of the relevant code. This requirement motivates the design of \emph{mixed-mode execution}, which allows Granary to instrument module code while non-module kernel code executes with zero overhead. This is challenging because Granary is comprehensive: all code meant to be instrumented will be instrumented.
 
-Granary also supports dynamically changing the policy used to instrument code, called \emph{policy-driven instrumentation}. For example, Granary has a tool that uses policy switching to dynamically construct inter- and intra-procedural control flow graphs (CFGs). Granary tools can benefit from recorded CFGs to optimise register stealing, condition code dependencies, and tracing. Two policies are used to construct these graphs: $P_{enter\_function}$ and $P_{in\_function}$. $P_{enter\_function}$ applies to the first execution of the first basic block of each function, and connects functions in the inter-procedural CFG.  $P_{in\_function}$ applies to all other executed basic blocks within each function, including re-executions of the first basic block. $P_{in\_function}$ connects basic blocks in the intra-procedural CFG.
+Granary also supports dynamically changing the policy used to instrument code, called \emph{policy-driven instrumentation}. For example, Granary has a tool that uses policy switching to dynamically construct inter- and intra-procedural control flow graphs (CFGs). Granary tools can benefit from recorded CFGs to optimise register stealing, condition code dependencies, and tracing. Two policies are used to construct these graphs: $P_{enter\_function}$ and $P_{in\_function}$. $P_{enter\_function}$ applies to the first execution of the first basic block of each function, and connects functions in the inter-procedural CFG.  $P_{in\_function}$ applies to all other executed basic blocks within each function, including re-executions of the first basic block. $P_{in\_function}$ connects basic blocks in the intra-procedural CFG. We explicitly maintain policy information in translated basic blocks in order to track execution contexts. This avoids typical problems involved in tracking context in just-in-time DBT systems (e.g. concurrency, abitrary pre-emption, context-switching).
+
+%The just-in-time nature of DBT systems and the way basic blocks are linked together makes it challenging 
+%Abitrary module pre-emption and resumption can cause the context in which a module executes 
+%Implementing policy tracking and switching in a way that is convenient for tool-developers is challenging in the face of arbitrary module pre-emption and resumption.
+%is challenging in the face of abitrary pre-emption 
 
 % is applied to \texttt{call} instructions, which makes
 
@@ -437,40 +442,46 @@ For example, we are actively developing a tool that uses reifying instrumentatio
 
 %, as well as using this information to learn more about the execution of an otherwise opaque binary. 
 
-\subsection{Goals}\label{sec:goals}
+%\subsection{Goals}\label{sec:goals}
+%
+%Our goal when creating Granary was to make a flexible and efficient framework that developers can use to create tools that analyse arbitrary, binary modules. In pursuit of this goal, we designed Granary so that its tools would be \begin{inparaenum}[i)]
+%	%\item easy to prototype;
+%	%\item portable;
+%	\item comprehensive;
+%	\item efficient; and
+%	\item easy to debug.
+%\end{inparaenum}
+%
+%
+%%While designing Granary, we identified the following five features that help achieve this goal: testability, debuggability, portability, comprehensiveness, and efficiency.
+%
+%%\paragraph{Easy to prototype:} Creating instrumentation tools that run in pre-emptive kernels on multi-core computers is challenging. Our experience is that, when possible, modelling a kernel space problem and its instrumentation in user space allows tool developers to easily test assumptions and gain insights. Therefore, we designed Granary to be able to also instrument user space code on both Linux and Mac OS X. We have found this feature very useful as a way of weeding out bugs in new instrumentation tools before applying those tools to actual kernel modules.
+%
+%%We have found that testing tools in user space has the benefit of quicker turn-around time when making changes, and that the plethora of user space debugging tools enables faster.
+%
+%%, Granary maintains structured meta-data along with all generated executable code. Meta-data is queried by \texttt{gdb} debugger commands to provide rich debugging information.
+%
+%%\paragraph{Portable:} The Linux kernel and its modules have many different versions, including several long-term support  versions. To support the development of module debugging tools for discovering bugs that appear on only some kernel versions, Granary was designed to be portable across several kernel versions and compiler toolchains.
+%%
+%%Granary runs on any of Linux 2.32.x to Linux 3.9.x, compiles with both \texttt{gcc} and \texttt{clang}, and requires no changes to the kernel's source code. Granary also runs in user space on Linux and Mac OS X.
+%
+%\paragraph{Comprehensive:} Granary is comprehensive in two ways. First, if code is meant to be instrumented then it always executes under Granary's control. Second, Granary does not depend on hardware virtualisation or module source code. This enables Granary to instrument any binary kernel module.
+%
+%\paragraph{Efficient:} Mixed-mode execution enables some code to run without overhead by executing that code natively. When instrumenting Linux kernel modules, Granary imposes no performance overheads on non-module kernel code.
+%
+%%\paragraph{Easy to interpret
+%
+%\paragraph{Easy to debug:} Debugging the tools that transform and generate executable code on-the-fly can be challenging. However, Granary ameliorates the experience by providing rich debugger commands that query structured meta-data stored alongside all generated code. For example, Granary facilitates debugging by allowing a debugger to step back in time over recently executed basic blocks, inspect/query the register state on entry to those basic blocks, and see what instrumentation policies and state were used to create those basic blocks.
 
-Our goal when creating Granary was to make a flexible and efficient framework that developers can use to create tools that analyse arbitrary, binary modules. In pursuit of this goal, we designed Granary so that its tools would be \begin{inparaenum}[i)]
-	%\item easy to prototype;
-	%\item portable;
-	\item comprehensive;
-	\item efficient; and
-	\item easy to debug.
+Additional features of Granary include rich debugging commands for: \begin{inparaenum}[i)]
+	\item stepping back in time over recently executed basic blocks;
+	\item querying historical register state;
+	\item inspecting basic blocks and how they were translated; and
+	\item tracking performance counters.
 \end{inparaenum}
 
-
-%While designing Granary, we identified the following five features that help achieve this goal: testability, debuggability, portability, comprehensiveness, and efficiency.
-
-%\paragraph{Easy to prototype:} Creating instrumentation tools that run in pre-emptive kernels on multi-core computers is challenging. Our experience is that, when possible, modelling a kernel space problem and its instrumentation in user space allows tool developers to easily test assumptions and gain insights. Therefore, we designed Granary to be able to also instrument user space code on both Linux and Mac OS X. We have found this feature very useful as a way of weeding out bugs in new instrumentation tools before applying those tools to actual kernel modules.
-
-%We have found that testing tools in user space has the benefit of quicker turn-around time when making changes, and that the plethora of user space debugging tools enables faster.
-
-%, Granary maintains structured meta-data along with all generated executable code. Meta-data is queried by \texttt{gdb} debugger commands to provide rich debugging information.
-
-%\paragraph{Portable:} The Linux kernel and its modules have many different versions, including several long-term support  versions. To support the development of module debugging tools for discovering bugs that appear on only some kernel versions, Granary was designed to be portable across several kernel versions and compiler toolchains.
-%
-%Granary runs on any of Linux 2.32.x to Linux 3.9.x, compiles with both \texttt{gcc} and \texttt{clang}, and requires no changes to the kernel's source code. Granary also runs in user space on Linux and Mac OS X.
-
-\paragraph{Comprehensive:} Granary is comprehensive in two ways. First, if code is meant to be instrumented then it always executes under Granary's control. Second, Granary does not depend on hardware virtualisation or module source code. This enables Granary to instrument any binary kernel module.
-
-\paragraph{Efficient:} Mixed-mode execution enables some code to run without overhead by executing that code natively. When instrumenting Linux kernel modules, Granary imposes no performance overheads on non-module kernel code.
-
-%\paragraph{Easy to interpret
-
-\paragraph{Easy to debug:} Debugging the tools that transform and generate executable code on-the-fly can be challenging. However, Granary ameliorates the experience by providing rich debugger commands that query structured meta-data stored alongside all generated code. For example, Granary facilitates debugging by allowing a debugger to step back in time over recently executed basic blocks, inspect/query the register state on entry to those basic blocks, and see what instrumentation policies and state were used to create those basic blocks.
-
-
 \subsection{Contributions}\label{sec:contrib}
-In \Cref{sec:modes}, we describe how to efficiently implement mixed-mode execution; in \Cref{sec:reify}, we describe how to integrate static analysis information into a DBT system; in \Cref{sec:policies}, we describe a new method for dynamically changing how code is instrumented; and in \Cref{sec:eval}, we evaluate Granary's performance.
+In \Cref{sec:modes}, we describe how to efficiently implement mixed-mode execution; in \Cref{sec:policies}, we describe a new method for dynamically changing how code is instrumented; in \Cref{sec:reify}, we describe how to integrate static analysis information into a DBT system; and in \Cref{sec:eval}, we evaluate Granary's performance.
 
 %	\begin{enumerate}[i)]
 %		%\item The design and implementation of three novel instrumentation techniques: policy-driven instrumentation, mixed-mode execution, and reifying instrumentation.
@@ -687,6 +698,72 @@ The trade-off between transparency and overhead motivated the inclusion of confi
 
 \paragraph{Module function wrappers} Granary does not maintain transparency when its type wrappers replace pointers to module functions with pointers to wrapped module functions. This is perhaps the riskiest break in transparency within Granary because a module might treat a function pointer as being representative of the module being in some particular state. The benefit of enabling module function wrappers is that they give instrumentation tools more information about the executing module (e.g. shared data structures, which interfaces are used by the kernel). If Granary is configured to use transparent module function pointer addresses in shared data structures then fast attaching is disabled and tools will not have access to the same level of static program information.
 
+
+
+\section{Instrumentation Policies}\label{sec:policies}
+
+
+\lstset{language=[x64]Assembler}
+\newsavebox\asmbox
+\begin{lrbox}{\asmbox}
+\begin{minipage}[b]{4cm}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+1: mov    (%rdi), %rax
+   jmp    .2
+2: mov    %rax, (%rsi)
+   test   %rax
+   jz     .4
+3: inc    %rsi
+   inc    %rdi
+   jmp    .1
+4: ret
+\end{lstlisting}
+\end{minipage}
+\end{lrbox}
+
+\begin{figure*}[ht!]
+\centering
+\subfloat[Policy Switching Protocol]{
+\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=3cm,scale=0.8, every node/.style={scale=0.8}]
+  \node[initial,state]          (C)   {$P_{call\_entry}$}; 
+  \node[state]          (A)[right of=C]      {$P_{after\_entry}$};
+  \path[->]     (A)     edge    [loop above]    node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)                                edge         [bend right]        node {{\footnotesize\ttfamily\bf call}} (C)                        (C) edge    [bend right]     node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)                        (C)     edge    [loop above]    node {{\footnotesize\ttfamily\bf call}} (C);
+\end{tikzpicture}
+}
+\hfill
+ \subfloat[Uninstrumented Code]{\usebox\asmbox}
+\hfill
+ \subfloat[Instrumented Basic Blocks]{
+\epsfig{file=diagrams/policy-switching-entry-tracking.eps,width=2.5in}
+ }
+\ORIGcaption{\label{fig:policy_switching}Example policy switching protocol that ensures that instrumentation ($P_{call\_entry}$) is performed only once on entry to every function, regardless of if that basic block is re-executed. Basic block (1) is instrumented by both $P_{call\_entry}$ and $P_{after\_entry}$, and basic blocks (2) and (3) are instrumented by $P_{after\_entry}$.}
+\end{figure*}
+
+Giving Granary tools the ability to dynamically switch the policy used to instrument code was a natural extension of mixed-mode execution. Just as instrumenting only module code allows Granary to specialise the execution of native code, so does policy switching allow tools to specialise the execution of instrumented code. In fact, optimising the performance of an early Granary tool was the original motivation for policy switching.
+
+We developed a Granary tool that detects several Read-Copy-Update (RCU) API misuses in module code. As an optimisation, we wanted our heavyweight API-checking instrumentation to apply only when the code executing was within the context of a read-side critical section. At the time, implementing this optimisation was challenging because we didn't have a reliable way to know whether or not some code being translated was or would execute within a read-side critical section. That is, instrumented module code executing within a read-side critical section may have originally been translated while executing outside of a read-side critical section. If that lightweight-instrumented code was later executed within a read-side critical section, then our bug detection scheme would not have been comprehensive. 
+
+To implement our optimisation, we solved a more fundamental problem: tailoring instrumentation to the context in which the instrumented code will execute. Our solution to this problem was to allow different versions of the same module code to co-exist within Granary's code cache. That is, a different version of each of a module's basic blocks exists in Granary's code cache  for each encountered execution context. In the case of our RCU checker tool, there were two execution contexts: \begin{inparaenum}[(1)]
+	\item in a read-side critical section; and
+	\item not in a read-side critical section.
+\end{inparaenum} If the same module basic block executed in both contexts, then Granary's code cache would contain two different instrumented versions of that basic block. The way that Granary distinguishes between both execution contexts is with \emph{instrumentation policies}. 
+
+An instrumentation policy is both a name for an execution context, as well as a function that decides how to instrument basic blocks that will execute within that context. All tools define an initial policy that Granary uses to instrument module code. Tools are not limited to one policy though: any policy can declare a policy switch that will take effect when a selected control-transferring instruction (CTI) is executed. For example, our RCU tool invokes a policy switch from policy $P_{null}$ to policy $P_{read\_critical}$ when $P_{null}$'s instrumentation function observes a \texttt{call} instruction to the \texttt{rcu\_read\_lock} Linux kernel function.
+
+Because policies name an execution context, they also represent states in a finite state machine. That is, a module's execution is in the state named by a policy if the code executing was instrumented by that policy. A state transition occurs when control transfers from code instrumented by one policy to code instrumented by another policy. An early limitation with this approach was that a single state does not encode the sequence of previous states that led to execution being the current state. For example, RCU permits nested read-side critical sections. If two read-side critical sections were nested then switching from $P_{read\_critical}$ to $P_{null}$ on the first \texttt{call} to \texttt{rcu\_read\_unlock} would mean that our tool woild lose track of being in the context the outer read-side critical section. We solved this early limitation by observing that, in most cases, function returns are natural policy reverting points. This is because the runtime call stack encodes both the context in which the current code is executing, as well as the continuation of the current executing code.
+
+Granary implements policy tracking and switching by encoding policy information into the meta-data and CTIs of basic blocks. If a policy switch is not specified on an instrumented CTI then that CTI automatically inherits the policy used to instrument the basic block containing the CTI. However, policy switching and inheritance does not apply to \texttt{ret} instructions, which allows a function instrumented by a different policy than its caller to return to the caller's context (i.e. policy). When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. Because every CTI encodes policy information, and because Granary's translation mechanism depends only on CTI policy and target information, Granary is able to ensure that policy information is never lost or corrupted, even in the face of concurrent executions of the same module code, arbitrary pre-emption, and abitrary resumption.
+
+% Our approach makes tools that use policies to track states of a module's execution resilient against abitrary pre-emption and resumption because once cached, the policy-switching behaviour of a basic block cannot be accidentally corrupted or lost (e.g. due to concurrency bugs). 
+
+One drawback of Granary's policy implementation is code cache bloat. We feel that this is a well made trade-off because \begin{inparaenum}[i)]
+	\item tool authors are not required to use more than one policy if bloat is a concern; and
+	\item things that are challenging to do with only one policy are often simpler to do with multiple coordinating policies.
+\end{inparaenum} For example, Granary's CFG tool uses coordinating policies to dynamically construct runtime call graphs. A single policy approach to the problem of call graph construction might add edges to the call graph only at every \texttt{call} site. However, this single policy approach is insufficient in the face of mixed-mode execution. If an instrumented function $F$ contains no function calls and is invoked by a native function, then $F$ will not appear as a root node in the call graph. A two-policy solution easily solves the missing root problem by instrumenting both function call sites as well as function entrypoints. The CFG tool distinguishes between the first execution of a function's first basic block ($P_{call\_entry}$), and all other basic blocks executed within the function, including later executions of the first basic block ($P_{after\_entry}$). Function call sites are instrumented to set up the source node of an edge in the call graph. On entry to a function, we identify the current function as either a sink node connected to a source node (instrumented call), or as a root node if no source is present (native call). The distinction between entrypoints and non-entrypoints is achieved with minor bloat: the first basic block appears twice in Granary's code cache, but instrumented by two different policies (\Cref{fig:policy_switching}).
+
+
+
+
 \section{Reifying Instrumentation}\label{sec:reify}
 
 Granary's mixed-mode instrumentation exposes a lot of static analysis information to instrumentation tools. For example, we are actively using wrapper information to create a tool that generates models of typical module behaviour. The wrapper information available to all tools serves two roles in our tool. First, we use type wrappers to assign type-specific IDs to module allocated memory that is shared across the module/kernel interface. Type ID assignment plays a critical role because it allows us to match memory reads and writes to specific kernel data structure fields. Second, we use the kernel and module function wrappers to generate call graphs of a module's execution. This call graph models module behaviour (according to the kernel) because we label module code nodes with kernel data structure and function pointer field names. This labelling allows us to generalise across similar modules. For example, code reached by calling the \texttt{ext4\_mount} and \texttt{btrfs\_mount} functions from the \texttt{ext4} and \texttt{btrfs} modules, respectively, are both labelled as \texttt{file\_system\_type::mount}. The combined records from executing multiple ``trusted'' modules (e.g. mature, open-source file systems) will model the behaviour of typical kernel modules. We hope that these models will help us to automatically generate new tools that classify and identify spurious module behaviour.
@@ -711,7 +788,7 @@ Granary's mixed-mode instrumentation exposes a lot of static analysis informatio
 %	\item Mixed source/binary analysis tools. Existing tools give high- and low-level access to program informaiton, but require changes to the compilation toolchain and sometimes program source code \cite{NaCl,AddressSanitizer,ThreadSanitizer}.
 %\end{enumerate}
 
-An imporant missing feature of existing low-level instrumentation tools is the ``big picture'' view that one gets from static analysis information. Similarly, static analysis tools lack access to instructions, memory, and processor-specific behaviours that are only available to low-level runtime instrumentation tools. Existing mixed static/dynamic analysis tools \cite{NaCl,AddressSanitizer,ThreadSanitizer} appear to get the best of both worlds, but sacrifice on runtime flexibility by commiting to a single instrumentation policy at a program's compile time.
+An important missing feature of existing low-level instrumentation tools is the ``big picture'' view that one gets from static analysis information. Similarly, static analysis tools lack access to instructions, memory, and processor-specific behaviours that are only available to low-level runtime instrumentation tools. Existing mixed static/dynamic analysis tools \cite{NaCl,AddressSanitizer,ThreadSanitizer} appear to get the best of both worlds, but sacrifice on runtime flexibility by committing to a single instrumentation policy at a program's compile time.
 
 The benefits of high-level static analysis information motivated its inclusion into Granary using a technique we call reifying instrumentation. Granary extracts type and function declarations from the Linux kernel source code and exposes that information to tool developers. Information extracted with static analysis is available using either \texttt{C++} template meta-programs or \texttt{Python} scripts that operate on kernel type graphs. For example, we used extracted static type information to generate hooks that invoke tool-specific functions on all memory writes to a specific kernel data structure field. We used this tool to precisely detect if/when a module violates a kernel data structure invariant (\Cref{fig:field_invariant_check}).
 
@@ -793,67 +870,6 @@ WATCH_WRITE(struct file_operations, ioctl, {
 %\section{Environment}\label{sec:env}
 %\subsection{Interrupts and Exceptions}\label{sec:interrupts}
 
-
-\section{Instrumentation Policies}\label{sec:policies}
-
-
-\lstset{language=[x64]Assembler}
-\newsavebox\asmbox
-\begin{lrbox}{\asmbox}
-\begin{minipage}[b]{4cm}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
-1: mov    (%rdi), %rax
-   jmp    .2
-2: mov    %rax, (%rsi)
-   test   %rax
-   jz     .4
-3: inc    %rsi
-   inc    %rdi
-   jmp    .1
-4: ret
-\end{lstlisting}
-\end{minipage}
-\end{lrbox}
-
-\begin{figure*}[ht!]
-\centering
-\subfloat[Policy Switching Protocol]{
-\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=3cm,scale=0.8, every node/.style={scale=0.8}]
-  \node[initial,state]          (A)      {$P_{after\_entry}$};
-  \node[state]          (C) [right of=A]  {$P_{call\_entry}$}; 
-  \path[->]     (A)     edge    [loop above]    node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)                                edge         [bend left]        node {{\footnotesize\ttfamily\bf call}} (C)                        (C) edge    [bend left]     node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)                        (C)     edge    [loop above]    node {{\footnotesize\ttfamily\bf call}} (C);
-\end{tikzpicture}
-}
-\hfill
- \subfloat[Uninstrumented Code]{\usebox\asmbox}
-\hfill
- \subfloat[Instrumented Basic Blocks]{
-\epsfig{file=diagrams/policy-switching-entry-tracking.eps,width=2.5in}
- }
-\ORIGcaption{\label{fig:policy_switching}Example policy switching protocol that ensures that instrumentation ($P_{call\_entry}$) is performed only once on entry to every function, regardless of if that basic block is re-executed. Basic block (1) is instrumented by both $P_{call\_entry}$ and $P_{after\_entry}$, and basic blocks (2) and (3) are instrumented by $P_{after\_entry}$.}
-\end{figure*}
-
-Giving Granary tools the ability to dynamically switch the policy used to instrument code was a natural extension of mixed-mode execution. Just as instrumenting only module code allows Granary to specialise the execution of native code, so does policy switching allow tools to specialise the execution of instrumented code. In fact, optimising the performance of an early Granary tool was the original motivation for policy switching.
-
-We developed a Granary tool that detects several Read-Copy-Update (RCU) API misuses in module code. As an optimisation, we wanted our heavyweight API-checking instrumentation to apply only when the code executing was within the context of a read-side critical section. At the time, implementing this optimisation was challenging because we didn't have a reliable way to know whether or not some code being translated was or would execute within a read-side critical section. That is, instrumented module code executing within a read-side critical section may have originally been translated while executing outside of a read-side critical section. If that lightweight-instrumented code was later executed within a read-side critical section, then our bug detection scheme would not have been comprehensive. 
-
-To implement our optimisation, we solved a more fundamental problem: tailoring instrumentation to the context in which the instrumented code will execute. Our solution to this problem was to allow different versions of the same module code to co-exist within Granary's code cache. That is, a different version of each of a module's basic blocks exists in Granary's code cache  for each encountered execution context. In the case of our RCU checker tool, there were two execution contexts: \begin{inparaenum}[(1)]
-	\item in a read-side critical section; and
-	\item not in a read-side critical section.
-\end{inparaenum} If the same module basic block executed in both contexts, then Granary's code cache would contain two different instrumented versions of that basic block. The way that Granary distinguishes between both execution contexts is with \emph{instrumentation policies}. 
-
-An instrumentation policy is both a name for an execution context, as well as a function that decides how to instrument basic blocks that will execute within that context. All tools define an initial policy that Granary uses to instrument module code. Tools are not limited to one policy though: any policy can declare a policy switch that will take effect when a selected control-transferring instruction (CTI) is executed. For example, our RCU tool invokes a policy switch from policy $P_{null}$ to policy $P_{read\_critical}$ when $P_{null}$'s instrumentation function observes a \texttt{call} instruction to the \texttt{rcu\_read\_lock} Linux kernel function.
-
-Because policies name an execution context, they also represent states in a finite state machine. That is, a module's execution is in the state named by a policy if the code executing was instrumented by that policy. A state transition occurs when control transfers from code instrumented by one policy to code instrumented by another policy. An early limitation with this approach was that a single state does not encode the sequence of previous states that led to execution being the current state. For example, RCU permits nested read-side critical sections. If two read-side critical sections were nested then switching from $P_{read\_critical}$ to $P_{null}$ on the first \texttt{call} to \texttt{rcu\_read\_unlock} would mean that our tool woild lose track of being in the context the outer read-side critical section. We solved this early limitation by observing that, in most cases, function returns are natural policy reverting points. This is because the runtime call stack encodes both the context in which the current code is executing, as well as the continuation of the current executing code.
-
-Granary implements policy tracking and switching by encoding policy information into the meta-data and CTIs of basic blocks. If a policy switch is not specified on an instrumented CTI then that CTI automatically inherits the policy used to instrument the basic block containing the CTI. However, policy switching and inheritance does not apply to \texttt{ret} instructions, which allows a function instrumented by a different policy than its caller to return to the caller's context (i.e. policy). When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. Because every CTI encodes policy information, and because Granary's translation mechanism depends only on CTI policy and target information, Granary is able to ensure that policy information is never lost or corrupted, even in the face of concurrent executions of the same module code, arbitrary pre-emption, and abitrary resumption.
-
-% Our approach makes tools that use policies to track states of a module's execution resilient against abitrary pre-emption and resumption because once cached, the policy-switching behaviour of a basic block cannot be accidentally corrupted or lost (e.g. due to concurrency bugs). 
-
-One drawback of Granary's policy implementation is code cache bloat. We feel that this is a well made trade-off because \begin{inparaenum}[i)]
-	\item tool authors are not required to use more than one policy if bloat is a concern; and
-	\item things that are challenging to do with only one policy are often simpler to do with multiple coordinating policies.
-\end{inparaenum} For example, Granary's CFG tool uses coordinating policies to dynamically construct runtime call graphs. A single policy approach to the problem of call graph construction might add edges to the call graph only at every \texttt{call} site. However, this single policy approach is insufficient in the face of mixed-mode execution. If an instrumented function $F$ contains no function calls and is invoked by a native function, then $F$ will not appear as a root node in the call graph. A two-policy solution easily solves the missing root problem by instrumenting both function call sites as well as function entrypoints. The CFG tool distinguishes between the first execution of a function's first basic block ($P_{call\_entry}$), and all other basic blocks executed within the function, including later executions of the first basic block ($P_{after\_entry}$). Function call sites are instrumented to set up the source node of an edge in the call graph. On entry to a function, we identify the current function as either a sink node connected to a source node (instrumented call), or as a root node if no source is present (native call). The distinction between entrypoints and non-entrypoints is achieved with minor bloat: the first basic block appears twice in Granary's code cache, but instrumented by two different policies (\Cref{fig:policy_switching}).
 
 %Because of mixed-mode execution, a given function's caller might have been executing natively, therefore we cannot depend on 
 
