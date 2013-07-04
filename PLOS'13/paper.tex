@@ -610,7 +610,9 @@ Granary's approach to mixed-mode execution is based on the observation that modu
 
 Granary is able to dynamically discover attach and detach points by wrapping the kernel/module interface. Kernel functions are wrapped by \emph{kernel wrappers} that inspect and traverse argument pointers in search of module function pointers. If a pointer to a module function is discovered (a future attach point) then Granary replaces that pointer with a function-specific \emph{module wrapper}. Granary inspects and modifies arguments to module wrappers in the same way. Finally, Granary redirects execution to the appropriate kernel or instrumented module function after wrapping has occured.
 
-Kernel and module wrappers invoke \emph{type wrappers} to find and wrap pointers to module functions that are (in)directly referenced by kernel/module function arguments (\Cref{fig:type_wrapper}). A type wrapper is a function that recursively  traverses the in-memory object graph and converts pointers to module code into pointers to wrapped module functions. Granary automatically applies the correct type wrapper to the arguments of kernel/module wrappers.
+Kernel and module wrappers invoke \emph{type wrappers} to find and wrap pointers to module functions that are (in)directly referenced by kernel/module function arguments (\Cref{fig:type_wrapper}). A type wrapper is a function that recursively  traverses the in-memory object graph and converts pointers to module code into pointers to wrapped module functions. Granary automatically applies the correct type wrapper in all cases using \texttt{C++} template meta-programs that operate on kernel static type information (\Cref{sec:reify}). Automating the generation of kernel, module, and type wrappers was an important goal for Granary because the kernel/module interface contains thousands of functions and data structures.
+
+%Granary automatically applies the correct type wrapper to the arguments of kernel/module wrappers. Automating the wrapping of the kernel/module interface is achieved using 
 
 %Modules expect that the kernel will later invoke these shared functions because it is through these functions that modules extend the functionality of the kernel.
 
@@ -636,7 +638,7 @@ Granary first attaches to a module when that module is loaded into the Linux ker
 	\item {\bf Slow attaching:} the kernel invokes unwrapped module code. Granary uses memory page protection to mark module code as non-executable. Making module code non-executable helps Granary ensure comprehensiveness: if the kernel finds an ``alternate route'' to invoking module code, then the processor will refuse to execute that code and instead raise a fault. Granary handles this fault by returning execution to the instrumented version of the faulting module code.
 \end{enumerate}
 
-Fast and slow attaching transfer control to instrumented module code. Fast attaching is ``fast'' because the instrumented code address is computed once and emitted as part of the module function wrapper. Slow attaching is ``slow'' because Granary looks up the instrumented address associated with the faulting native address each time the fault occurs.
+%Fast and slow attaching transfer control to instrumented module code. Fast attaching is ``fast'' because the instrumented code address is computed once and emitted as part of the module function wrapper. Slow attaching is ``slow'' because Granary looks up the instrumented address associated with the faulting native address each time the fault occurs.
 
 \subsection{Detaching}
 
