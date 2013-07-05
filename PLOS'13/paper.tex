@@ -70,11 +70,11 @@
 \captionsetup[figure]{format=ruled_caption}
 \captionsetup[subfigure]{format=unruled_caption}
 \let\ORIGcaption\caption
-\renewcommand{\caption}[2][\compressedcaption]{%
-\def\compressedcaption{#2}%
-    \vspace{-5pt}%
-    \ORIGcaption[#1]{#2}%
-    \vspace{-12pt}}
+%\renewcommand{\caption}[2][\compressedcaption]{%
+%\def\compressedcaption{#2}%
+%    \vspace{-1em}%
+%    \ORIGcaption[#1]{#2}%
+%    \vspace{-4em}}
 
 % Add listing language for assembly
 \lstdefinelanguage
@@ -168,7 +168,7 @@ TODO
 
 \section{Introduction}\label{sec:intro}
 
-Operating system (OS) kernels present an apparently insane environment for a transparent binary instrumentation framework.  For example, hardware interrupts can redirect control flow at any instruction, and interrupt delivery cannot be delayed past the execution of memory instructions that might alter the interrupt delivery state~\cite{DRK}. Preserving interrupt transparency, however, requires that interrupts be delayed until the end of any injected instrumentation instructions.  Together, these requirements make it very difficult to write instrumentation tools.  The insane environment of OS kernels also create several opportunities for analysis tools. For example, interrupts can be ``tamed'' and put to new uses; privileged hardware features can be used; and the kernel ABI and source code can be relied upon to be a good predictor of module behaviour at the kernel/module boundary.
+Operating system (OS) kernels present an apparently insane environment for a transparent binary instrumentation framework.  For example, hardware interrupts can redirect control flow at any instruction, and interrupt delivery cannot be delayed past the execution of memory instructions that might alter the interrupt delivery state~\cite{DRK}. Preserving interrupt transparency, however, requires that interrupts be delayed until the end of any injected instrumentation instructions.  Together, these requirements make it very difficult to write instrumentation tools.  The insane environment of OS kernels also creates several opportunities for analysis tools. For example, interrupts can be ``tamed'' and put to new uses; privileged hardware features can be used; and the kernel ABI and source code can be relied upon to be a good predictor of module behaviour at the kernel/module boundary.
 
 %Granary is a new dynamic binary translation (DBT) framework created to instrument the Linux kernel, its modules, and user space Mac OS X and Linux programs.
 %The main contribution of our work is the design and implementation of a \emph{mixed-mode} binary translation framework: Granary 
@@ -184,9 +184,11 @@ Operating system (OS) kernels present an apparently insane environment for a tra
 %Previous work has two limitations: 1) it has focused on complete binary instrumentation (i.e., instrumenting all code) to ensure transparency (... define transparency). In practice, we would like to have flexible instrumentation policies, that allow simply not instrumenting some code at all for efficiency, while also allowing rich/detailed instrumentation of relevant code. Example 1) only instrument module code without adding any instrumentation overhead while running normal kernel code, 2) watchpoint example, 3) instrument only shared accesses, 3) instrument differently for SIMD versus not. The second limitation of current systems is that they don't allow using static type information in the instrumentation code. Give example of why that is useful for possibly the four cases described above. Based on these limitations, our approach introduces mixed-mode execution, which enables implementing rich instrumentation policies, and a method for unifying static and dynamic instrumentation. Explain how mixed-mode execution handles transparency ...
 %In this paper, we describe Granary \cite{GranaryAtOSDI,GranaryAtASPLOS}, 
 
-The challenges and opportunities of the kernel environment motivated the creation of Granary \cite{GranaryAtOSDI,GranaryAtASPLOS}. Granary is a new binary instrumentation framework designed for the Linux kernel environment, with a particular focus on the analysis of kernel modules. Granary is the first system that allows developers to create flexible and dynamic module analysis tools that can analyse arbitrary Linux kernel module binaries. Our goal when creating Granary was to make it easy to create efficient, low-level analysis tools (e.g. to analyse memory accesses, instructions, basic blocks, or control flow) that integrate high-level static analysis information (e.g. figuring out which data structure fields are associated with each memory access). Granary uses dynamic binary translation (DBT) to just-in-time decode, instrument, and encode \texttt{x86-64} binary module instructions. Unlike other binary analysis systems, Granary tools can use kernel static analysis information to change how code is instrumented and to provide meaning to otherwise typeless instructions/memory. 
+The challenges and opportunities of the kernel environment motivated the creation of Granary \cite{GranaryAtOSDI,GranaryAtASPLOS}. Granary is a new binary instrumentation framework designed for the Linux kernel environment, with a particular focus on the analysis of kernel modules. Granary is the first system that allows developers to create flexible and dynamic analysis tools for arbitrary Linux kernel module binaries. Our goal when creating Granary was to make it easy to create efficient, low-level analysis tools (e.g. to analyse memory accesses, instructions, basic blocks, or control flow) that integrate high-level static analysis information (e.g. figuring out which data structure fields are associated with each memory access). Granary uses dynamic binary translation (DBT) to just-in-time decode, instrument, and encode \texttt{x86-64} binary module instructions. 
 
-The goal of Granary was to create a framework that makes it easy for developers to create flexible and dynamic instrumentation tools. Granary addresses three limitations of existing program analysis systems that restrict the flexibility of their tools: \begin{inparaenum}[(1)]
+%Unlike other binary analysis systems, Granary tools can use kernel static analysis information to change how code is instrumented and to provide meaning to otherwise typeless instructions/memory. 
+
+Granary addresses three limitations of existing program analysis systems: \begin{inparaenum}[(1)]
 	\item they have focused on instrumenting all code (e.g. the whole kernel or whole system) \cite{DRK,QEMU,PinOS}; 
 	\item they do not allow for the instrumentation policy to change dynamically \cite{Pin,DynamoRIO,QEMU}; and
 	\item they do not allow mixing static type information into the instrumentation code  \cite{PinOS,Pin,DRK,DynamoRIO,QEMU}.
@@ -202,9 +204,14 @@ The goal of Granary was to create a framework that makes it easy for developers 
 %	\item it does not allow mixing static type information into the instrumentation code.
 %\end{inparaenum} 
 
-Instrumenting all code (e.g. the whole kernel) imposes unnecessary performance overheads when only a subset of the code is being analysed (e.g. modules). In practice, we would like to target instrumentation at specific modules for efficiency, while also allowing rich and detailed instrumentation of the relevant code. This requirement motivates the design of \emph{mixed-mode execution}, which allows Granary to instrument module code while non-module kernel code executes with zero overhead.
+Instrumenting all code (e.g. the whole kernel) imposes unnecessary performance overheads when only a subset of the code is being analysed (e.g. modules). In practice, we would like to target instrumentation at specific modules for efficiency, while also allowing rich and detailed instrumentation of the relevant code. This requirement motivates the design of \emph{mixed-mode execution}, which allows Granary to instrument module code while non-module kernel code executes with zero overhead. This is challenging because Granary must be comprehensive: all code that is meant to be instrumented will be instrumented. In other words, relinquishing control to execute kernel code natively must not cause Granary to miss the execution of any module code.
 
-Granary also supports dynamically changing the policy used to instrument code, called \emph{policy-driven instrumentation}. For example, Granary has a tool that uses policy switching to dynamically construct inter- and intra-procedural control flow graphs (CFGs). Granary tools can benefit from recorded CFGs to optimise register stealing, condition code dependencies, and tracing. Two policies are used to construct these graphs: $P_{enter\_function}$ and $P_{in\_function}$. $P_{enter\_function}$ applies to the first execution of the first basic block of each function, and connects functions in the inter-procedural CFG.  $P_{in\_function}$ applies to all other executed basic blocks within each function, including re-executions of the first basic block. $P_{in\_function}$ connects basic blocks in the intra-procedural CFG.
+Granary also supports dynamically changing the policy used to instrument code, called \emph{policy-driven instrumentation}. For example, Granary has a tool that uses policy switching to dynamically construct inter- and intra-procedural control flow graphs (CFGs). Granary tools can benefit from recorded CFGs to optimise register stealing, condition code dependencies, and tracing. Two policies are used to construct these graphs: $P_{call\_entry}$ and $P_{after\_entry}$. $P_{call\_entry}$ applies to the first execution of the first basic block of each function, and connects functions in the inter-procedural CFG.  $P_{after\_entry}$ applies to all other executed basic blocks within each function, including re-executions of the first basic block. $P_{after\_entry}$ connects basic blocks in the intra-procedural CFG. We explicitly maintain policy information in translated basic blocks in order to track execution contexts. This avoids typical problems involved in tracking context in just-in-time DBT systems (e.g. concurrency, abitrary pre-emption, context-switching).
+
+%The just-in-time nature of DBT systems and the way basic blocks are linked together makes it challenging 
+%Abitrary module pre-emption and resumption can cause the context in which a module executes 
+%Implementing policy tracking and switching in a way that is convenient for tool-developers is challenging in the face of arbitrary module pre-emption and resumption.
+%is challenging in the face of abitrary pre-emption 
 
 % is applied to \texttt{call} instructions, which makes
 
@@ -238,7 +245,7 @@ Granary also supports dynamically changing the policy used to instrument code, c
 
 %Policy switching is also useful in the context of interrupts. For example, Granary provides a framework for fine-grained memory access instrumentation, called \emph{behavioural watchpoints}. Behavioural watchpoints-based tools expose tainted memory addresses to instrumented programs. If a tainted address is used to access memory then the processor raises a fault. Instead of instrumenting all code in a way that guards against such faults ($P_{watchpoints}$), Granary defaults to instrumenting basic blocks using $P_{null}$. However, when a fault is raised, Granary prevents future faults from occuring within the same basic block by patching the $P_{null}$-instrumented basic block to re-route control to a $P_{watchpoints}$-instrumented basic block.
 
-The last limitation of current systems is that they do not allow the use of static program information while also instrumenting arbitrary, binary modules. This is unfortunate because static program analysis provides ``big picture'' information that is sorely missing when doing instruction-level instrumentation. The benefits of high-level static analysis information motivated its inclusion into Granary using a technique we call \emph{reifying instrumentation}. Granary statically analyses the Linux kernel source code to learn about  the interfaces that enable modules and the kernel to interact. Granary exposes this information to instrumentation tools in the form of type and function \emph{wrappers}. Tools can use this information to decide what policy to apply when instrumenting certain module code as well as to inspect and manipulate parts of kernel/module memory in a type-safe way.
+The last limitation of current systems is that they do not allow the use of static program information while also instrumenting arbitrary, binary modules. This is unfortunate because static program analysis provides ``big picture'' information that is sorely missing when doing instruction-level instrumentation. The benefits of high-level static analysis motivated its inclusion into Granary using a technique we call \emph{reifying instrumentation}. Granary statically analyses the Linux kernel source code to learn about  the interfaces that enable modules and the kernel to interact. Granary exposes this information to instrumentation tools in the form of type and function \emph{wrappers}. Tools can use this information to decide what policy to apply when instrumenting certain module code as well as to inspect and manipulate parts of kernel/module memory in a type-safe way.
 
 %Existing program analysis systems fall into one of three categories:
 %\begin{enumerate}
@@ -397,7 +404,7 @@ For example, we are actively developing a tool that uses reifying instrumentatio
 %Dynamic analysis of kernel modules is challenging because existing tools are either too coarse grained (TODO CITE: DRK, PinOS, QEMU, KVM) or are optimised for performance at the cost of expresive/flexible tooling.
 %Static analysis of module source code is difficult because of the tight interaction between modules and the kernel. Some modules, however, are only distributed in a binary format, which makes static analysis intractable. 
 
-\comment{!!!This might narrow the usefulnesss of Granary down by making it seem like we're only useful where static analysis fails, or like we're only useful when source code is unavailable.!!!}
+%\comment{!!!This might narrow the usefulnesss of Granary down by making it seem like we're only useful where static analysis fails, or like we're only useful when source code is unavailable.!!!}
 
 %\iffalse
 %	\subsection{Novelties}
@@ -437,38 +444,46 @@ For example, we are actively developing a tool that uses reifying instrumentatio
 
 %, as well as using this information to learn more about the execution of an otherwise opaque binary. 
 
-\subsection{Goals}\label{sec:goals}
+%\subsection{Goals}\label{sec:goals}
+%
+%Our goal when creating Granary was to make a flexible and efficient framework that developers can use to create tools that analyse arbitrary, binary modules. In pursuit of this goal, we designed Granary so that its tools would be \begin{inparaenum}[i)]
+%	%\item easy to prototype;
+%	%\item portable;
+%	\item comprehensive;
+%	\item efficient; and
+%	\item easy to debug.
+%\end{inparaenum}
+%
+%
+%%While designing Granary, we identified the following five features that help achieve this goal: testability, debuggability, portability, comprehensiveness, and efficiency.
+%
+%%\paragraph{Easy to prototype:} Creating instrumentation tools that run in pre-emptive kernels on multi-core computers is challenging. Our experience is that, when possible, modelling a kernel space problem and its instrumentation in user space allows tool developers to easily test assumptions and gain insights. Therefore, we designed Granary to be able to also instrument user space code on both Linux and Mac OS X. We have found this feature very useful as a way of weeding out bugs in new instrumentation tools before applying those tools to actual kernel modules.
+%
+%%We have found that testing tools in user space has the benefit of quicker turn-around time when making changes, and that the plethora of user space debugging tools enables faster.
+%
+%%, Granary maintains structured meta-data along with all generated executable code. Meta-data is queried by \texttt{gdb} debugger commands to provide rich debugging information.
+%
+%%\paragraph{Portable:} The Linux kernel and its modules have many different versions, including several long-term support  versions. To support the development of module debugging tools for discovering bugs that appear on only some kernel versions, Granary was designed to be portable across several kernel versions and compiler toolchains.
+%%
+%%Granary runs on any of Linux 2.32.x to Linux 3.9.x, compiles with both \texttt{gcc} and \texttt{clang}, and requires no changes to the kernel's source code. Granary also runs in user space on Linux and Mac OS X.
+%
+%\paragraph{Comprehensive:} Granary is comprehensive in two ways. First, if code is meant to be instrumented then it always executes under Granary's control. Second, Granary does not depend on hardware virtualisation or module source code. This enables Granary to instrument any binary kernel module.
+%
+%\paragraph{Efficient:} Mixed-mode execution enables some code to run without overhead by executing that code natively. When instrumenting Linux kernel modules, Granary imposes no performance overheads on non-module kernel code.
+%
+%%\paragraph{Easy to interpret
+%
+%\paragraph{Easy to debug:} Debugging the tools that transform and generate executable code on-the-fly can be challenging. However, Granary ameliorates the experience by providing rich debugger commands that query structured meta-data stored alongside all generated code. For example, Granary facilitates debugging by allowing a debugger to step back in time over recently executed basic blocks, inspect/query the register state on entry to those basic blocks, and see what instrumentation policies and state were used to create those basic blocks.
 
-Our goal when creating Granary was to make a flexible and efficient framework that developers can use to create tools that analyse arbitrary, binary modules. In pursuit of this goal, we designed Granary so that its tools would be \begin{inparaenum}[i)]
-	%\item easy to prototype;
-	\item easy to debug;
-	%\item portable;
-	\item comprehensive; and
-	\item efficient.
+Additional features of Granary include rich debugging commands for: \begin{inparaenum}[i)]
+	\item stepping back in time over recently executed basic blocks;
+	\item querying historical register state;
+	\item inspecting basic blocks and how they were translated; and
+	\item tracking performance counters.
 \end{inparaenum}
 
-
-%While designing Granary, we identified the following five features that help achieve this goal: testability, debuggability, portability, comprehensiveness, and efficiency.
-
-%\paragraph{Easy to prototype:} Creating instrumentation tools that run in pre-emptive kernels on multi-core computers is challenging. Our experience is that, when possible, modelling a kernel space problem and its instrumentation in user space allows tool developers to easily test assumptions and gain insights. Therefore, we designed Granary to be able to also instrument user space code on both Linux and Mac OS X. We have found this feature very useful as a way of weeding out bugs in new instrumentation tools before applying those tools to actual kernel modules.
-
-%We have found that testing tools in user space has the benefit of quicker turn-around time when making changes, and that the plethora of user space debugging tools enables faster.
-
-\paragraph{Easy to debug:} Debugging the tools that transform and generate executable code on-the-fly can be challenging. However, Granary ameliorates the experience by providing rich debugger commands that query structured meta-data stored alongside all generated code. For example, Granary facilitates debugging by allowing a debugger to step back in time over recently executed basic blocks, inspect/query the register state on entry to those basic blocks, and see what instrumentation policies and state were used to create those basic blocks.
-
-%, Granary maintains structured meta-data along with all generated executable code. Meta-data is queried by \texttt{gdb} debugger commands to provide rich debugging information.
-
-%\paragraph{Portable:} The Linux kernel and its modules have many different versions, including several long-term support  versions. To support the development of module debugging tools for discovering bugs that appear on only some kernel versions, Granary was designed to be portable across several kernel versions and compiler toolchains.
-%
-%Granary runs on any of Linux 2.32.x to Linux 3.9.x, compiles with both \texttt{gcc} and \texttt{clang}, and requires no changes to the kernel's source code. Granary also runs in user space on Linux and Mac OS X.
-
-\paragraph{Comprehensive:} Granary is comprehensive in two ways. First, if code is meant to be instrumented then it always executes under Granary's control. Second, Granary does not depend on hardware virtualisation or module source code. This enables Granary to instrument any binary kernel module.
-
-\paragraph{Efficient:} Mixed-mode execution enables some code to run without overhead by executing that code natively. When instrumenting Linux kernel modules, Granary imposes no performance overheads on non-module kernel code.
-
-
 \subsection{Contributions}\label{sec:contrib}
-In \Cref{sec:modes}, we describe how to efficiently implement mixed-mode execution; in \Cref{sec:reify}, we describe how to integrate static analysis information into a DBT system; in \Cref{sec:policies}, we describe a new method for maintaining state and dynamically changing how code is instrumented; and in \Cref{sec:eval}, we evaluate Granary's performance.
+In \Cref{sec:modes}, we describe how to efficiently implement mixed-mode execution; in \Cref{sec:policies}, we describe a new method for dynamically changing how code is instrumented; in \Cref{sec:reify}, we describe how to integrate static analysis information into a DBT system; and in \Cref{sec:eval}, we evaluate Granary's performance.
 
 %	\begin{enumerate}[i)]
 %		%\item The design and implementation of three novel instrumentation techniques: policy-driven instrumentation, mixed-mode execution, and reifying instrumentation.
@@ -486,13 +501,32 @@ In \Cref{sec:modes}, we describe how to efficiently implement mixed-mode executi
 
 %In this section, we give a brief background on dynamic binary translation in general, and Granary in particular.
 
-Granary uses a technique called dynamic binary translation (DBT) to instrument Linux kernel modules \cite{DynamoRIO}. DBT is used for instruction set translation/emulation \cite{QEMU}, runtime optimization \cite{DynamoRIOOptimisation}, and runtime instrumentation (analysis, security, debugging) \cite{Vx32,NaCl,Valgrind}. DBT is attractive when few assumptions can be made about the nature of the programs being translated. On architectures like \texttt{x86} where the mix of variably-sized instructions and data make static binary translation intractable, DBT is necessary.
+Granary uses dynamic binary translation (DBT) to instrument Linux kernel modules. DBT is used for instruction set translation/emulation \cite{QEMU}, runtime optimization \cite{DynamoRIOOptimisation}, and runtime instrumentation (analysis, security, debugging) \cite{Vx32,NaCl,Valgrind}. We chose DBT because \begin{inparaenum}[i)]
+	\item some modules are only distributed in a binary format;
+	\item static binary analysis tools are unable to cope with \texttt{x86}'s mix of variably-sized instructions and data; and
+	\item virtualisation-based approaches are unable to analyse non-virtualisable device drivers.
+\end{inparaenum}
+
+%existing source code analysis tools 
+%DBT enables Granary to analyse abitrary, binary modules because \begin{inparaenum}[i)]
+%	\item 
+%	\item some modules are only distributed in a binary format;
+%	\item \texttt{x86} module binaries can mix data and instructions, which makes static binary analysis intractable; and
+%	\item DBT c
+%DBT does not depend on virtualisation, which restricts what kinds of modules can be analysed; and
+%	\item static binary translation 
+%on architectures like \texttt{x86}, where the mix of variably-sized instructions and data make static binary translation intractable.
+%\end{inparaenum}
+
+%Our goal of being able to analyse abitrary, binary modules motivated our choice to
+
+%Binary translation is attractive when few assumptions can be made about the nature of the programs being translated. DBT is necessary to analyse binaries 
 
 Granary interposes on the module loading process of the Linux kernel. When a kernel module is loaded, Granary replaces the pointer to the module's initialisation function with a pointer to the translated version of the initialisation function's first basic block. The translation process begins when the kernel initialises the module by invoking the translated module code.
 
-Granary translates and instruments module binaries one basic block at a time. That is, new basic blocks are decoded and translated as execution ``discovers'' those basic blocks. Translated basic blocks are linked together and stored in a globally accessible \emph{code cache}. In Granary, a basic block is a sequence of instructions ending in a conditional branch, \texttt{ret}, or \texttt{jmp}. Granary inlines \texttt{call} instructions, which exposes code cache addresses to instrumented module code in the form of return addresses (\Cref{para:return_address_transparency}). Inlining \texttt{call} instructions avoids return-address mispredictions and unnecessary control-flow by building longer basic blocks.
+Granary translates and instruments module binaries one basic block at a time. That is, new basic blocks are decoded and translated as execution ``discovers'' those basic blocks. Translated basic blocks are linked together and stored in a globally accessible \emph{code cache}. In Granary, a basic block is a sequence of instructions ending in a conditional branch, \texttt{ret}, or \texttt{jmp}. Unlike most DBT frameworks, Granary inlines \texttt{call} instructions, which exposes code cache addresses to instrumented module code in the form of return addresses (\Cref{para:return_address_transparency}). Inlining \texttt{call} instructions avoids return-address mispredictions and unnecessary control-flow by building longer basic blocks.
 
-The implication of Granary's just-in-time translation approach is that code executing from the code cache will sometimes yield control to Granary to request the address of the next basic block to execute. When instrumented code yields to Granary, a ``context switch'' occurs that transfers execution to a CPU-private stack where Granary operates. Granary will context-switch back to instrumented module code when the next basic block has been found or translated so that instrumented execution may continue. Similar to other DBT systems, Granary uses caching and hotpatching to reduce the number of context switches. Our observation is that translated modules stabilise very quickly: context switches stop happening after most module basic blocks have been translated.
+The implication of Granary's just-in-time translation approach is that code executing from the code cache will sometimes yield control to Granary to request the address of the next basic block to execute. When instrumented code yields to Granary, a ``context switch'' occurs that transfers execution to a CPU-private stack where Granary operates. Granary context-switches back to instrumented module code when the next basic block has been found or translated so that instrumented execution may continue. Similar to other DBT systems, Granary uses caching and hotpatching to reduce the number of context switches. Our observation is that translated modules stabilise very quickly: context switches stop happening after most module basic blocks have been translated.
 
 Basic blocks in Granary's code cache contain \texttt{x86-64} binary instructions and meta-data describing those instructions. The meta-data that Granary records in each basic block includes: \begin{inparaenum}[i)]
 	\item the length in bytes of the original and translated basic blocks;
@@ -581,7 +615,7 @@ TYPE_WRAPPER(struct device_driver, {
 })
 \end{lstlisting}
 \end{multicols}
-\ORIGcaption[LoF entry]{Example type wrapper for the Linux \texttt{device\_driver} structure. In the above code, \texttt{arg} is a reference to a \texttt{struct device\_driver} object passed as or referenced by an argument to a kernel or module function. Granary automatically applies type wrappers to function arguments passed over the kernel/module interface. Type wrappers are applied recursively (e.g. \texttt{POST\_WRAP}). \texttt{PRE\_}, \texttt{POST\_}, and \texttt{RETURN\_} define wrapping policies applied before, after, or to the return value of a function used to transfer control to/from the kernel or the module, respectively. The \texttt{\_IN} and \texttt{\_OUT} suffixes define the direction of data: \texttt{\_IN} wrappers apply to data going from the kernel into the module, and \texttt{\_OUT} wrappers apply to data leaving the module.}
+\ORIGcaption[LoF entry]{Example type wrapper for the Linux \texttt{device\_driver} structure. In the above code, \texttt{arg} is a reference to a \texttt{struct device\_driver} object passed as, or referenced by, an argument to a kernel or module function. Granary automatically applies type wrappers to function arguments passed over the kernel/module interface. Type wrappers are applied recursively (e.g. \texttt{POST\_WRAP}). \texttt{PRE\_}, \texttt{POST\_}, and \texttt{RETURN\_} define wrapping policies applied before, after, or to the return value of a function used to transfer control to/from the kernel or the module, respectively. The \texttt{\_IN} and \texttt{\_OUT} suffixes define the direction of data: \texttt{\_IN} wrappers apply to data going from the kernel into the module, and \texttt{\_OUT} wrappers apply to data leaving the module.}
 \label{fig:type_wrapper}
 \end{figure*}
 
@@ -593,11 +627,17 @@ Our original design for mode-switching used hardware page protection to trap att
 	\item the trap told us nothing about which interfaces were being used by the kernel to invoke the module.
 \end{inparaenum}
 
-Granary's approach to mixed-mode execution is based on the observation that modules tell the kernel about their interfaces by registering functions with the kernel. We expect that at least some of the shared functions will be executed by the kernel because this is the mechanism by which modules extend the kernel's functionality. To Granary, module functions registered with the kernel represent potential future \emph{attach} points, where a mode switch from native to instrumented code will occur. Unless otherwise specified, all kernel functions are treated as \emph{detach} points, where a mode switch from instrumented to native code will occur. It is at these attach and detach points that Granary is able to discover additional attach points by observing module function pointers that are passed across the kernel/module boundary.
+Granary's approach to mixed-mode execution is based on the observation that modules tell the kernel about their interfaces by registering functions with the kernel. We expect that at least some of the registered functions will be executed by the kernel because this is the mechanism by which modules extend the kernel's functionality. To Granary, registered module functions represent potential future \emph{attach} points, where a mode switch from native to instrumented code will occur. Unless otherwise specified, all kernel functions are treated as \emph{detach} points, where a mode switch from instrumented to native code will occur. It is at these attach and detach points that Granary is able to discover additional attach points by observing module function pointers that are passed across the kernel/module boundary.
 
-Granary is able to dynamically discover attach and detach points by wrapping the kernel/module interface. Kernel functions are wrapped by \emph{kernel wrappers} that inspect and traverse argument pointers in search of module function pointers. If a pointer to a module function is discovered (a future attach point) then Granary replaces that pointer with a function-specific \emph{module wrapper}. Granary inspects and modifies arguments to modules wrappers in the same way. Finally, Granary redirects execution to the appropriate kernel or instrumented module function after wrapping has occured.
+Granary is able to dynamically discover attach points by wrapping the kernel/module interface. Kernel functions are wrapped by \emph{kernel wrappers} that inspect and traverse argument pointers in search of pointers to module functions. If a pointer to a module function (a future attach point) is discovered, then Granary replaces that pointer with a function-specific \emph{module wrapper}. Granary inspects and modifies arguments to module wrappers in the same way as in kernel wrappers. Finally, Granary redirects execution to the appropriate kernel or instrumented module function after wrapping has occured.
 
-Kernel and module wrappers invoke \emph{type wrappers} to find and wrap pointers to module functions that are (in)directly referenced by kernel/module function arguments (\Cref{fig:type_wrapper}). A type wrapper is a function that recursively  traverses the in-memory object graph and converts pointers to module code into pointers to wrapped module functions.  Granary automatically applies the correct type wrapper to the arguments of kernel/module wrappers.
+Kernel and module wrappers invoke \emph{type wrappers} to find and wrap pointers to module functions that are (in)directly referenced by kernel/module function arguments (\Cref{fig:type_wrapper}). A type wrapper is a function that recursively  traverses the in-memory object graph and converts pointers to module code into pointers to wrapped module functions. Type and kernel wrappers are automatically generated at Granary's compile time by scripts that statically analyse the kernel source code. Granary automatically matches generated type and kernel wrappers together using compile-time meta-programming. Similarly, Granary automatically generates module wrappers using a combination of compile-time meta-programming and runtime code generation to match type wrappers to the declared arguments of \texttt{C} function pointer types.
+
+%Granary automatically generates kernel, module, and type wrappers that cover the entire kernel/module interface (thousands of functions and types).
+
+%Granary automatically applies the correct type wrapper in all cases using \texttt{C++} template meta-programs that operate on kernel type information (\Cref{sec:reify}). 
+
+%Granary automatically applies the correct type wrapper to the arguments of kernel/module wrappers. Automating the wrapping of the kernel/module interface is achieved using 
 
 %Modules expect that the kernel will later invoke these shared functions because it is through these functions that modules extend the functionality of the kernel.
 
@@ -620,16 +660,17 @@ Kernel and module wrappers invoke \emph{type wrappers} to find and wrap pointers
 Granary first attaches to a module when that module is loaded into the Linux kernel. Granary intercepts the kernel's attempt to invoke the module's initialisation function and redirects execution to the instrumented version of that function's first basic block. After this, attaching occurs in one of three ways: \begin{enumerate}
 	\item {\bf Implicit attaching:} the kernel returns to instrumented module code.
 	\item {\bf Fast attaching:} the kernel invokes a wrapped module function.
-	\item {\bf Slow attaching:} the kernel invokes unwrapped module code. Granary uses memory page protection to mark module code as non-executable. Making module code non-executable helps Granary ensure comprehensiveness: if the kernel finds an ``alternate route'' to invoking module code, then the processor will refuse to execute that code and instead raise a fault. Granary handles this fault by returning execution to the instrumented version of the faulting module code.
+	\item {\bf Slow attaching:} the kernel invokes unwrapped module code. Granary uses memory page protection to mark module code as non-executable, which helps Granary ensure comprehensiveness: if the kernel finds an ``alternate route'' to invoking module code, then the processor will refuse to execute that code and instead raise a fault. Granary handles this fault by returning execution to the instrumented version of the faulting module code.
 \end{enumerate}
 
-Fast and slow attaching transfer control to instrumented module code. Fast attaching is ``fast'' because the instrumented code address is computed once and emitted as part of the module function wrapper. Slow attaching is ``slow'' because Granary looks up the instrumented address associated with the faulting native address each time the fault occurs.
+%Fast and slow attaching transfer control to instrumented module code. Fast attaching is ``fast'' because the instrumented code address is computed once and emitted as part of the module function wrapper. Slow attaching is ``slow'' because Granary looks up the instrumented address associated with the faulting native address each time the fault occurs.
 
 \subsection{Detaching}
 
-Granary detaches when control transfers from instrumented code to native (uninstrumented) code. Detaching occurs is one of two ways: \begin{enumerate}
-	\item {\bf Implict detaching:} instrumented module code returns to the original kernel.
+Granary detaches when control transfers from instrumented code to native (uninstrumented) code. Detaching occurs in one of three ways: \begin{enumerate}
+	\item {\bf Implict detaching:} instrumented module code returns to the original kernel, or is interrupted.
 	\item {\bf Wrapped detaching:} intrumented module code invokes a kernel wrapper, which later transfers control to the kernel.
+	\item {\bf Unwrapped detaching:} instrumented module code invokes a kernel function directly. This happens when a tool---as part of its instrumentation---injects an unwrapped \texttt{call} or \texttt{jmp} to a kernel function.
 \end{enumerate}
 
 
@@ -661,13 +702,15 @@ Granary detaches when control transfers from instrumented code to native (uninst
 
 \subsection{Transparency}\label{sec:transparency}
 
-An instrumentation system is transparent if the instrumented and uninstrumented versions of a program behave in the same way given the same inputs \cite{Transparency}. By default, Granary operates under a relaxed transparency model: certain artifacts of Granary existence (e.g. instrumented code addresses, changes in timing) are exposed to the kernel and to instrumented modules. Some artifacts are unavoidable. For example, instrumented code (typically) executes more slowly than native code because of additional indirection added by Granary. Granary also requires memory to operate---memory that once allocated becomes unavailable for other uses. Some artifacts that break transparency can be avoided; however, the mechanisms required to maintain transparency in these cases introduce additional overheads.
+An instrumentation system is transparent if the instrumented and uninstrumented versions of a program behave in the same way given the same inputs \cite{Transparency}. By default, Granary operates under a relaxed transparency model: certain artifacts of Granary existence (e.g. instrumented code addresses, changes in timing) are exposed to the kernel and to instrumented modules. Some artifacts are unavoidable. For example, instrumented code (typically) executes more slowly than native code because of additional indirection added by Granary. Granary also requires memory to operate, reducing the memory available for other uses. Some artifacts that break transparency can be avoided; however, the mechanisms required to maintain transparency in these cases introduce additional overheads.
 
-The trade-off between transparency and overhead motivated the inclusion of configurable levels of transparency in Granary. Granary defaults to being non-transparent for efficiency and flexibility, and if transparency is needed to instrument a module then transparency can be enabled at the cost of increased overheads. By default, Granary exposes the following artifacts: \begin{enumerate}
-	\item Instrumented code addresses as return addresses in function activation frames.
-	\item Instrumented code addresses as return addresses in interrupt stack frames.
-	\item Wrapped module function addresses in shared data structures.
-\end{enumerate}
+Granary includes configurable levels of transparency to address the trade off between transparency and overhead. Granary defaults to being non-transparent for efficiency and flexibility, but if instrumentation for some module requires transparency then it can be enabled at the cost of increased overheads. By default, Granary exposes the following three artifacts: code cache addresses as function and interrupt return addresses, and wrapped module function addresses in shared data structures.
+
+% \begin{enumerate}
+%	\item Instrumented code addresses as return addresses in function activation frames.
+%	\item Instrumented code addresses as return addresses in interrupt stack frames.
+%	\item Wrapped module function addresses in shared data structures.
+%\end{enumerate}
 
 %Our experience is that most modules are not sensitive to the ways in which Granary is not transparent.
 % Granary is not fully transparent because it exposes instrumented code addresses to the kernel and to instrumented modules.
@@ -676,17 +719,89 @@ The trade-off between transparency and overhead motivated the inclusion of confi
 %Implicit and fast attaching are achieved by exposing instrumented code addresses to the kernel and its modules. Instrumented code addresses are exposed as return addresses in function activation frames and interrupt stack frames, and as wrapped module function addresses in shared data structures. Exposing these addresses risks altering the module's behaviour: some modules might depend on specific return address values or function pointer values (stored in a shared data structure). 
 %The following list describes the ways in which Granary is and is not transparent:
 
-\paragraph{Function return addresses}\label{para:return_address_transparency} By default, Granary does not maintain return address transparency. Return addresses to instrumented code are exposed to instrumented functions and kernel functions. The benefit of not maintaining return address transparency is efficiency: Granary will not do extra work (i.e. an indirect branch lookup) to resolve the target of a \texttt{ret} (return from procedure) instruction. If Granary is configured to use transparent return addresses, then implicit attaching and detaching are disabled. Granary will fall back to depending on slow attaching and performing an indirect branch lookup before executing \texttt{ret} instructions.
+\paragraph{Function return addresses}\label{para:return_address_transparency} By default, Granary does not maintain return address transparency. Return addresses to instrumented code are exposed to instrumented functions and kernel functions. The benefit of relaxing return address transparency is efficiency: Granary will not do extra work (i.e. an indirect branch lookup) to resolve the target of a \texttt{ret} (return from procedure) instruction. If Granary is configured to use transparent return addresses, then implicit attaching and detaching are disabled. Granary will fall back to depending on slow attaching and performing an indirect branch lookup before executing \texttt{ret} instructions.
 
-\paragraph{Interrupt return addresses} Kernel interrupts are not sensitive to return addresses, except in the case of page faults occuring within specific kernel functions that access user space data. Therefore, maintaining return address transparency with respect to interrupts in instrumented module code has no value. Granary treats faults in kernel code that accesses user space data as a special case and handles those kinds of interrupts in a similar way to the kernel.
+\paragraph{Interrupt return addresses} Kernel interrupts are not sensitive to return addresses, except in the special case of page faults occuring within specific kernel functions that access user space data. Granary handles this special case in a similar way to the kernel. Therefore, maintaining return address transparency with respect to interrupts in instrumented module code has no value.
 
 %The benefit of this approach is that interrupts are never delayed, unless explicitly requested by tool developers.  Our experience with writing module analysis tools using DRK motivated Granary's lack of interrupt return address transparency. DRK-based analysis tools that want to maintain transparency are restricted by DRK's approach to handling interrupts. DRK limits tools to 
 
-\paragraph{Module function wrappers} Granary does not maintain transparency when its type wrappers replace pointers to module functions with pointers to wrapped module functions. This is perhaps the riskiest break in transparency within Granary because a module might treat a function pointer as being representative of the module being in some particular state. The benefit of enabling module function wrappers is that they give instrumentation tools more information about the executing module (e.g. shared data structures, which interfaces are used by the kernel). If Granary is configured to use transparent module function pointer addresses in shared data structures then fast attaching is disabled and tools will not have access to the same level of static program information.
+\paragraph{Module function wrappers} Granary does not maintain transparency when its type wrappers replace pointers to module functions with pointers to wrapped module functions. This is perhaps the riskiest break in transparency within Granary because a module might treat a function pointer as being representative of the module being in some particular state\footnote{We have not yet encountered a module where changing pointers to module functions into module wrappers altered the module's behaviour under instrumentation.}. The benefit of enabling module function wrappers is that they give instrumentation tools more information about the executing module (\Cref{sec:reify}). If Granary is configured to use transparent module function pointer addresses in shared data structures then fast attaching is disabled and tools will not have access to the same level of static program information.
+
+
+
+\section{Policy-Driven Instrumentation}\label{sec:policies}
+
+
+\lstset{language=[x64]Assembler}
+\newsavebox\asmbox
+\begin{lrbox}{\asmbox}
+\begin{minipage}[b]{4cm}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+1: mov    (%rdi), %rax
+   jmp    .2
+2: mov    %rax, (%rsi)
+   test   %rax
+   jz     .4
+3: inc    %rsi
+   inc    %rdi
+   jmp    .1
+4: ret
+\end{lstlisting}
+\end{minipage}
+\end{lrbox}
+
+\begin{figure*}[ht!]
+\centering
+\subfloat[Policy Switching Protocol]{
+\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=3cm,scale=0.8, every node/.style={scale=0.8}]
+  \node[initial,state]          (C)   {$P_{call\_entry}$}; 
+  \node[state]          (A)[right of=C]      {$P_{after\_entry}$};
+  \path[->]     (A)     edge    [loop above]    node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)                                edge         [bend right]        node {{\footnotesize\ttfamily\bf call}} (C)                        (C) edge    [bend right]     node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)                        (C)     edge    [loop above]    node {{\footnotesize\ttfamily\bf call}} (C);
+\end{tikzpicture}
+}
+\hfill
+ \subfloat[Uninstrumented Code]{\usebox\asmbox}
+\hfill
+ \subfloat[Instrumented Basic Blocks]{
+\epsfig{file=diagrams/policy-switching-entry-tracking.eps,width=2.5in}
+ }
+\ORIGcaption{\label{fig:policy_switching}Example policy switching protocol that ensures that instrumentation ($P_{call\_entry}$) is performed only once on entry to every function, regardless of if that basic block is re-executed. Basic block (1) is instrumented by both $P_{call\_entry}$ and $P_{after\_entry}$, and basic blocks (2) and (3) are instrumented by $P_{after\_entry}$.}
+\end{figure*}
+
+Giving Granary tools the ability to dynamically switch the policy used to instrument code was a natural extension of mixed-mode execution. Instrumenting only module code allows Granary to specialise the execution of native code. In the same way, policy switching allow tools to specialise the execution of instrumented code. In fact, optimising the performance of an early Granary tool was the original motivation for policy switching.
+
+We developed a Granary tool that detects several Read-Copy-Update (RCU) API misuses in module code. As an optimisation, we wanted our heavyweight API-checking instrumentation to apply only when the code executing was within the context of a read-side critical section (denoted by \texttt{rcu\_read\_lock} and \texttt{rcu\_read\_unlock} in the code). Implementing this optimisation was challending because a given basic block was only translated once, and we didn't have a reliable way to determine whether or not it should be instrumented with the heavyweight API checking instrumentation. Knowing the current state (within or outside of a read-side critical section) at translation time was not sufficient, since the same translated block could later be executed in the opposite context. That is, module code executing \emph{within} a read-side critical section may have originally been translated while executing \emph{outside} of a read-side critical section, and would thus include only the lightweight instrumentation. The omission of the heavyweight API-checking instrumentation could cause our tool to miss bugs (i.e., it would not be comprehensive) when the basic block executes within a read-side critical section.
+
+%Implementing this optimisation was challenging because we did not have a reliable way to know whether or not some code being translated was or would execute within a read-side critical section. That is, instrumented module code executing within a read-side critical section may have originally been translated while executing outside of a read-side critical section. If that lightweight-instrumented code was later executed within a read-side critical section, then our bug detection scheme would not have been comprehensive. 
+
+To implement our optimisation, we solved a more fundamental problem: tailoring instrumentation to the context in which the instrumented code will execute. Our solution was to allow different versions of the same module code to co-exist within Granary's code cache. That is, a different version of each of a module's basic blocks exists in Granary's code cache  for each encountered execution context. In the case of our RCU checker tool, there were two execution contexts: within and outside of a read-side critical section. If the same module basic block is  executed in both contexts, then Granary's code cache would contain two different instrumented versions of that basic block. The way that Granary distinguishes between different execution contexts is with \emph{instrumentation policies}. 
+
+An instrumentation policy is both a name for an execution context, as well as a function that decides how to instrument basic blocks that will execute within that context. All tools define an initial policy that Granary uses to instrument module code. Tools are not limited to one policy though: any policy can declare a policy switch that will take effect when a selected control-transferring instruction (CTI) is executed. For example, our RCU tool invokes a policy switch from policy $P_{null}$ to policy $P_{read\_critical}$ when $P_{null}$'s instrumentation function observes a \texttt{call} instruction to the \texttt{rcu\_read\_lock} Linux kernel function.
+
+Because policies name an execution context, they also represent states in a finite state machine. That is, a module's execution is in the state named by a policy if the code executing was instrumented by that policy. A state transition occurs when control transfers from code instrumented by one policy to code instrumented by another policy. An early limitation with this approach was that a single state does not encode the sequence of previous states that led to execution being in the current state. For example, RCU permits nested read-side critical sections. If two read-side critical sections were nested then switching from $P_{read\_critical}$ to $P_{null}$ on the first \texttt{call} to \texttt{rcu\_read\_unlock} meant that our tool would lose track of being in the context of the outer read-side critical section. We solved this early limitation by observing that, in most cases, function returns are natural policy reverting points. This is because the runtime call stack encodes both the context in which the current code is executing, as well as the continuation of the current executing code.
+
+Tools specify policy switches on CTIs. The effect of specifying a policy switch on a CTI is that the basic block(s) targeted by that CTI will be instrumented according to the specified policy. CTIs with unspecified policies inherit their policies from their containing basic blocks. As hinted at above, policy switching does not apply to \texttt{ret} instructions, which allows a function instrumented by a different policy than its caller to return to the caller's context (i.e. policy). The asymmetry between \texttt{call}s and \texttt{ret}s is intentional: \texttt{call}s place contextual breadcrumbs (in the form of return addresses) on the runtime call stack, and \texttt{ret}s read these breadcrumbs to return to a previous context. Under this lens, the instruction pointer tracks our current policy, and return addresses form a stack of previous policies. Policy switches behave similarly to state transitions in a pushdown automaton. \texttt{call} instructions push a new state onto the stack for each function, \texttt{ret} instructions pop the current function's state from the stack, and other CTIs induce state transitions within the current function by altering control flow.
+
+
+%Here is why CALL is special: because it places return addresses (breadcrumbs) on the runtime call stack. Under this lens, the instruction pointer maintains our current state, and return addresses form a stack of previous states.
+
+%This is similar to the behaviour of a pushdown automaton, and can be viewed from a language theoretic perspective. A CALL is like a push, that pushes a new state on the stack. A RET is like a pop/reduce, where we accept the execution of some function. All other CTIs are like shifts, where the internal state transitions within the function, and independent of the states of all of our callers. In summary, policy switching can be seen as language acceptance, where policies accept/reject an execution iff that execution can be generated by a context-free grammar.
+
+Granary implements policy tracking and switching by encoding policy information into the meta-data and CTIs of basic blocks. If a policy switch is not specified on an instrumented CTI then that CTI automatically inherits the policy used to instrument the basic block containing the CTI. When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. Because every non-\texttt{ret} CTI encodes policy information, and because Granary's translation mechanism depends only on CTI policy and target information, Granary is able to ensure that policy information is never lost or corrupted, even in the face of concurrent executions of the same module code, arbitrary pre-emption, and abitrary resumption.
+
+% Our approach makes tools that use policies to track states of a module's execution resilient against abitrary pre-emption and resumption because once cached, the policy-switching behaviour of a basic block cannot be accidentally corrupted or lost (e.g. due to concurrency bugs). 
+
+One drawback of Granary's policy implementation is code cache bloat. We feel that this is a reasonable tradeoff because \begin{inparaenum}[i)]
+	\item tool authors are not required to use more than one policy if bloat is a concern; and
+	\item things that are challenging to do with only one policy are often simpler to do with multiple coordinating policies.
+\end{inparaenum} For example, Granary's CFG tool uses coordinating policies to dynamically construct runtime call graphs. A single policy approach for call graph construction might add edges to the call graph only at every \texttt{call} site. However, this approach is insufficient in the face of mixed-mode execution. If an instrumented function $F$ is only invoked by a native function (which contains no instrumentation), and $F$ contains no function calls, then $F$ will not appear as a root node in the call graph. A two-policy solution easily solves the missing root problem by instrumenting both function call sites as well as function entrypoints. The CFG tool distinguishes between the first execution of a function's first basic block ($P_{call\_entry}$), and all other basic blocks executed within the function, including later executions of the first basic block ($P_{after\_entry}$). Function call sites are instrumented to set up the source node of an edge in the call graph. On entry to a function, we identify the current function as either a sink node connected to a source node (instrumented call), or as a root node if no source is present (native call). The distinction between entrypoints and non-entrypoints is achieved with minor bloat: the first basic block appears twice in Granary's code cache, but instrumented by two different policies (\Cref{fig:policy_switching}).
+
+
+
 
 \section{Reifying Instrumentation}\label{sec:reify}
 
-Granary's approach to mixed-mode instrumentation exposes a lot of static analysis information to instrumentation tools. For example, we are actively using wrapper information to create a tool that generates models of typical module behaviour. The wrapper information available to all tools serves two roles in our tool. First, we use type wrappers to assign type-specific IDs to module allocated memory that is shared across the module/kernel interface. Type ID assignment plays a critical role because it allows us to match memory reads and writes to specific kernel data structure fields. Second, we use the kernel and module function wrappers to generate call graphs of a module's execution. This call graph models module behaviour (according to the kernel) because we label module code nodes with kernel data structure and function pointer field names. This labelling allows us to generalise across similar modules. For example, code reached by calling the \texttt{ext4\_mount} and \texttt{btrfs\_mount} functions from the \texttt{ext4} and \texttt{btrfs} modules, respectively, are both labelled as \texttt{file\_system\_type::mount}. The combined records from executing multiple ``trusted'' modules (e.g. mature, open-source file systems) will model the behaviour of typical kernel modules. We hope that these models will help us to automatically generate new tools that classify and identify spurious module behaviour.
+Granary's mixed-mode instrumentation approach exposes a lot of static analysis information to instrumentation tools. For example, we are actively using wrapper information to create a tool that generates models of typical module behaviour. The wrapper information available to all tools serves two roles in our tool. First, we use type wrappers to assign type-specific IDs to module allocated memory that is shared across the module/kernel interface. Type ID assignment plays a critical role because it allows us to match memory reads and writes to specific kernel data structure fields. Second, we use the kernel and module function wrappers to generate call graphs of a module's execution. This call graph models module behaviour (according to the kernel) because we label module code nodes with kernel data structure and function pointer field names. This labelling allows us to generalise across similar modules. For example, code reached by calling the \texttt{ext4\_mount} and \texttt{btrfs\_mount} functions from the \texttt{ext4} and \texttt{btrfs} modules, respectively, are both labelled as \texttt{file\_system\_type::mount}. The combined records from executing multiple ``trusted'' modules (e.g. mature, open-source file systems) will model the behaviour of typical kernel modules. We hope that these models will help us to automatically generate new tools that classify and identify spurious module behaviour.
 
 
 %We compress these call graphs by treating internal module function calls as 
@@ -708,9 +823,9 @@ Granary's approach to mixed-mode instrumentation exposes a lot of static analysi
 %	\item Mixed source/binary analysis tools. Existing tools give high- and low-level access to program informaiton, but require changes to the compilation toolchain and sometimes program source code \cite{NaCl,AddressSanitizer,ThreadSanitizer}.
 %\end{enumerate}
 
-We realised that an imporant missing feature of existing low-level instrumentation tools is the ``big picture'' view that one gets from static analysis information. Similarly, static analysis tools lack access to instructions, memory, and processor-specific behaviours that are only available to low-level runtime instrumentation tools. Existing mixed static/dynamic analysis tools \cite{NaCl,AddressSanitizer,ThreadSanitizer} appear to get the best of both worlds, but sacrifice on runtime flexibility by commiting to a single instrumentation policy at a program's compile time.
+An important missing feature of existing low-level instrumentation tools is the ``big picture'' view that one gets from static analysis information. Similarly, static analysis tools lack access to instructions, memory, and processor-specific behaviours that are only available to low-level runtime instrumentation tools. Existing mixed static/dynamic analysis tools \cite{NaCl,AddressSanitizer,ThreadSanitizer} appear to get the best of both worlds, but sacrifice on runtime flexibility by committing to a single instrumentation policy at a program's compile time.
 
-The benefits of high-level static analysis information motivated its inclusion into Granary using a technique we call reifying instrumentation. Granary extracts type and function declarations from the Linux kernel source code and exposes that information to tool developers. Tools can use this information to inspect data in wrappers and dynamically change the instrumentation policy based on either static or runtime information. For example, we developed a tool that interposes on and associate writes to memory with specific kernel data structure fields. We used this tool to precisely detect if/when a module violates a kernel data structure invariant (\Cref{fig:field_invariant_check}).
+The benefits of high-level static analysis information motivated its inclusion into Granary using a technique we call reifying instrumentation. Granary extracts type and function declarations from the Linux kernel source code and exposes that information to tool developers. Information extracted with static analysis is available using either \texttt{C++} template meta-programs or \texttt{Python} scripts that operate on kernel type graphs. For example, we used extracted static type information to generate hooks that invoke tool-specific functions on all memory writes to a specific kernel data structure field. We used this tool to precisely detect if/when a module violates a kernel data structure invariant (\Cref{fig:field_invariant_check}).
 
 \begin{figure}[t]
 \begin{lstlisting}[language=C,basicstyle=\footnotesize\ttfamily]
@@ -791,19 +906,56 @@ WATCH_WRITE(struct file_operations, ioctl, {
 %\subsection{Interrupts and Exceptions}\label{sec:interrupts}
 
 
-\section{Instrumentation Policies}\label{sec:policies}
+%Because of mixed-mode execution, a given function's caller might have been executing natively, therefore we cannot depend on 
 
-Giving Granary tools the ability to dynamically switch the policy used to instrument code was a natural extension of mixed-mode execution. Just as instrumenting only module code allows Granary to specialise the execution of native code, so does policy switching allow tools to specialise the execution of instrumented code. In fact, optimising the performance of an early Granary tool was the original motivation for policy switching.
+%needs to distinguish between the first execution of a function's first basic block and later executions of that basic block (e.g. because of backward branches within the function).
 
-We developed a Granary tool that detects several Read-Copy-Update (RCU) API misuses in module code. As an optimisation, we wanted our heavyweight API-checking instrumentation to apply only when the code executing was within the context of a read-critical section. At the time, implementing this optimisation was challenging because we didn't have a reliable way to know whether or not some code being translated was executing within a read-critical section. That is, instrumented module code executing within a read-critical section may have originally been translated while executing outside of the context of a read-critical section. If that lightweight-instrumented code was executed within the context of a read-critical section, then our bug detection scheme would not have been comprehensive. Our solution to this problem was to allow different versions of the same module code to co-exist within Granary's code cache.
+%Granary depends on these inputs alone as a means of ensuring consistency.
+%: Granary cannot ``lose track'' of state concerning the execution of some code because the code itself maintains that state.  This enables arbitrary pre-emption and resumption of instrumented code without negatively affecting how as-of-yet uninstrumented code will be instrumented. The value of this approach is that it simplifies the process of creating instrumentation tools that run in OS kernels.
+%Our experience with policy switching has been that they are a robust way of tracking state about the execution of a module. This is especially true in the
+%For example, we created a tool that uses policies to implement different weights of instrumentation. Unfortunately, execution got ``stuck'' in a heavyweight policy after the first policy switch from light to heavyweight. We also didn't want to abitrarily switch from a heavyweight to a lightweight policy, lest the switch occur too early. 
+%function returns were the best indicator of when to revert to a previous policy.
+%the best indicator of when to revert to a previous policy/context was
+%because while a policy names an execution context but made no 
+%, and contexts
+%While designing module analysis tools, we realised that it is valuable to be able to revert to a previous state. For example, 
+
+%Switching policies based on CTIs fits well with Granary's JIT-based translation mechanism for two reasons. First, a tool cannot be certain about when a given CTI will first be executed. For example, Granary translates a single conditional branch into two CTIs: one conditional branch, and a fall-through \texttt{jmp} to the next basic block. If the tested condition is always true then the fall-through basic block might never be instrumented. However, if a failure of the tested condition indicates a context switching scenario, then 
+
+%For example, the fall-through basic block after a conditional branch may never be executed if the tested condition is always true. 
+
+%Because of this, the basic block targeted by the CTI that connects the testing basic block to the fall-through basic block
+
+%Our experience with implementing policy swithc
 
 
 
-TODOs \begin{itemize}
-	\item It turned out that part of the problem we were trying to solve was tracking/propagating state, and so policies and switching was a really good mechanism of doing this.
-	\item New paragraph about policy info being encoded in basic blocks, and starting to introduce policy state, etc.
-	\item Perhaps use the RCU example as a way of also motivating the SIMD saving / restoring?
-\end{itemize}
+%
+
+%; however, most Granary tools define more than one interacting policies.
+
+% By default, all module code is instrumented by the initial policy. However, if a tool wants to declare an execution context switch (e.g. entering into a read-side critical section) then the active
+
+
+%However, any policy (including the initial policy) may declare that a policy switch will occur at a control-flow transferring instruction (CTI). The effect of declaring a policy switch at a CTI is that 
+
+%a tool tells Granary to switch policies. A policy switch can occur at control-flow instructions.
+
+% is a function that decides how to instrument a basic block of module code that will execute within the execution context named by that policy.
+%An instrumentation policy is a name that a tool gives to an execution context. A policy decides how to instrument a basic block of module code that is executing within 
+
+%for each encountered execution context , a new version of the basic block tailored to that context.
+% is handled by a different \emph{instrumentation policy}.
+%Granary solves the problem of context-aware instrumentation using a technique that we call policy-driven instrumentation. An instrumentation 
+%The underlying problem that we solved was to change the behaviour of instrumentation based on the context in which code executes.
+%The underlying problem that we needed to solve in order to implement our RCU checking optimisation was: \begin{inparaenum}
+%was that a basic block should have some notion of the context in which its executing.
+
+%TODOs \begin{itemize}
+%	\item It turned out that part of the problem we were trying to solve was tracking/propagating state, and so policies and switching was a really good mechanism of doing this.
+%	\item New paragraph about policy info being encoded in basic blocks, and starting to introduce policy state, etc.
+%	\item Perhaps use the RCU example as a way of also motivating the SIMD saving / restoring?
+%\end{itemize}
 
 %translated 
 %Recall that Granary translates basic blocks on demand.
@@ -820,41 +972,6 @@ TODOs \begin{itemize}
 %Our original goal with Granary was to instrument only Linux kernel modules. This was a natural extension from DRK: 
 %When developing new module instrumentation tools, a common thought 
 
-\lstset{language=[x64]Assembler}
-\newsavebox\asmbox
-\begin{lrbox}{\asmbox}
-\begin{minipage}[b]{4cm}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
-1: mov    (%rdi), %rax
-   jmp    .2
-2: mov    %rax, (%rsi)
-   test   %rax
-   jz     .4
-3: inc    %rsi
-   inc    %rdi
-   jmp    .1
-4: ret
-\end{lstlisting}
-\end{minipage}
-\end{lrbox}
-
-\begin{figure*}[ht!]
-\centering
-\subfloat[Policy Switching Protocol]{
-\begin{tikzpicture}[>=stealth',shorten >=1pt,auto,node distance=3cm,scale=0.8, every node/.style={scale=0.8}]
-  \node[initial,state]          (A)      {$P_{after\_entry}$};
-  \node[state]          (C) [right of=A]  {$P_{call\_entry}$}; 
-  \path[->]     (A)     edge    [loop above]    node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)                                edge         [bend left]        node {{\footnotesize\ttfamily\bf call}} (C)                        (C) edge    [bend left]     node {{\footnotesize\ttfamily\bf jmp}, {\footnotesize\ttfamily\bf jz}} (A)                        (C)     edge    [loop above]    node {{\footnotesize\ttfamily\bf call}} (C);
-\end{tikzpicture}
-}
-\hfill
- \subfloat[Uninstrumented Code]{\usebox\asmbox}
-\hfill
- \subfloat[Instrumented Basic Blocks]{
-\epsfig{file=diagrams/policy-switching-entry-tracking.eps,width=2.5in}
- }
-\ORIGcaption{\label{fig:policy_switching}Example policy switching protocol that ensures that instrumentation ($P_{call\_entry}$) is performed only once on entry to every function, regardless of if that basic block is re-executed. Basic block (1) is instrumented by both $P_{call\_entry}$ and $P_{after\_entry}$, and basic blocks (2) and (3) are instrumented by $P_{after\_entry}$.}
-\end{figure*}
 
 
 %New module analysis tools are created by implementing one or more interacting instrumentation policies. Module analysis tools use policies to track state (called \emph{policy properties}) and decide how to instrument code.
@@ -881,35 +998,35 @@ TODOs \begin{itemize}
 %	%	\item tracking and propagating state/context using \emph{policy properties}.
 %	%\end{inparaenum}
 
-\subsection{Creating Tools with Policies}
-
-Tool developers must implement three functions for each policy: \begin{enumerate}
-	\item $F_{module}$ instruments a basic block of module code.
-	\item $F_{kernel}$ instruments a basic block of kernel code.
-	\item $F_{interrupt}$ handles an interrupt in instrumented code.
-\end{enumerate}
-
-The majority of tools will focus on implementing $F_{module}$; however, we have found $F_{kernel}$ useful when implementing \emph{data-driven instrumentation} and $F_{interupt}$ useful when implementing multiple weights of instrumentation in response to interrupt behaviour. 
+%\subsection{Creating Tools with Policies}
+%
+%Tool developers must implement three functions for each policy: \begin{enumerate}
+%	\item $F_{module}$ instruments a basic block of module code.
+%	\item $F_{kernel}$ instruments a basic block of kernel code.
+%	\item $F_{interrupt}$ handles an interrupt in instrumented code.
+%\end{enumerate}
+%
+%The majority of tools will focus on implementing $F_{module}$; however, we have found $F_{kernel}$ useful when implementing \emph{data-driven instrumentation} and $F_{interupt}$ useful when implementing multiple weights of instrumentation in response to interrupt behaviour. 
 
 %Granary provides a framework for fine-grained memory access instrumentation, called \emph{behavioural watchpoints}. Behavioural watchpoints-based tools expose tainted memory addresses to instrumented programs. If a tainted address is used to access memory then the processor raises a fault. Instead of instrumenting all code in a way that guards against such faults ($P_{watchpoints}$), Granary defaults to instrumenting basic blocks using $P_{null}$. However, when a fault is raised, Granary prevents future faults from occuring within the same basic block by patching the $P_{null}$-instrumented basic block to re-route control to a $P_{watchpoints}$-instrumented basic block.
 
-For example, tools built with Granary's behavioural watchpoints framework expose tainted memory addresses to instrumented modules. Modules and the kernel freely share data, making it almost inevitable for  tainted addresses to ``leak'' into the kernel. If the kernel attempts to access the memory referenced by a tainted address then the processor will raise a fault. We handle this fault by applying $F_{kernel}$ to instrument the faulting kernel code using a policy that protects against such faults ($P_{watchpoints}$). $F_{interupt}$ is also used to optimise the execution of tools using behavioural watchpoints by initially assuming that code will not dereference a tainted address ($P_{null}$) and upgrading to $P_{watchpoints}$ if a fault on a tainted address occurs within a $P_{null}$-instrumented basic block.
+%For example, tools built with Granary's behavioural watchpoints framework expose tainted memory addresses to instrumented modules. Modules and the kernel freely share data, making it almost inevitable for  tainted addresses to ``leak'' into the kernel. If the kernel attempts to access the memory referenced by a tainted address then the processor will raise a fault. We handle this fault by applying $F_{kernel}$ to instrument the faulting kernel code using a policy that protects against such faults ($P_{watchpoints}$). $F_{interupt}$ is also used to optimise the execution of tools using behavioural watchpoints by initially assuming that code will not dereference a tainted address ($P_{null}$) and upgrading to $P_{watchpoints}$ if a fault on a tainted address occurs within a $P_{null}$-instrumented basic block.
 
 % instrument as much or as little of the kernel as they want in response to this fault.
 %Instrumentation policies expose three functions: one to instrument module code, one to instrument kernel code, and one to handle an interrupt in instrumented code.
 
 
-$F_{module}$ and $F_{kernel}$ can abitrarily manipulate instructions and policy properties before they are packaged into basic blocks. These functions decide what the ``next'' policy should be for each CTI within the basic block. For example, if $P_{call\_entry}$'s $F_{module}$ sets the policy of a CTI in the basic block to policy $P_{after\_entry}$, then any module code targeted by the changed CTI will be translated and instrumented by $P_{after\_entry}$'s function $F_{module}$ (\Cref{fig:policy_switching}). 
+%$F_{module}$ and $F_{kernel}$ can abitrarily manipulate instructions and policy properties before they are packaged into basic blocks. These functions decide what the ``next'' policy should be for each CTI within the basic block. For example, if $P_{call\_entry}$'s $F_{module}$ sets the policy of a CTI in the basic block to policy $P_{after\_entry}$, then any module code targeted by the changed CTI will be translated and instrumented by $P_{after\_entry}$'s function $F_{module}$ (\Cref{fig:policy_switching}). 
 
 %Because Granary depends on DynamoRIO's instruction encoder/decoder, the full range of DynamoRIO instruction/operand manipulation functions can be applied to instructions within a basic block.
 
-\subsection{Managing State with Policies}
+%\subsection{Managing State with Policies}
 
-Policies encode state in the form of properties. A policy property describes an aspect of the environment in which the instructions of a basic block execute. Properties are tested, set, and unset by Granary and tool-specific policies over the course of decoding, instrumenting, and packaging instructions into basic blocks. By default, properties are propagated across all control-flow transfers except for return instructions. Property propagation through function call instructions enables inheritance of contextual information through the function call chain. The lack of propagation through function returns enables execution to return to a previous context.
+%Policies encode state in the form of properties. A policy property describes an aspect of the environment in which the instructions of a basic block execute. Properties are tested, set, and unset by Granary and tool-specific policies over the course of decoding, instrumenting, and packaging instructions into basic blocks. By default, properties are propagated across all control-flow transfers except for return instructions. Property propagation through function call instructions enables inheritance of contextual information through the function call chain. The lack of propagation through function returns enables execution to return to a previous context.
 
-Granary encodes policy information into the meta-data and CTIs of basic blocks. When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. Granary depends on these inputs alone as a means of ensuring consistency: Granary cannot ``lose track'' of state concerning the execution of some code because the code itself maintains that state.  This enables arbitrary pre-emption and resumption of instrumented code without negatively affecting how as-of-yet uninstrumented code will be instrumented. The value of this approach is that it simplifies the process of creating instrumentation tools that run in OS kernels.
+%Granary encodes policy information into the meta-data and CTIs of basic blocks. When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. Granary depends on these inputs alone as a means of ensuring consistency: Granary cannot ``lose track'' of state concerning the execution of some code because the code itself maintains that state.  This enables arbitrary pre-emption and resumption of instrumented code without negatively affecting how as-of-yet uninstrumented code will be instrumented. The value of this approach is that it simplifies the process of creating instrumentation tools that run in OS kernels.
 
-Granary's approach to managing state was motivated by our experience of trying to analyse modules with DRK. DRK maintains control over the execution of instrumented code by tracking what code is executing on each CPU. However, maintaining the consistency of this state is challenging: interrupts and exceptions introduce re-entrancy issues that are solved on a case-by-case basis. The complexities of managing the existing state increased when we modified DRK to only instrument modules and not the kernel. We found that our modified DRK sometimes ``got lost'' because of the interaction between interrupt handling, state management, and patching of translated code.
+%Granary's approach to managing state was motivated by our experience of trying to analyse modules with DRK. DRK maintains control over the execution of instrumented code by tracking what code is executing on each CPU. However, maintaining the consistency of this state is challenging: interrupts and exceptions introduce re-entrancy issues that are solved on a case-by-case basis. The complexities of managing the existing state increased when we modified DRK to only instrument modules and not the kernel. We found that our modified DRK sometimes ``got lost'' because of the interaction between interrupt handling, state management, and patching of translated code.
 
 %We found that DRK sometimes ``got lost''  when analysing modules because the mechanism 
 %because of the interaction of interrupt-handling, state-management, and patching of translated code.
