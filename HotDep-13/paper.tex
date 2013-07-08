@@ -96,19 +96,60 @@ University of Toronto
 
 \section{Introduction}
 
-%A data \emph{watchpoint} is a powerful tool that reports on the usage of a particular memory location by a running program.
-Despite costly effort to improve software-development methodologies, software defects in deployed codes continue to thrive causing system failure or unpredictable behaviour. Finding, understanding, and fixing software bugs is challenging and requires significant cost. Numerous tools exist to help developers identify these bugs. A data \emph{watchpoint} is one such powerful tool that reports on the usage of a particular memory location by a running program. Similar to instruction breakpoints, they correlate watched memory locations with the program points accessing these memory locations. 
+Watchpoints are an integral feature of program analysis and debugging tools because they correlate watched memory locations with the program points accessing those memory locations. %It provides mean to discover program bugs that are tedious or impossible to detect.
+There are two categories of watchpoints: hardware-based and software-based. Most architecture provides support for Hardware-based watchpoints. They are fast but limited in number and size. This limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints, Roberts96implementationand,  Wahbe93practicaldata}, but are limited by their view of memory as an opaque sequence of bytes. This view is at odds with program analysis tools, which require contextual information about a program's memory. %This severely limits its practical and ubiquitous use.
+As a result, watchpoint-based analysis tools are harder to design and implement because they must maintain separate bookkeeping mechanisms to recover contextual information about watched memory.
 
-There are two categories of watchpoints: i) Hardware-based approach and ii) Software-based approach. Hardware-based watchpoints are fast but scarce and requires additional hardware support. This limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints}, but are limited by their view of memory as an opaque sequence of bytes. This view is at odds with program analysis tools, which require contextual information about a program's memory. Embedding such informations in existing software approach will require to maintain separate bookkeeping mechanisms which will lead to large computational and lookup overheads. This severely limits its practical and ubiquitous use and impede their adoptation by developers
+In this paper, we introduce \emph{Behavioural Watchpoints}: a new form of software-based watchpoints that simplify the implementation of program analysis and debugging tools.  Behavioural watchpoints address the usability concerns of hardware-based watchpoints and overcome the incongruency between how software implements watchpoints and how program analysis tools use watchpoints. The characteristic which defines behavioural watchpoints are: i) Context-specific information is embedded in each watchpoint. The information is directly available when a watched address is accessed. This provides significant versatility in monitoring large number of memory. ii) The action taken when a watched address is accessed is a component of the context-specific information. This implies that different watchpoints can \emph{behave} differently.
 
-In this paper, we introduce \emph{behavioural watchpoints}: a new form of software-based watchpoints which addresses the usability concern of hardware-based watchpoints and overcome the incongruency between how software implements watchpoints and how program analysis tools use them. We describes our prototype implementation of Behavioural Watchpoints using binary instrumentation and code manipulation framework and ability to watch large number of memory locations with 2x overhead. We also demonstrate how the ability to store contextual information simplify and broaden the scope of developing new debugging tools. 
+The behavioural watchpoints are implemented using Granary: a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. The paper presents the design and challenges of implementing behavioural watchpoints using an in-kernel dynamic binary translation (DBT) framework. It also discuss the concept of data-driven instrumentation and set of optimization which is enabled by framework to reduce the cost of runtime checking. Data-driven instrumentation works as an extension of traditional data breakpoint and allows instrumentation framework to attach when program encounters watchpoint. This reduces the cost of debugging when using limited number of watchpoints.
 
- Two characteristics define behavioural watchpoints:
-\begin{enumerate*}
-  \item[i)] Context-specific information is embedded in each watchpoint. This information is directly available when a watched address is accessed.
-  \item[ii)] The action taken when a watched address is accessed is a component of the context-specific information. This implies that different watchpoints can \emph{behave} differently.
+%We implemented behavioural watchpoints using Granary: a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. Behavioural watchpoints also introduces the concept of data-driven instrumentation and set of optimization to reduce the cost of checking for runtime system. Data-driven instrumentation works as an extension of traditional data breakpoint and allows instrumentation framework to attach when program encounters watchpoint.
+
+
+
+%when program encounters watchpoints, instrumenting a basic block of program. This reduces the cost of using watchpoints specially for the program using less or no watchpoints.
+
+
+%Two characteristics define behavioural watchpoints:
+%\begin{enumerate*}
+%  \item[i)] Context-specific information is embedded in each watchpoint. This information is directly available when a watched address is accessed.
+ % \item[ii)] The action taken when a watched address is accessed is a component of the context-specific information. This implies that different watchpoints can \emph{behave} differently.
   %\item[iii)] A single watchpoint can watch multiple addresses.
-\end{enumerate*} 
+%\end{enumerate*}
+
+
+
+
+
+
+%Program debugging is crucial and important phase of software-development methodology. It is suggested that finding, understanding and fixing of software defects in deployed system requires significant cost. Numerous tools exist to help developers identify these bugs.   
+
+
+%despite the costly effort to improve the software quality,  
+
+
+%The reports on software engineering economics suggests that   
+
+%It is suggested that a developer spends 50 percent of 
+
+%Despite the costly effort to improve the  
+
+
+ %can be tedious and time-consuming, in part because the program code responsible for a bug can be difficult to find. A serious software bug may be caused by a single instruction among millions of instructions in a computer program.
+%A data \emph{watchpoint} is a powerful tool that reports on the usage of a particular memory location by a running program.
+%Despite costly effort to improve software-development methodologies, software defects in deployed codes continue to thrive causing system failure or unpredictable behaviour. Finding, understanding, and fixing software bugs is challenging and requires significant cost. Numerous tools exist to help developers identify these bugs. A data \emph{watchpoint} is one such powerful tool that reports on the usage of a particular memory location by a running program. Similar to instruction breakpoints, they correlate watched memory locations with the program points accessing these memory locations. 
+
+%There are two categories of watchpoints: i) Hardware-based approach and ii) Software-based approach. Hardware-based watchpoints are fast but scarce and requires additional hardware support. This limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints}, but are limited by their view of memory as an opaque sequence of bytes. This view is at odds with program analysis tools, which require contextual information about a program's memory. Embedding such informations in existing software approach will require to maintain separate bookkeeping mechanisms which will lead to large computational and lookup overheads. This severely limits its practical and ubiquitous use and impede their adoptation by developers
+
+%In this paper, we introduce \emph{behavioural watchpoints}: a new form of software-based watchpoints which addresses the usability concern of hardware-based watchpoints and overcome the incongruency between how software implements watchpoints and how program analysis tools use them. We describes our prototype implementation of Behavioural Watchpoints using binary instrumentation and code manipulation framework and ability to watch large number of memory locations with 2x overhead. We also demonstrate how the ability to store contextual information simplify and broaden the scope of developing new debugging tools. 
+
+ %Two characteristics define behavioural watchpoints:
+%\begin{enumerate*}
+%  \item[i)] Context-specific information is embedded in each watchpoint. This information is directly available when a watched address is accessed.
+  %\item[ii)] The action taken when a watched address is accessed is a component of the context-specific information. This implies that different watchpoints can \emph{behave} differently.
+  %\item[iii)] A single watchpoint can watch multiple addresses.
+%\end{enumerate*} 
 
 
 %removes memory opaqueness and provide debugger useful information about the memory state thus simplifing the implementation of new program analysis and debugging tools. It also de
@@ -117,7 +158,7 @@ In this paper, we introduce \emph{behavioural watchpoints}: a new form of softwa
 
 %Watchpoints are an integral feature of program analysis and debugging tools because they correlate watched memory locations with the program points accessing those memory locations. There are two categories of watchpoints: hardware-based and software-based. Hardware-based watchpoints are fast but scarce, which limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints}, but are limited by their view of memory as an opaque sequence of bytes. This view is at odds with program analysis tools, which require contextual information about a program's memory. As a result, watchpoint-based analysis tools are harder to design and implement because they must maintain separate bookkeeping mechanisms to recover contextual information about watched memory.
 
-%There are two categories of watchpoints: i) Hardware-based approach and ii) Software-based approach. Hardware-based watchpoints are fast but scarce, which limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints}, but are limited by their view of memory as an opaque sequence of bytes. This view is at odds with program analysis tools, which require contextual information about a program's memory and severely limits its usefulness.
+%There are two cwith increase in software complexity there is a need of better toolsategories of watchpoints: i) Hardware-based approach and ii) Software-based approach. Hardware-based watchpoints are fast but scarce, which limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints}, but are limited by their view of memory as an opaque sequence of bytes. This view is at odds with program analysis tools, which require contextual information about a program's memory and severely limits its usefulness.
 
 %In this paper, we introduce \emph{behavioural watchpoints}: a new form of software-based watchpoints that simplify the implementation of program analysis and debugging tools.  Behavioural watchpoints address the usability concerns of hardware-based watchpoints and overcome the incongruency between how software implements watchpoints and how program analysis tools use watchpoints.
 
@@ -140,7 +181,7 @@ In this paper, we introduce \emph{behavioural watchpoints}: a new form of softwa
 %	\item[iii)] {\bf Type-specific:} When a watchpoint is added to an address, the address's type determines which set of behaviours to invoke when (displacements of) that address are dereferenced. In \Secref{access_policies}, we use this feature to detect Linux kernel rootkits by implementing fine-grained memory access policies.
 %\end{enumerate*}
 
-\section{Design}
+\section{Design}\label{sec:design}
 A behavioural watchpoint is a software-based watchpoint that triggers the invocation of a function when any watched memory is accessed. Unlike most software-based watchpoints, a behavioural watchpoint watches a \emph{range} of addresses. This design supports our goal of allowing one watchpoint to monitor all memory accesses to a single object.
 
 To achieve this design goal, we implemented watchpoints by adding an extra level of indirection to memory addresses. An unwatched address is converted into a watched address by changing its high-order bits. These high-order bits indirectly identify context-specific information about the range of memory being watched. This information, called the watchpoint's \emph{descriptor}, contains the originating watched address and a set of functions to invoke when watched memory is dereferenced. Since watchpoint information is embedded in only the high-order bits, a typical offset of a watched address is another watched address that shares the same watchpoint-specific high-order bits. A watchpoint's descriptor is indirectly located by interpreting these high-order bits as an index into a global \emph{watchpoint descriptor table} (\Figref{watchpoint_descriptor_table}). 
@@ -222,6 +263,30 @@ Our approach has the following design implications.
 %	\item 
 %\end{enumerate}
 
+%\subsection{Design Challenges}
+Our design of behavioural watchpoints put some restrictions on the range of applications which it can handle. Behavioural watchpoint tags the higer-order bits with the descriptor information and it can't handle the application which is also doing similar things. Such operation will corrupt the embedded descriptor information and once lost we don't have a way to recover it. Identifying applications doing such operation is challenging. Applications which are only handling with 32-bit address is also not supported. We designed behavioural watchpoints for the Linux kernel but all the functionalities in the kernel is not very suitable for the approach. We found some cases where fast method of mapping virtual addresses to physical addresses for page table lookup was depending on sign extension of 64-bit addresses which is not the case when it is changed to watched addresses. 
+
+%has the following design implications. 
+
+%are designed for Linux kernel and generated by providing an extra-level of indirection and storing the descriptor information in higher order bits of the address. This puts restrictions on the range of applications which behavioural watchpoints can handle. The applications storing tagging information with the high-order bits of the address works against the design of behavioural watchpoints. Identifying such operations in an application is an open problem for us. Our solution of embedding descriptor information in object address is not very friendly with some of the kernel functions.   
+
+
+%However identifying such operations in an application is an  
+
+
+%However all the applications  
+
+
+%The operation is not very friendly with some of the kernel functions. Linux kernel uses fast method of mapping virtual addresses to physical address. The mapping functions performs bit-operations in the  
+
+
+%and virtual address into struct pages for lookup in the page table. 
+
+
+ %to the physical address. These operations 
+
+
+%There is a requirement for Linux to have a fast method of mapping virtual addresses to physical addresses and for mapping struct pages to their physical address. Linux achieves this by knowing where, in both virtual and physical memory, the global mem_map array is because the global array has pointers to all struct pages representing physical memory in the system. All architectures achieve this with very similar mechanisms, but, for illustration purposes, we will only examine the x86 carefully. This section will first discuss how physical addresses are mapped to kernel virtual addresses and then what this means to the mem_map array.   
 
 %\subsection{Architecture}
 
@@ -248,7 +313,7 @@ While Granary provides a framework for instrumenting kernel modules, we found it
 %Watched addresses, however, do not reference valid memory. Dereferencing a watched address triggers a hardware exception. To avoid this, we use Granary to dynamically translate memory loads and stores to first check for and then resolve watched addresses to their unwatched counterparts. If a watched address is detected then a watchpoint-specific vtable function is invoked. Both the address of the watchpoint descriptor and the watched address are passed as arguments to the invoked function. Finally, the original memory instruction is emulated by one that uses the unwatched address. The choice of which vtable function to invoke depends on the size of the memory operand (1, 2, 4, or 8 bytes) and whether the operation reads or writes its operand from/to memory.
 
 \section{Applications\label{sec:applications}}
-The following sub-sections describe three applications of behavioural watchpoints and their implementations. In these sub-sections, we use the term \emph{object} to refer to a range of memory locations that are allocated together as a unit.
+The following sub-sections describe four applications of behavioural watchpoints and their implementations. In these sub-sections, we use the term \emph{object} to refer to a range of memory locations that are allocated together as a unit.
 
 %to describe a value or aggregate of values stored in memory and referenced by a memory address.
 
@@ -390,6 +455,134 @@ We detect freeing of non-heap memory when the argument to a kernel memory deallo
 
 %Two positive side-effects of our approach is that it detects double-free bugs and freeing of non-heap memory bugs. A double-free is detected when a watched address for an already deallocated object is passed as an argument to a deallocator. An attempt to free non-heap memory is detected when an unwatched address is passed as an argument to a deallocator.
 
+\subsection{Memory Leak Detection\label{sec:memory_leaks}}
+Linux kernel and its modules are mostly developed in C. Memory leak bugs are a common problem with C and C++ based applications \cite{Boehm96simplegarbage-collector-safety}. These bugs are difficult to identify or track-down without the help of a dedicated tool \cite{Memcheck, Bruening:2011:PMC:2190025.2190067}. Memory leak can be a problem especially in long running application and is worse in the kernel because every time a piece of memory is lost, it is gone until the next boot.
+%Memory leaks can be a problem in applications, especially those which run for a long time
+%Memory leak bugs are common in Linux kernel and its modules which are mostly developed in C. These bugs are difficult to identify or track-down without the help of a dedicated tool. 
+%Memory leaks in kernel is worse because of its long running nature and every time a piece of memory is lost, it is gone until the next boot. 
+Linux kernel modules works as an extension of Operating system providing additional features, while running in the privilege mode and a serious memory leak in the kernel modules can make the operating system unstable. In this section we will describe our approach of using behavioural watchpoints in detecting memory leak bugs in kernel modules.
+
+\paragraph{Liveness Analysis} Our approch of leak detector is based on the liveness analysis of heap objects, which are directly or indirectly allocated by the modules. Similar to existing solution like Purify \cite{Rs_purify:fast} and Dr Memory \cite{Bruening:2011:PMC:2190025.2190067}, leak detector uses garbage collection algorithm to detect memory leaks. %Behavioural Watchpoints being able to hold context-specific information with each objects and are equally efficient for both the methods
+It uses conventional mark and sweep algorithm and recursively follows potential pointers from the data, stack segment and heaps to mark the objects live and reachable. Many implementation of mark and sweep based tracing algorithm exist and a straightforward implementation invloves stopping the client(mutator) to perform the liveness analysis. This solution is not very efficient when client operates on very large heap-memory as it will increase the pause-time and touching heap memory will blow away the cache, seriously affecting the system performance. One solution to reduce the pause time is using generational collection based algorithm. However, this avoids the problem by scheduling the collector thread less frequently, thus doesn't remove the problem completely. In our leak detector we remove this problem by using mostly parallel collector. Mostly-parallel collectors takes an orthogonal approach and reduces the problem by having collector doing most of the work parallel to the client and using stop-the-world to prepare the system. 
+
+
+%running collector parallel to client
+
+%However this doesn't completely remove the 
+
+
+%. The solution to reduce the pause time in tracing algorithm based leak detector is generational or parallel collection. Generational collection avoids stop-the-world time by running the collector thread occasionally, thus doesn't remove the problem completely. However the parallel collectors takes orthogonal approach and reduces the time of pause by running collector parallel to client. We took similar approach of mostly-parallel collector to perform the object liveness analysis.  
+
+
+
+
+%A straigntforward implementation of tracing based collector involves stoping the client when collector is in the process performing liveness-analysis. This solution is not very efficient when client operates on very large heap-memory as it stops the clients for longer time. The solution to reduce the pause time in tracing algorithm based leak detector is generational or parallel collection. Generational collection avoids stop-the-world time by running the collector thread occasionally, thus doesn't remove the problem completely. However the parallel collectors takes orthogonal approach and reduces the time of pause by running collector parallel to client. We took similar approach of mostly-parallel collector to perform the object liveness analysis.  
+
+
+%purify uses an algorithm similar to the conventional mark and sweep. In the mark
+%phase,i lyify-recursively follows potential pointers from the data and stack segmentsin to the heap and marks all
+%blocks referencedin the standard"conservativea"n d "pessimistic" 
+
+%embed context-specific information with each objects and are equally efficient for implementing both direct and indirect method of leak detection but we decided to use the tracing algorithm which has no overhead cost for maintaining and updating the records for each objects.
+
+
+
+%both direct and indirect method of leak detection but we decided to use the tracing algorithm which has no overhead cost for maintaining and updating the records for each objects.
+
+
+%The existing solution for memory leak detection uses two methods to perform livness analysis: the reference counting \cite{Maebe_precisedetection} and tracing methods \cite{Bruening:2011:PMC:2190025.2190067}. 
+
+
+%The existing solution for memory leak detection uses two methods to perform the liveness analysis: the direct method and the indirect method. Direct method requires that a record be associated with each object in the heap on behalf of the objects which gets updated based on if a pointer is set to refer to this object or the reference of the object is lost. Reference counting is one of the common direct method for detecting leaks. The indirect method includes the tracing algorithm where the live-ness analysis is performed at later point of time independent of client. Behavioural Watchpoints embed context-specific information with each objects and are equally efficient for implementing both direct and indirect method of leak detection but we decided to use the tracing algorithm which has no overhead cost for maintaining and updating the records for each objects.
+
+%\paragraph{Leak Scan}
+%A common tracing algorithm used to implement garbage collector is mark-and-sweep operation. We used similar method to perform the liveness analysis on module allocated objects. A straigntforward implementation of tracing based collector involves stoping the client when collector is in the process performing liveness-analysis. This solution is not very efficient when client operates on very large heap-memory as it stops the clients for longer time. The solution to reduce the pause time in tracing algorithm based leak detector is generational or parallel collection. Generational collection avoids stop-the-world time by running the collector thread occasionally, thus doesn't remove the problem completely. However the parallel collectors takes orthogonal approach and reduces the time of pause by running collector parallel to client. We took similar approach of mostly-parallel collector to perform the object liveness analysis.  
+
+\paragraph{Types of Leak}
+Implementing memory leak detector for kernel modules without having full knowledge of kernel is non-trivial. This is because not all module owned objects are directly allocated by the module and there is frquent change in the ownership of the objects at kernel/module interface. Leak detector makes use of wrapper interface of Granary to add watchpoints with all the objects allocated in module context and lazily tracks their ownership at collection. This is particularily important to reduce the false positive. However, our approach of lazily determining object ownweship require us to keep track of all the objects passed to the modules but this avoids the scanning of kernel heaps for liveness-analysis. Based on limited kernel view and lazy collection of objects allocated by the modules, leak detector divides them into three categories: 
+\begin{enumerate*}
+   \item[i)] Objects that are live and rechable from one of the prior roots. These objects are not considerd as leak. 
+   \item[ii)] Objects that are not reachable but are potentially live. These includes objects which are allocated in module context but are not owned by the modules. Leak detector keep tracks of such objects by marking them as live. 
+   \item[iii)] Objects that are not reachable and are certainly garbage. Determining the garbage objects with partial view of kernel and scanning of kernel objects passed to the module is challenging. However, to detemine this we follow the ownship history of the objects and any watched objects which is owned by the modules previous and are not rechable from any of the root-sets is reported as leak. Root-sets are set of object references which are prior reachable and for our leak detector it includes kernel and module static data and kernel objects passed to the module.  
+\end{enumerate*}
+
+
+
+%A root-set is de-
+%fined by the set of references of objects which are prior
+%reachable. 
+
+
+
+%These are the objects that never passed directly to the kernel and also not rechable from the rootsets. Leak detector reports them as potentially leaked objects. 
+
+
+% kernel and modules frequently changes the ownership of objects at complex interface.  
+
+%This is because kernel and modules frequently changes object ownership at complex interface and not all the 
+
+
+%since the modules are tightly integrated with the kernel exchanging objects at complex interface. This makes it challeging to perform the liveness-analysis. Leak detector uses partial kernel information embedded in the Granary to create the root-sets. A root-set is defined by the set of references of objects which are prior reachable. We take a conservative approach in defining root-sets and apart from the static data of the module and kernel, we include all the dynamically allocated kernel objects which are ever passed to the modules as root-set. This avoids the scanning of entire heap but the leak detector has to maintain bookkeeping of such objects. Based on limited kernel view and scanning of root-set objects, leak detector divides the heap allocated objects into three categories: i) Objects that are reachable and not garbage. These are the objects which are reachable from the root-set and not considerd as leak. ii) Objects that are not reachable and potentially garbage. This includes the objects which are directly or indirectly allocated by the modules but are passed to the kernel at some point. Leak detector consider it as a potential object for leak and reports them if large number of such objects exist. iii) Objects that are not reachable and are certainly garbage. These are the objects that never passed directly to the kernel and also not rechable from the rootsets. Leak detector reports them as potentially leaked objects. 
+
+
+%Memory chunks that are certainly garbage and need to be reclaimed.
+%Memory chunks that are potentially garbage.
+%Memory chunks that are not garbage. 
+
+
+
+ %livenes-analysis on the heap allocated objects divides the scanning objects into three catergories: i) Memory that is reachable by the root-sets. This is considered as live and acts as the root-set to perform the rechability on other objects.
+
+
+ %Many applications do not explicitly free memory whose lifetime matches the process lifetime and this is not considered an error. 
+
+%Performing rechability analysis on the 
+%For performing the reachability analysis on the heap allocated objects, the leak detector divides the scanning objects into three categories: i) Memory that is still reachable by the application. This is not considered a leak. Many applications do not explicitly free memory whose lifetime matches the process lifetime and this is not considered an error. ii) Memory that is definitely not reachable by the application
+%(at least, not by an aligned pointer to the start or middle of the allocated block). This is called a leak as there is no way for the application to free this memory: it has lost all references to it. iii) Memory that is reachable only via pointers to the middle of the allocation, rather than the head. This is called a possible leak. These may or may not be legitimate pointers to that allocation.
+
+ %The parallel collector imposes overhead on the mutator but it eliminates long pause due to stop the world. While designing the collector we took middle approach and used mostly parallel tracing collector to perform the reachability analysis. We update the root-set in stop-the-world collector and perform the rechability analysis on these rootsets by running collector parallel to the mutators.
+
+
+
+ %concentrate on reclaiming recently allocated objects and it reduces the stop-the-world pause time by running the collector occasionally in-order to perform the reachability analysis on older objects. Thus, the problem of stop-the-world is not completely removed.
+
+
+ %Generational collection concentrate on reclaiming recently allocated objects and it reduces the stop-the-world pause time by running the collector occasionally in-order to perform the reachability analysis on older objects. Thus, the problem of stop-the-world is not completely removed. Parallel collectors takes orthogonal approach and reduces the time of pause by running it parallel to the mutator(client). The parallel collector imposes overhead on the mutator but it eliminates long pause due to stop the world. While designing the collector we took middle approach and used mostly parallel tracing collector to perform the reachability analysis. We update the root-set in stop-the-world collector and perform the rechability analysis on these rootsets by running collector parallel to the mutators.
+
+
+
+
+%However the tracing technique also suffers from some drawbacks and one of them is long delay in performing the object liveness analysis. One of the approach to smoothly detect the memory leak using tracing technique is to concurrently perform the liveness analysis.
+
+%or root that object is reachable. A most common direct method of garbage detection/collection is the reference counting. In this method each object is associated with the reference count which gets incremented when a pointer is set to refer to this object and is decremented when a reference of the object gets deleted. The reference counting mechanism is advantageous in the sense that the memory management overhead in this case gets distributed throughout the program execution but it is weak in resolving cycles and collecting the cyclic data structure.  The other indirect method includes the tracing algorithm for garbage collection. The tracing algorithm based garbage collector maintains a set of roots and periodically perform the reachability analysis to check the liveness of the objects. The tracing technique has an advantage over the reference counting is that no precaution is needed while handling cycles and also the overhead for maintaining and updating the records(reference counting) is not there.   
+
+
+% developed in C or C++ and can be difficult to identify without the help of a dedicated tool. The problem is particularly important in applications which run for a long time. Memory leak in kernel is worse because of its long running nature and every time a piece of memory is lost, it is gone until next boot. In this section we will describe our approach of using behavioural watchpoints in detecting memory leak bugs in kernel modules. Linux kernel module is a software component which extends the functionality of Operating system. Once loaded these modules executes in privilege mode having full control on the kernel resources and a serious memory leak in the kernel modules can make the system unstable.
+
+%Our approch of leak detection is based on the reachability analysis of heap objects, directly or indirectly allocated by the modules, as opposed to considering unfreed memory as a leak. This is similar to tracing garbage collector’s mark-and-sweep operation. A straigntforward implementation of tracing garbage collector algorithm involves stoping the client when collector is in the process performing liveness-analysis. This solution when applied with mutators operating on very large heap is not very efficient. This is one of the primary argument against using the tracing algorithm in memory leak detection. The other solution to reduce the pause time in tracing algorithm based leak detector is: i) generational collection ii) parallel collection.  Generational collection concentrate on reclaiming recently allocated objects and it reduces the stop-the-world pause time by running the collector occasionally in-order to perform the reachability analysis on older objects. Thus, the problem of stop-the-world is not completely removed. Parallel collectors takes orthogonal approach and reduces the time of pause by running it parallel to the mutator(client). The parallel collector imposes overhead on the mutator but it eliminates long pause due to stop the world. While designing the collector we took middle approach and used mostly parallel tracing collector to perform the reachability analysis. We update the root-set in stop-the-world collector and perform the rechability analysis on these rootsets by running collector parallel to the mutators.
+
+%Performing rechability analysis on the 
+%For performing the reachability analysis on the heap allocated objects, the leak detector divides the scanning objects into three categories: i) Memory that is still reachable by the application. This is not considered a leak. Many applications do not explicitly free memory whose lifetime matches the process lifetime and this is not considered an error. ii) Memory that is definitely not reachable by the application
+%(at least, not by an aligned pointer to the start or middle of the allocated block). This is called a leak as there is no way for the application to free this memory: it has lost all references to it. iii) Memory that is reachable only via pointers to the middle of the allocation, rather than the head. This is called a possible leak. These may or may not be legitimate pointers to that allocation.
+
+
+%Each of the leak and possible leak categories is further
+%broken down into direct and indirect leaks. An indirect leak is
+%a heap object that is reachable by a pointer to its start address,
+%but with all such pointers originating in leaked objects. Dr.
+%Memory reports the number of leaks, possible leaks, and stillreachable
+%allocations, along with the allocation callstack for
+%each.
+
+
+
+ %can allocate and deallocate them dynamically and any misuse of these resources can lead to memory leaks in the kernel. Previous work on memory leaks is focused to detect leaks in the entire kernel which is not particularly required if we leak is happening in the modules code. 
+
+%To detect memory leaks in the kernel modules we perform reachability-based analysis, where a leak is defined as a heap memory that is no longer has any pointer to it as considering any unfreed memory as a leak.
+
+ %to wrap kernel memory allocators and deallocators (e.g., \texttt{kmalloc}, \texttt{kfree}). Wrapped allocators add watchpoints to the addresses returned by the kernel's allocators, and wrapped deallocators remove watchpoints before invoking the kernel's deallocators. Selective shadow memory is maintained as a watchpoint descriptor-specific, variable-sized bitset\footnote{As an optimisation, shadow memory for small objects is embedded in the watchpoint descriptor.}. Each byte of allocated memory corresponds to one bit of descriptor-specific shadow memory. The bits in shadow memory are initialised to zero. Individual bits are flipped to one by write-specific vtable functions when there is a write to the bytes of memory shadowed by those bits. 
+
+
 \subsection{Field-grained Access Policies\label{sec:access_policies}}
 
 \begin{figure}[t]
@@ -468,7 +661,7 @@ Zhao \emph{et al.} \cite{DynamoRIOWatchpoints} describe a method of implementing
 %Our approach differs from theirs in that we e
 %Our approach differs from them in the sense that our watchpoint contains the contextual information which can be used for debugging. 
 %In , 
-% can add a data breakpoint at an address and any access of the gets checked. Unlike this our approach of behavioral watchpoint watches the range of addresses and a watchpoint monitors the access of an object.  Our approach of watchpoint is also viral and any address derived from the watched addresses will also get watched. Our watchpoint implementation bears a resemblance with {cite dynamic information flow} however we don�t require hardware support to efficiently store the tag else it gets embedded with the address itself.
+% can add a data breakpoint at an address and any access of the gets checked. Unlike this our approach of behavioral watchpoint watches the range of addresses and a watchpoint monitors the access of an object.  Our approach of watchpoint is also viral and any address derived from the watched addresses will also get watched. Our watchpoint implementation bears a resemblance with {cite dynamic information flow} however we donÕt require hardware support to efficiently store the tag else it gets embedded with the address itself.
 
 
 \section{Conclusions and Future Work}
