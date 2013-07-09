@@ -1,36 +1,87 @@
-Granary is designed to comprehensively instrument kernel modules. We first evaluated the performance of Granary framework alone by running it with different kernel modules. To compare the throughput of Granary with existing kernel instrumentation framework, we modified DRK to instrument only kernel modules. We implemented similar attach/detach mechanism for DRK at module interface. The framework uses similar kernel wrappers for fast attach and page protection as fall back mechanism to gain control. For initial evaluation of Granary, we developed null policy client and enabled wrap depth optimization by limiting it to 2. 
+Granary is designed with the motivation to allow mixed-mode execution in Linux kernel. This is particularly important to avoid the unnecessary performance overheads incurred by instrumenting whole kernel. Granary uses a type-rich wrapper for attach and detach of framework at kernel/module interface. Based on the design of Granary, we decided to evaluate it on the following three parameters: 1) Overhead of Granary with null-instrumentation, 2) Advantage of wrappers for fast attach/detach and 3) Advantages of mixed-mode execution in the Linux kernel. 
+To evaluate the performance overhead of Granary on kernel modules, we used Iozone filesystem benchmark to exercise the \texttt{ext3} filesystem driver as a kernel modules. we run our experiment on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ 2 Duo 2.93 GHz CPU with 4GB physical memory. 
 
-We ran the experiment on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ 2 Duo 2.93 GHz CPU, 4GB memory, and an Intel 82598EB 10 Gigabit Ethernet controller. We used IOzone filesystem benchmark to exercise ext3 module while running it with Granary. Iozone is a useful benchmark for testing data throughput with number of different access pattern. we avoided bottleneck for disk I/O by partitioning main memory to load ext3 module. We enable Iozone to run in througput mode with two active processes and evaluated the system under three different workloads: read, write and mixed.
+%To focus our evaluation on CPU overhead of Granary and avoid the disk performance bottleneck, we created a ramdisk of 1GB and mounted \texttt{ext3} module on this. Iozone creates two active processes each writing to and reading from a file of size 480MB with record size 1kb.
+
+\paragraph{Overhead of Granary with null-instrumentation} For the evaluation of Granary framework alone, we created a granary client with null instrumentation policy. This avoids the overhead caused by the instrumentation. While evaluation Granary, Our focus was to measure CPU overhead and avoids the disk performnace bottleneck. To ensure this we created a ramdisk of 1GB and mounted \texttt{ext3} moudle on this. Iozone creates two processes which acts as writer and reader thread and workload includes writing to and reading from a file of size 480MB with record size of 1kb. We compared the performance of Granary with the existing framework by modifying DRK to instrument the kernel modules.  we implemented similar attach/detach mechanism for DRK at the kernel/module interface including similar kernel wrappers for fast attach and page protection as the fall-back mechanism to regain control. Figure shows 
+
+\paragraph{Fast attach/detach} Granary uses kernel wrappers for fast attach/detach at kernel/module interface and page protection as the fall-back mechanism to regain control. The use of kernel-wrappers provides additional advantage by intergrating the static information with the Granary. However, in our evaluation we tried to compared the overhead of wrapper against our fallback mechanism of page-protection.  
 
 
-\begin{table}[thp!]
-\ORIGcaption{Iozone Throughput for different filesystem operations(KBytes/Sec)}
+%implemented similar attach/detach mechanism for DRK at the kernel/module interface including similar kernel wrappers for fast attach and page protection as the fall-back mechanism to regain control.
+
+\paragraph{Advantage of Mixed-mode execution} We evalauted the advantage of using mixed-mode execution over full kernel instrumentation by running Iozone with disabling direct I/O effect. Disabling direct I/O enables the buffer cache effect for the filesystem operations and all the requests issued by Iozone doesn't go directly to the disk. This avoids running filesystem code for every operations. Figure clearly shows that for different read workloads the Granary doesn't put overhead because the filesystem code doesn't gets executed. However for the DRK which is instrumenting entire kernel including vfs layer and thus causes overhead even when we only try to analyse filesystem code.
+
+
+ %two configurations : 1) with direct I/O and 2) without direct I/O. Direct I/O disables the buffer cache effect and all I/O requests issued by Iozone directly goes to disk and for every such request filesystem code gets executed.   
+
+ %settings. In first configuration, while running the Iozone benchmark we enabled the direct I/O to the disk. This disables the buffer cache for the ramdisk and for every I/O was happening was happening to the disk. Second configuration enabled buffer cache. The effect of buffer cache is important since it avoids running of the kernel modules and IO happens directly from the VFS layer bypassing filesystem module code. 
+
+
+
+
+%Before evaluating the performance overhead of Granary framework over native execution, we   
+
+%One of the motivation for the design of Granary is allow the mixed-mode execution of 
+%One of the motivation for the design of Granary is to a 
+
+
+%new system is  
+
+%Granary is designed to instrument kernel modules and one of the motivation for  
+
+%Instrumenting all code (e.g. the whole kernel) imposes unnecessary
+%performance overheads when only a subset of the code is
+%being analysed (e.g. modules).
+
+
+%We evaluated the performance of framework alone by running the kernel modules with Granary under null instrumentation policy. We ran the experiment on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ 2 Duo 2.93 GHz CPU with 4GB physical memory. For the experiemnt, we used ext3 filesystem module. we avoided the disk I/O bottleneck by creating a ramdisk of 1GB and modunting an ext3 filesystem on it. This setup allows us to focus on the CPU overhead of Granary, rather than the disk performance. We use Iozone version 3.4 to get a fine-grained view of performance on different filesystem intensive workloads. The Iozone creates two active processes each writing to and reading from a file of size 480MB with record size 1kb. For the initial experiment, we disabled the effect of buffer cache for the device which allows reader process to read data from buffer cache completely bypassing Granary-instrumented filesystem code. We compared the performance of Granary with existing instrumentation framework by modifying DRK to instrument the kernel modules.  we implemented similar attach/detach mechanism for DRK at the kernel/module interface including similar kernel wrappers for fast attach and page protection as the fall-back mechanism to regain control.
+
+
+%We used Iozone benchmark for read and write intensive workload which sufficiently stresses filesystem module. To compare the performance of Granary with existing instrumentation framework, we implemented similar attach/detach mechanism for DRK at the kernel/module interface including similar kernel wrappers for fast attach and page protection as the fall-back mechanism to regain control.
+
+%We ran Iozone benchmark with two active processes each creating a file of \~480 MB with record size of 1kb.
+
+%We first evaluated the performance of Granary framework alone by running it with different kernel modules. To compare the throughput of Granary with existing kernel instrumentation framework, we modified DRK to instrument only kernel modules. We implemented similar attach/detach mechanism for DRK at module interface. The framework uses similar kernel wrappers for fast attach and page protection as fall back mechanism to gain control. For initial evaluation of Granary, we developed null policy client and enabled wrap depth optimization by limiting it to 2. 
+
+%We ran the experiment on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ 2 Duo 2.93 GHz CPU, 4GB memory, and an Intel 82598EB 10 Gigabit Ethernet controller. We used IOzone filesystem benchmark to exercise ext3 module while running it with Granary. Iozone is a useful benchmark for testing data throughput with number of different access pattern. we avoided bottleneck for disk I/O by partitioning main memory to load ext3 module. We enable Iozone to run in througput mode with two active processes and evaluated the system under three different workloads: read, write and mixed.
+
+\begin{figure}[ht!]
+ \subfloat{
+\epsfig{file=diagrams/iozone-write-workload.eps,width=3.4in}
+ }
+\ORIGcaption{\label{fig:iozone-write-workload}Writer procress throughput under different workloads}
+\end{figure}
+
+
+%\begin{table}[thp!]
+%\ORIGcaption{Iozone Throughput for different filesystem operations(KBytes/Sec)}
 % title of Table
-\centering
+%\centering
 % used for centering table
-\begin{tabular}{l r r r}
+%\begin{tabular}{l r r r}
 % centered columns (4 columns)
-\hline\hline
+%\hline\hline
 %inserts double horizontal lines
-Workload & Native & Granary & Modified Drk  \\ [0.5ex]
+%Workload & Native & Granary & Modified Drk  \\ [0.5ex]
 % inserts table
 %heading
-\hline
+%\hline
 % inserts single horizontal line
-Write & 184669.69 & 152223.03 & 55134.09 \\
+%Write & 184669.69 & 152223.03 & 55134.09 \\
 % inserting body of the table
-Read & 1577591.69 & 1648645.02 & 1421037.96 \\
+%Read & 1577591.69 & 1648645.02 & 1421037.96 \\
 %Random Write  & 552380.48 & 412069.48 & 162847.34 \\
 %Random Read & 1644573.29 & 1597321.54 & 1636472.14 \\
 
-Mixed & 1168804.11 & 929383.54 & 915196.76 \\[1ex]
+%Mixed & 1168804.11 & 929383.54 & 915196.76 \\[1ex]
 % [1ex] adds vertical space
-\hline
+%\hline
 %inserts single line
-\end{tabular}
-\label{table:nonlin}
+%\end{tabular}
+%\label{table:nonlin}
 % is used to refer this table in the text
-\end{table}
+%\end{table}
 
 %wrapping mechanism for DRK to attach and detach the framework at module interface.
 
