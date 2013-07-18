@@ -65,7 +65,7 @@
 %\renewcommand{\bibliography}[1]{{\footnotesize \ORIGbibliography{#1}}}
 
 % Add a horizontal rule above captions, and make captions closer to their figures
-\DeclareCaptionFormat{ruled_caption}{#1#2#3\hrulefill\vspace{-1em}}
+\DeclareCaptionFormat{ruled_caption}{#1#2#3\hrulefill\vspace{-1.5em}}
 \DeclareCaptionFormat{unruled_caption}{#3}
 \captionsetup[figure]{format=ruled_caption}
 \captionsetup[subfigure]{format=unruled_caption}
@@ -97,6 +97,13 @@
 
 % For leaving some comments in the draft.
 \newcommand{\comment}[1]{}
+
+% Compress things.
+\usepackage[compact]{titlesec}
+\titlespacing{\section}{0pt}{0.5em}{0.25em}
+\titlespacing{\subsection}{0pt}{1em}{*0}
+\titlespacing{\subsubsection}{0pt}{*0}{*0}
+
 
 % Customize cleverref
 \crefname{section}{Section}{Sections}
@@ -197,11 +204,11 @@ The challenges and opportunities of the kernel environment motivated the creatio
 
 %Unlike other binary analysis systems, Granary tools can use kernel static analysis information to change how code is instrumented and to provide meaning to otherwise typeless instructions/memory. 
 
-Granary addresses three limitations of existing program analysis systems: \begin{enumerate}
-	\item They have focused on instrumenting all code (the whole kernel: DRK; or whole system: QEMU, PinOS). 
-	\item They do not allow for the contexts in which translated code will execute to alter how that code is instrumented (Pin, DynamoRIO).
-	\item They do not provide static type information to the instrumented code (Pin, DynamoRIO).
-\end{enumerate} 
+Granary addresses three limitations of existing program analysis systems: \begin{inparaenum}[i)]
+	\item they have focused on instrumenting all code (the whole kernel: DRK; or whole system: QEMU, PinOS);
+	\item they do not allow for flexible runtime code specialisation (Pin, DynamoRIO); and
+	\item they do not provide static type information to the instrumented code (Pin, DynamoRIO).
+\end{inparaenum} 
 
 %high-level analysis tools (e.g. determining 
 %Granary is well suited to both low-level analysis (e.g. analysis memory accesses, individual instructions) and high-level module analysis
@@ -493,7 +500,7 @@ For example, we are actively developing a tool that uses static type information
 %
 %\paragraph{Easy to debug:} Debugging the tools that transform and generate executable code on-the-fly can be challenging. However, Granary ameliorates the experience by providing rich debugger commands that query structured meta-data stored alongside all generated code. For example, Granary facilitates debugging by allowing a debugger to step back in time over recently executed basic blocks, inspect/query the register state on entry to those basic blocks, and see what instrumentation policies and state were used to create those basic blocks.
 
-Additional features of Granary include rich support for debugging, including stepping back in time over recently executed basic blocks, querying historical register state, inspecting basic blocks and how they were translated, and tracking performance counters.
+%Additional features of Granary include rich support for debugging, including stepping back in time over recently executed basic blocks, querying historical register state, inspecting basic blocks and how they were translated, and tracking performance counters.
 
 The rest of the paper describes Granary in more detail. \Cref{sec:modes} describes how to efficiently implement mixed-mode execution. \Cref{sec:policies} describes a new method for dynamically changing how code is instrumented. \Cref{sec:reify} describes how to integrate static analysis information into a DBT system. Finally, \Cref{sec:eval} evaluates Granary's performance.
 
@@ -730,7 +737,7 @@ An instrumentation system is transparent if, given the same inputs, the instrume
 %Implicit and fast attaching are achieved by exposing instrumented code addresses to the kernel and its modules. Instrumented code addresses are exposed as return addresses in function activation frames and interrupt stack frames, and as wrapped module function addresses in shared data structures. Exposing these addresses risks altering the module's behaviour: some modules might depend on specific return address values or function pointer values (stored in a shared data structure). 
 %The following list describes the ways in which Granary is and is not transparent:
 
-\paragraph{Function return addresses}\label{para:return_address_transparency} Unlike most DBT frameworks, Granary defaults to inlining \texttt{call} instructions, which exposes code cache addresses to instrumented module code in the form of return addresses. Inlining \texttt{call} instructions avoids return-address mispredictions and unnecessary control-flow by building longer basic blocks. If Granary is configured to use transparent return addresses, then implicit attaching and detaching are disabled because they depend directly on returning to instrumented module or native kernel code. Granary will fall back to slow attaching to handle kernel to module returns, and indirect branch lookups for module-to-module returns.
+\paragraph{Function return addresses}\label{para:return_address_transparency} Unlike most DBT frameworks, Granary defaults to inlining \texttt{call} instructions, which exposes code cache addresses to instrumented module code in the form of return addresses. Inlining \texttt{call} instructions avoids return-address mispredictions and unnecessary control-flow by building longer basic blocks. If Granary is configured to use transparent return addresses, then implicit attaching and detaching are disabled because they depend directly on returning to instrumented module or native kernel code. Granary will fall back to slow attaching to handle kernel-to-module returns, and indirect branch lookups for module-to-module returns.
 
 \paragraph{Interrupt return addresses} Kernel interrupts are not sensitive to return addresses and hence relaxing return address transparency has no effect on interrupts. A special case arises for page fault exceptions that occur within specific kernel functions that access user space data. Granary handles this special case in a similar way to the kernel. Therefore, maintaining return address transparency with respect to interrupts in instrumented module code has no value.
 
@@ -803,10 +810,12 @@ Granary implements policy tracking and switching by encoding policy information 
 
 % Our approach makes tools that use policies to track states of a module's execution resilient against abitrary pre-emption and resumption because once cached, the policy-switching behaviour of a basic block cannot be accidentally corrupted or lost (e.g. due to concurrency bugs). 
 
-One drawback of Granary's policy implementation is code cache bloat. We feel that this is a reasonable tradeoff because \begin{inparaenum}[i)]
-	\item tool authors are not required to use more than one policy if bloat is a concern; and
-	\item things that are challenging to do with only one policy are often simpler to do with multiple coordinating policies.
-\end{inparaenum} For example, Granary's CFG tool uses coordinating policies to dynamically construct runtime call graphs. A single policy approach for call graph construction might add edges to the call graph only at every \texttt{call} site. However, this approach is insufficient in the face of mixed-mode execution. If an instrumented function $F$ is only invoked by a native function (which contains no instrumentation), and $F$ contains no function calls, then $F$ will not appear as a root node in the call graph. A two-policy solution easily solves the missing root problem by instrumenting both function call sites as well as function entrypoints. The CFG tool distinguishes between the first execution of a function's first basic block ($P_{call\_entry}$), and all other basic blocks executed within the function, including later executions of the first basic block ($P_{after\_entry}$). Function call sites are instrumented to set up the source node of an edge in the call graph. On entry to a function, we identify the current function as either a sink node connected to a source node (instrumented call), or as a root node if no source is present (native call). The distinction between entrypoints and non-entrypoints is achieved with minor bloat: the first basic block appears twice in Granary's code cache, but instrumented by two different policies, as shown by example in \Cref{fig:policy_switching}.
+%One drawback of Granary's policy implementation is code cache bloat. We feel that this is a reasonable tradeoff because \begin{inparaenum}[i)]
+%	\item tool authors are not required to use more than one policy if bloat is a concern; and
+%	\item things that are challenging to do with only one policy are often simpler to do with multiple coordinating policies.
+%\end{inparaenum} 
+
+One example of a tool that uses policy switching is Granary's CFG tool, which dynamically constructs runtime inter- and intra-procedural control-flow graphs (CFGs). A single policy approach for call graph construction might add edges to the call graph only at every \texttt{call} site. However, this approach is insufficient in the face of mixed-mode execution. If an instrumented function $F$ is only invoked by a native function (which contains no instrumentation), and $F$ contains no function calls, then $F$ will not appear as a root node in the call graph. A two-policy solution easily solves the missing root problem by instrumenting both function call sites as well as function entrypoints. The CFG tool distinguishes between the first execution of a function's first basic block ($P_{call\_entry}$), and all other basic blocks executed within the function, including later executions of the first basic block ($P_{after\_entry}$). Function call sites are instrumented to set up the source node of an edge in the call graph. On entry to a function, we identify the current function as either a sink node connected to a source node (instrumented call), or as a root node if no source is present (native call). The distinction between entrypoints and non-entrypoints is achieved with minor bloat: the first basic block appears twice in Granary's code cache, but instrumented by two different policies, as shown by example in \Cref{fig:policy_switching}.
 
 
 
@@ -1174,7 +1183,13 @@ We evaluated Granary by measuring throughput of common file system operations on
 %We ran the experiment on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ 2 Duo 2.93 GHz CPU, 4GB memory, and an Intel 82598EB 10 Gigabit Ethernet controller. We used IOzone filesystem benchmark to exercise ext3 module while running it with Granary. Iozone is a useful benchmark for testing data throughput with number of different access pattern. we avoided bottleneck for disk I/O by partitioning main memory to load ext3 module. We enable Iozone to run in througput mode with two active processes and evaluated the system under three different workloads: read, write and mixed.
 
 \section{Related Work}\label{sec:related}
-TODO
+This section describes how Granary differs from related work.
+
+\paragraph{Whole-kernel/system DBT} DRK \cite{DRK} is a kernel space port of the DynamoRIO \cite{DynamoRIO} DBT framework. DRK instruments the entire kernel, including modules. DRK follows a strict transparency model, which limits the flexibility of instrumentation. PinOS \cite{PinOS} is a port of the Pin \cite{Pin} DBT framework that performs whole-system instrumentation. PinOS is unable to perform fine-grained instrumentation and depends on hardware virtualisation, which limits it to instrumenting systems using only virtualisable device driver modules.
+
+\paragraph{Probe-based Instrumentation} Several systems support injecting code at specific locations within kernel code. For example, KernInst \cite{KernInst} can inject code at almost any location in an unmodified commodity OS. Other examples with similar or more restricted functionality include LTTng \cite{LTTng}, KProbes \cite{KProbes}, DProbes \cite{DProbes}, and ftrace \cite{ftrace}. These systems are unable to perform fine-grained instrumentation of instructions or memory.
+
+
 %\input{related-work}
 
 \section{Conclusion}\label{sec:conclusion}
