@@ -100,43 +100,11 @@ Program debugging is a tedious and time-consuming part of software development. 
 Dynamic binary translation (DBT) systems provide a powerful facility for building debugging and analysis tools because they allow instrumenting the entire program at an instruction granularity~\cite{DynamoRIOKernel}. For example, Valgrind's Memcheck \cite{Seward:2005:UVD:1247360.1247362} and Helgrind \cite{Muehlenfeld:2007:FDM:1229428.1229457} use binary translation to detect common memory errors (e.g. use-after-free, read-before-write, memory leaks) and threading bugs (e.g. data races) in user space programs. These tools are powerful but developing them is challenging for the following three reasons.
 
 First, DBT system provides infrastructure for code-centric instrumentation, where as many interesting debugging applications would prefer to have data-centric instrumentation. Applications like data race detection, memory usage bugs, or performance debugging such as finding false sharing hotspots are all naturally data-centric.
-%A programmer writing a tool to debug the data corruption problem in an object would like to target only memory of specific kinds (e.g. \texttt{sk\_buff}, \texttt{inode} ), and allow instrumentation explicitly to the targeted memory.
-%mentioning debugging tasks like data race detection, memory usage bugs, or performance debugging such as finding false sharing hotspots are all naturally data-centric.
-%
+
 Second, DBT abstractions are too low-level and individual instructions only reveal what memory addresses are being accessed. This is at odds with specialising instruction-level instrumentation with higher-level abstractions. For example, developing a tool to debug the data corruption problem in a specific field of a data structure such as \texttt{i\_flags} field of \texttt{struct inode}, or detecting invariant violation in a data structure requires instrumentation to be specialised to individual data structures.
 Third, existing DBT systems instruments everything to give comprehensive coverage, but introduces significant overheads for realistic instrumentation. If a bug occurs because the \texttt{i\_flags} field of one of the \texttt{inode} structure is corrupted then instrumenting every memory access in the kernel is excessive. In practice, we would like to instrument only the code that operates on \texttt{inode} structures.
 
 
- %are unable to instrument only the portion of code responsible for the bug. For example, if a bug occurs because the \texttt{i\_flags} field of one of the \texttt{inode} structure is corrupted then instrumenting every memory access in the kernel is excessive. In practice, we would like to instrument only the code that operates on \texttt{inode} structures.
-
-
-%Third,  instruments everything to give comprehensive coverage, but at high overhead costs.
-
-
-
-%; we get only the instructions, memory addresses, and read/write information, but can't easily connect that to higher-level abstractions like fields in data structures.
-
-
-
-%specific data structure (e.g. \texttt{sk\_buff}, \texttt{inode} ) or log accesses to its specific fields would require inspecting all the object of the type
-
-
-%need to manage these informations specifically.
-
-
-
-
-
-
-%log accesses to specific fields, or detect invarient violation in a data structure, these information is not directly available in DBT systems.
-
-
-
-%specific data structure, log accesses to specific fields, or detect invarient violation in a data structure, need to manage these informations specifically. They are not directly available with DBT systems.
-
-%existing DBT provides code-centric instrumentation, but for many interesting debugging tools, we would prefer to have data-centric instrumentation
-
-%First, DBT abstractions are too low-level and individual instructions only reveal what memory addresses are being accessed. This is problematic for creating efficient debugging tools that 
 
 
 %that detects corruption in a particular field of all data structures of a specific type. DBT systems don't provide information about what data structures are accessed, only what instructions are accessing what memory addresses
@@ -1155,7 +1123,10 @@ The field-accessor API connects to type-specific watchpoint vtables through auto
 %\end{multicols}
 %\end{figure*}
 
-We evaluated behavioural watchpoints framework using a microbenchmark and measuring the performance of filesystem operations on an in-memory disk. Our tests run on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ 2 Duo 2.93 GHz CPU with 4GB physical memory. Watchpoint instrumentation was enabled for every memory load and store and we used a null client and a heap-based buffer overflow detector to measure the overhead of using watchpoints. 
+We evaluated behavioural watchpoints framework using a microbenchmark and measuring the performance of common filesystem operations on an in-memory disk. Our tests run on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ 2 Duo 2.93 GHz CPU with 4GB physical memory. Watchpoint instrumentation was enabled for every memory operations. We measured the cost of watchpoint instrumentation using a null client and heap-based buffer overflow detector. %We also evaluated the performance of heap-based buffer overflow detector developed using watchpoints.
+
+
+%we used a null client and a heap-based buffer overflow detector to measure the overhead of using watchpoints. 
 %The null client includes the instrumentation for dereferencing watchpoint address.
 %To evaluated the cost of watchpoint framework we used a null client 
 %\begin{figure}
@@ -1170,7 +1141,23 @@ We evaluated behavioural watchpoints framework using a microbenchmark and measur
 
 %We compare native execution, passive execution, and active execution to evaluate the performance of our watchpoint implementation. Passive and active execution both run the Granary DBT framework; however, passive execution only performs basic translation of module code, while active execution translates and adds watchpoint-specific instrumentation to module code. Our choice of network and filesystem modules depend on the fact that they are
 
-\paragraph{Microbenchmark} We performed a microbenchmark consisting of a tight-loop of memory operations which exibits the worst-case overhead of using the watchpoint framework with null client and buffer-overflow detector. The CPU overhead of using the watchpoint framework with null client was 3.8{\footnotesize$\times$} and buffer-overflow was 21{\footnotesize$\times$}. The extra cost of the buffer-overflow detector comes from the instrumentation required for bounds checking.
+\paragraph{Microbenchmark} %We performed a microbenchmark consisting of a tight-loop of memory operations which exibits the worst-case overhead of using the watchpoint framework.% with null client and buffer-overflow detector. 
+The microbenchmark performed a tight-loop of memory operations and exhibits the CPU overhead of using watchpoint instrumentaion (3.8{\footnotesize$\times$} ). The extra cost of the buffer-overflow detector (about 21{\footnotesize$\times$}) comes from the instrumentation required for bounds checking.
+
+
+
+%The extra cost of the buffer-overflow detector comes from the instrumentation required for bounds checking.
+
+% We also evaluated the heap-based buffer overflow detector
+
+%The CPU overhead of watchpoint instrumentation was 3.8{\footnotesize$\times$} 
+
+
+
+%and we evaluated the buffer-overflow detection application
+
+
+%using the watchpoint framework with null client was 3.8{\footnotesize$\times$} and buffer-overflow was 21{\footnotesize$\times$}. The extra cost of the buffer-overflow detector comes from the instrumentation required for bounds checking.
 
 
 %Null client only gives the cost of watchpoint instrumentation.
