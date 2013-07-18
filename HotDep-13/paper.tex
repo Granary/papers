@@ -86,11 +86,11 @@ University of Toronto
 
 \maketitle
 \subsection*{Abstract}
-Finding, understanding, and fixing bugs in an operating system is challenging. DBT system provides a powerful facility for building program analysis and debugging tools. However, DBT abstractions are tool low-level and provide limited contextual information at instrumentation.
+Finding, understanding, and fixing bugs in an operating system is challenging. Dynamic binary translation (DBT) systems provide a powerful facility for building program analysis and debugging tools. However, DBT abstractions are too low-level and provide limited contextual information at instrumentation.
 
-In this paper, we introduce \emph{behavioural watchpoints}: a new software-based watchpoint framework that simplifies the implementation of DBT-based program analysis and debugging tools. Behavioural watchpoints extend the traditional approach of using DBT-system by providing context-specific information at instruction-level and specialising instrumentation to individual data-structure.  We describe four applications developed using watchpoint framework: detecting buffer overflows, detecting read-before-write and memory freeing bugs, detecting memory leaks and enforcing fine-grained memory access policies.
+We introduce \emph{behavioural watchpoints}: a new software-based watchpoint framework that simplifies the implementation of DBT-based program analysis and debugging tools. Behavioural watchpoints extend the traditional approach of using a DBT system by providing context-specific information at the instruction level and specialising instrumentation to individual data structures.  We describe four applications developed using our watchpoint framework: detecting buffer overflows, detecting read-before-write and memory freeing bugs, detecting memory leaks and enforcing fine-grained memory access policies.
 
-We implemented behavioural watchpoint framework using Granary, a DBT framework and show the reasonable overheads for their intended use in analysing and debugging kernel modules.
+We implemented behavioural watchpoints using Granary, a new DBT framework. We show the overheads are reasonable for their intended use in analysing and debugging kernel modules.
 %Finding, understanding, and fixing bugs in an operating system is challenging. DBT system provides a powerful facility for building program analysis and debugging tools. However, DBT abstractions are tool low-level and provide limited contextual information at instrumentation.
 %Data watchpoints are a powerful tool that can help with this problem; however, hardware-based watchpoints are too scarce for many uses and software-based watchpoints lack contextual information about the watched memory.
 
@@ -106,13 +106,13 @@ We implemented behavioural watchpoint framework using Granary, a DBT framework a
 
 \section{Introduction}
 
-Program debugging is a tedious and time-consuming part of software development. Detecting software bugs such as data corruption, bad pointers, and data races require developers to manually inspect millions of instructions that may modify data. The advent of multicore system and the ever increasing complexity and size of software has made program debugging even more challenging. 
+Program debugging is a tedious and time-consuming part of software development. Detecting software bugs such as data corruption, bad pointers, and data races requires developers to manually inspect millions of instructions that may modify data. The advent of multicore systems and the ever-increasing size and complexity of software has made debugging even more challenging. 
 
-Dynamic binary translation (DBT) systems provide a powerful facility for building debugging and analysis tools because they allow instrumenting the entire program at an instruction granularity~\cite{DynamoRIOKernel}. For example, Valgrind's Memcheck \cite{Seward:2005:UVD:1247360.1247362} and Helgrind \cite{Muehlenfeld:2007:FDM:1229428.1229457} uses binary translation to detect common memory errors (e.g. use-after-free, read-before-write, memory leaks) and threading bugs (e.g. data races) in user space programs.
+Dynamic binary translation (DBT) systems provide a powerful facility for building debugging and analysis tools because they allow instrumenting the entire program at an instruction granularity~\cite{DynamoRIOKernel}. For example, Valgrind's Memcheck \cite{Seward:2005:UVD:1247360.1247362} and Helgrind \cite{Muehlenfeld:2007:FDM:1229428.1229457} use binary translation to detect common memory errors (e.g. use-after-free, read-before-write, memory leaks) and threading bugs (e.g. data races) in user space programs.
 %Valgrind's Memcheck \cite{Seward:2005:UVD:1247360.1247362} uses binary instrumentation to detect common memory errors (e.g. use-after-free, read-before-write, memory leaks)
 %threading bugs (e.g. data races) in user space programs.
 %), such as buffer overflow, and Cachegrind~\cite{Nethercote:2007:VFH:1250734.1250746} helps profile program execution. 
-These tools are powerful but developing them is challenging for three reasons:
+These tools are powerful but developing them is challenging for the following three reasons.
 
 First, DBT abstractions are too low-level and individual instructions only reveal what memory addresses are being accessed. This is problematic for creating efficient debugging tools that detects corruption in a particular field of all data structures of a specific type. DBT systems don't provide information about what data structures are accessed, only what instructions are accessing what memory addresses
 %track meta-data for each in-memory data structure (e.g. to detect if a byte was written before it was read) because this meta-data must be queried on each memory access.
