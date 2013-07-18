@@ -123,7 +123,12 @@
 
 \maketitle
 \subsection*{Abstract}
-TODO
+Kernel modules extend the functionality of operating systems. They represent the bulk of new kernel code in development and contain the majority of new kernel bugs. Unfortunately, analysing and debugging modules is very challenging. Static analysis of module source code is difficult because of the tight interaction between modules and the kernel. Some modules, however, are only distributed in a binary format, which makes static analysis intractable.
+
+We created Granary to address the challenges of module analysis. Granary is a framework for creating flexible and efficient tools that analyse or debug arbitrary, binary Linux kernel modules. Granary uses dynamic binary translation to dynamically rewrite and comprehensively instrument kernel modules. Granary makes it easy to create flexible tools by supporting context-aware runtime code specialisation, and by integrating high-level static analysis information with low-level instrumentation. Module analysis tools built on Granary are efficient because of Granary's adoption of a relaxed transparency model, and because of Granary's ability to instrument module code without imposing overhead on non-module kernel code.
+
+%Our extensive use of compile-time meta-programming enables efficient, dynamic analyses that are driven by static kernel type information. 
+
 
 % Features:
 %   1)  Mixed-mode execution:
