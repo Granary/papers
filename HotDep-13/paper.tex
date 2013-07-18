@@ -1129,12 +1129,12 @@ We evaluated behavioural watchpoints framework using a microbenchmark and measur
 %we used a null client and a heap-based buffer overflow detector to measure the overhead of using watchpoints. 
 %The null client includes the instrumentation for dereferencing watchpoint address.
 %To evaluated the cost of watchpoint framework we used a null client 
-%\begin{figure}
- %\subfloat{
-%\epsfig{file=watchpoint.eps,width=3.2in}
+\begin{figure}
+%\subfloat{
+\epsfig{file=watchpoint.eps,width=3.2in}
  %}
-%\ORIGcaption{\label{fig:iozone-workload-overhead} Filesystem module (\texttt{ext3}) I/O performance at different workloads (write workloads (w), read workloads (r)).}
-%\end{figure}
+\ORIGcaption{\label{fig:iozone-workload-overhead} Filesystem module (\texttt{ext3}) I/O performance at different workloads (write workloads (w), read workloads (r)).}
+\end{figure}
 
  %and we evaluated the cost of using watchpoint framework with null client and heap-based buffer overflow detector which we developed as one of the application. 
 %buffer overflow detecting watchpoints were added to all memory returned from kernel heap allocators.
@@ -1174,7 +1174,10 @@ The microbenchmark performed a tight-loop of memory operations and exhibits the 
 
 %\paragraph*{Netperf} We tested network throughput and latency using the \texttt{e1000e} network device driver module. CPU utilization increased by {\texttildelow}6\%, UDP throughput decreased by at most 50\%, TCP throughput was unaffected, and both the TCP and UDP request-response latency increased by no more than 50\%. 
 
-\paragraph*{IOzone}  In our experimental setup, \texttt{ext3} filesystem module was mounted on RAMDisk of size 1GB and IOzone creates two processes (reader, writer) performing common file operations on to a file of size 480MB with record size of 1Kb. We wrapped two most used allocators by \texttt{ext3} \& \texttt{jbd} (e.g. \texttt{\_\_kmalloc} and \texttt{kmem\_cache\_alloc}) to add watchpoints at allocated objects.  
+\paragraph*{IOzone}  In our experimental setup, \texttt{ext3} filesystem module was mounted on RAMDisk of size 1GB and IOzone creates two processes (reader, writer) performing common file operations on to a file of size 480MB with record size of 1Kb. We wrapped two most used allocators by \texttt{ext3} \& \texttt{jbd} (e.g. \texttt{\_\_kmalloc} and \texttt{kmem\_cache\_alloc}) to add watchpoints at allocated objects. As shown (\Figref{iozone-workload-overhead}), the watchpoint framework 
+
+
+%using the watchpoint framework leads to a further drop of {\texttildelow}20\%
 
 
 
