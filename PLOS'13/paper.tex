@@ -1197,7 +1197,12 @@ To focus our evaluation on the CPU overhead of Granary and avoid the disk perfor
 \section{Related Work}\label{sec:related}
 This section describes how Granary differs from related work.
 
-\paragraph{Whole-kernel/system DBT} DRK \cite{DRK} is a kernel space port of the DynamoRIO \cite{DynamoRIO} DBT framework. DRK instruments the entire kernel, including modules. DRK follows a strict transparency model, which limits the flexibility of instrumentation. PinOS \cite{PinOS} is a port of the Pin \cite{Pin} DBT framework that performs whole-system instrumentation. PinOS is unable to perform fine-grained instrumentation and depends on hardware virtualisation, which limits it to instrumenting systems using only virtualisable device driver modules.
+\paragraph{Whole-kernel/system DBT} DRK \cite{DRK} is a kernel space port of the DynamoRIO \cite{DynamoRIO} DBT framework. DRK instruments the entire kernel, including modules. DRK follows a strict transparency model, which limits the flexibility of instrumentation. PinOS \cite{PinOS} is a port of the Pin \cite{Pin} DBT framework that performs whole-system instrumentation. PinOS depends on hardware virtualisation, which limits it to instrumenting systems that use only virtualisable modules. 
+
+%Neither system provides mechanisms for arbitrary attach/detach, runtime code specialisation, or integration of static analysis information.
+
+%Neither PinOS nor DRK are able to specialise instrumentation code to different execution contexts.
+%PinOS is unable to perform fine-grained instrumentation and depends on hardware virtualisation, which limits it to instrumenting systems using only virtualisable device driver modules.
 
 \paragraph{Probe-based Instrumentation} Several systems support injecting code at specific locations within kernel code. For example, KernInst \cite{KernInst} can inject code at almost any location in an unmodified commodity OS. Other examples with similar or more restricted functionality include LTTng \cite{LTTng}, KProbes \cite{KProbes}, DProbes \cite{DProbes}, and ftrace \cite{ftrace}. These systems are unable to perform fine-grained instrumentation of instructions or memory.
 
