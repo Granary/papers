@@ -5,6 +5,7 @@
 \usepackage{multicol,tabularx}
 \usepackage{textcomp} % for tilde
 \usepackage{paralist} % for in-paragraph lists
+\usepackage{url}
 
 % For drawing FSMs
 \usepackage{tikz}
@@ -1135,6 +1136,7 @@ To focus our evaluation on the CPU overhead of Granary and avoid the disk perfor
 
 \begin{figure}[t!]
 \epsfig{file=diagrams/stacked-performance.eps,width=\columnwidth}
+\vspace{-14pt}
 \caption{\label{fig:perf}Throughput in MB/sec of common file system operations, for Direct IO (\textbf{D}) where requests bypass the OS buffer cache and Buffered IO (\textbf{B}) where the OS buffer cache is enabled. }
 \end{figure}
 
@@ -1195,16 +1197,15 @@ To focus our evaluation on the CPU overhead of Granary and avoid the disk perfor
 %We ran the experiment on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ 2 Duo 2.93 GHz CPU, 4GB memory, and an Intel 82598EB 10 Gigabit Ethernet controller. We used IOzone filesystem benchmark to exercise ext3 module while running it with Granary. Iozone is a useful benchmark for testing data throughput with number of different access pattern. we avoided bottleneck for disk I/O by partitioning main memory to load ext3 module. We enable Iozone to run in throughput mode with two active processes and evaluated the system under three different workloads: read, write and mixed.
 
 \section{Related Work}\label{sec:related}
-This section describes how Granary differs from related work.
-
-\paragraph{Whole-kernel/system DBT} DRK \cite{DRK} is a kernel space port of the DynamoRIO \cite{DynamoRIO} DBT framework. DRK instruments the entire kernel, including modules. DRK follows a strict transparency model, which limits the flexibility of instrumentation. PinOS \cite{PinOS} is a port of the Pin \cite{Pin} DBT framework that performs whole-system instrumentation. PinOS depends on hardware virtualisation, which limits it to instrumenting systems that use only virtualisable modules. 
+Prior work can be classified as either whole-kernel/system DBT, or probe-based kernel instrumentation. We discuss how Granary differs from these approaches.
+\vspace{-3pt}\paragraph{Whole-kernel/system DBT} DRK \cite{DRK} is a kernel space port of the DynamoRIO \cite{DynamoRIO} DBT framework. DRK instruments the entire kernel, including modules, and follows a strict transparency model, which limits the flexibility of instrumentation and increases overheads.  PinOS \cite{PinOS} is a port of the Pin \cite{Pin} DBT framework that performs whole-system instrumentation. It has high overheads and depends on hardware virtualisation, which prevents it from instrumenting non-virtualisable kernel modules. 
 
 %Neither system provides mechanisms for arbitrary attach/detach, runtime code specialisation, or integration of static analysis information.
 
 %Neither PinOS nor DRK are able to specialise instrumentation code to different execution contexts.
 %PinOS is unable to perform fine-grained instrumentation and depends on hardware virtualisation, which limits it to instrumenting systems using only virtualisable device driver modules.
 
-\paragraph{Probe-based Instrumentation} Several systems support injecting code at specific locations within kernel code. For example, KernInst \cite{KernInst} can inject code at almost any location in an unmodified commodity OS. Other examples with similar or more restricted functionality include LTTng \cite{LTTng}, KProbes \cite{KProbes}, DProbes \cite{DProbes}, and ftrace \cite{ftrace}. These systems are unable to perform fine-grained instrumentation of instructions or memory.
+\vspace{-3pt}\paragraph{Probe-based Instrumentation} Several systems support injecting code at specific locations within kernel code. For example, KernInst \cite{KernInst} can inject code at almost any location in an unmodified commodity OS. Other examples with similar or more restricted functionality include LTTng \cite{LTTng}, KProbes \cite{KProbes}, DProbes \cite{DProbes}, and ftrace \cite{ftrace}. These systems are unable to perform fine-grained instrumentation of instructions or memory.
 
 
 %\input{related-work}
@@ -1285,4 +1286,5 @@ Together, Granary's features simplify the development of powerful kernel module 
 
 \bibliographystyle{acm}
 \bibliography{library}
+
 \end{document}
