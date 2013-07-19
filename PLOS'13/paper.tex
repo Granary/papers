@@ -1134,7 +1134,7 @@ To focus our evaluation on the CPU overhead of Granary and avoid the disk perfor
 \Cref{fig:perf} shows the decrease in \texttt{iozone} throughput due to Granary (instrumenting only \texttt{ext3} and \texttt{jbd}), DynamoRIO Kernel (DRK; instrumenting the whole kernel and all modules), and ModifiedDRK (a modified version of DRK instrumenting only \texttt{ext3} and \texttt{jbd}) relative to native execution.  We run tests both using direct I/O, to bypass the OS buffer cache and force all file system requests to go through the \texttt{ext3}/\texttt{jbd} code, and with the OS buffer cache enabled.  Buffering highlights the benefits of mixed-mode execution: Granary and ModifiedDRK introduce almost no overhead for reads because most file system requests are serviced by the kernel's buffer cache. Direct requests highlight the performance impact of Granary's more relaxed transparency model, which allows Granary to achieve lower overheads than ModifiedDRK.
 
 \begin{figure}[t!]
-\epsfig{file=diagrams/stacked_performance.eps,width=\columnwidth}
+\epsfig{file=diagrams/stacked-performance.eps,width=\columnwidth}
 \caption{\label{fig:perf}Throughput in MB/sec of common file system operations, for Direct IO (\textbf{D}) where requests bypass the OS buffer cache and Buffered IO (\textbf{B}) where the OS buffer cache is enabled. }
 \end{figure}
 
