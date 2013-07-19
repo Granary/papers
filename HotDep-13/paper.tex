@@ -1184,7 +1184,6 @@ The microbenchmark performed a tight-loop of memory operations and exhibits the 
 
 \paragraph*{IOzone} In our experimental setup, the \texttt{ext3} filesystem and \texttt{jbd} journalling modules were mounted on a 1GB RAMDisk. IOzone creates two processes (reader, writer) performing common file operations on to a file of size 480Mb with a record size of 1Kb. Watchpoints were added to addresses returned by the two most used allocators in \texttt{ext3} and \texttt{jbd}: \texttt{\_\_kmalloc} and \texttt{kmem\_cache\_alloc}. \Figref{iozone-workload-overhead} shows the drop in throughput of filesystem operations when using the watchpoints instrumentation. In the figure, \emph{watchpoint\_null} represents the overhead of baseline watchpoints instrumentation with no added watchpoints, and \emph{watchpoint\_watched} shows the overhead where every module-allocated object. 
 
-
 %overhead of using watchpoints for debugging purpose. 
 
 
