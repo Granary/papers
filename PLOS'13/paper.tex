@@ -6,6 +6,7 @@
 \usepackage{textcomp} % for tilde
 \usepackage{paralist} % for in-paragraph lists
 \usepackage{url}
+\usepackage{graphicx}
 
 % For drawing FSMs
 \usepackage{tikz}
@@ -786,7 +787,8 @@ An instrumentation system is transparent if, given the same inputs, the instrume
  \subfloat[Uninstrumented Code]{\usebox\asmbox}
 \hfill
  \subfloat[Instrumented Basic Blocks]{
-\epsfig{file=diagrams/policy-switching-entry-tracking.eps,width=2.5in}
+%\epsfig{file=diagrams/policy-switching-entry-tracking.eps,width=2.5in}
+\includegraphics[width=2.5in]{diagrams/policy-switching-entry-tracking.pdf}
  }
 \ORIGcaption{\label{fig:policy_switching}Example policy switching protocol that ensures that instrumentation ($P_{\mathit{call\_entry}}$) is performed only once on entry to every function, regardless of if that basic block is re-executed by a non-\texttt{call} instruction. Basic block (1) is instrumented by both $P_{\mathit{call\_entry}}$ and $P_{\mathit{after\_entry}}$, and basic blocks (2) and (3) are instrumented by $P_{\mathit{after\_entry}}$.}
 \end{figure*}
@@ -1135,8 +1137,8 @@ To focus on the CPU overhead of Granary and avoid the disk performance bottlenec
 \Cref{fig:perf} shows the decrease in throughput due to Granary (instrumenting only \texttt{ext3} and \texttt{jbd}), DynamoRIO Kernel (DRK; instrumenting the whole kernel and all modules), and ModifiedDRK (DRK modified to instrument only \texttt{ext3} and \texttt{jbd}, but using strict transparency) relative to native execution.  We run tests both using direct I/O, to bypass the OS buffer cache and force all file system requests to go through the \texttt{ext3}/\texttt{jbd} code, and with the OS buffer cache enabled.  Performance bars are overlaid, not stacked (e.g., buffered reads achieve nearly native throughput with both Granary and ModifiedDRK, so the native bar is covered).  Buffering highlights the benefits of mixed-mode execution: Granary and ModifiedDRK introduce almost no overhead for reads because most file system requests are served from the kernel's buffer cache. Direct requests highlight the impact of Granary's relaxed transparency model, which gives Granary lower overheads than ModifiedDRK.
 
 \begin{figure}[t!]
-\epsfig{file=diagrams/stacked-performance.eps,width=\columnwidth}
-\vspace{-14pt}
+%\epsfig{file=diagrams/stacked-performance.eps,width=\columnwidth}
+\includegraphics[width=\columnwidth]{diagrams/stacked-performance.pdf}
 \caption{\label{fig:perf}Throughput in MB/sec of common file system operations, for Direct IO (\textbf{D}) where requests bypass the OS buffer cache and Buffered IO (\textbf{B}) where the OS buffer cache is enabled. }
 \end{figure}
 
