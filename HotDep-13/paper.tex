@@ -551,7 +551,7 @@ Behavioural watchpoints also support the following important features:
 
 \begin{figure}[t]
 \begin{center}
-\epsfig{file=watchpoints.eps, width=2.9in}
+\epsfig{file=watchpoints.eps, width=2.9in, height=1.1in}
 \end{center}
 \caption{\label{fig:watchpoint_descriptor_table}A watched address (bottom left) and its corresponding unwatched address (top left) are compared. The process of resolving the watchpoint descriptor is shown.}%for the watched address is shown.}
 \end{figure}
@@ -572,8 +572,8 @@ Behavioural watchpoints also support the following important features:
 
 %This approach has some drawbacks when an offset of a watched address causes the low-order bits to overflow into the counter index; however, we have several solutions to this problem. 
 
-\paragraph{Watchpoint descriptors are context specific.} Our design separates the allocation and management of descriptors from the watchpoint framework. It is the responsibility of the client to manage its descriptor, which % and declare the corrosponding descriptor type for the framework. 
-provides complete flexibility in handling it. When a watchpoint gets added to an object, the client determines \emph{type}, \emph{size}, \emph{meta-information} and \emph{vtable} which needs to be stored in the descriptor. These descriptors can be arbitrarily customized or extended based on the need of the client. %One powerful application of this extension is discussed in section~\ref{sec:access_policies}.
+\paragraph{Watchpoint descriptors are context specific.} Our design separates the allocation and management of descriptors from the watchpoint framework. It is the responsibility of the client to manage its descriptor. %, which % and declare the corrosponding descriptor type for the framework. provides complete flexibility in handling it. 
+When a watchpoint gets added to an object, the client determines \emph{type}, \emph{meta-information} and \emph{vtable} which needs to be stored in the descriptor. These descriptors can be arbitrarily customized or extended based on the need of the client. %One powerful application of this extension is discussed in section~\ref{sec:access_policies}.
 
 
 
@@ -693,16 +693,6 @@ While Granary provides a framework for instrumenting kernel modules, we found it
 
 %Watched addresses, however, do not reference valid memory. Dereferencing a watched address triggers a hardware exception. To avoid this, we use Granary to dynamically translate memory loads and stores to first check for and then resolve watched addresses to their unwatched counterparts. If a watched address is detected then a watchpoint-specific vtable function is invoked. Both the address of the watchpoint descriptor and the watched address are passed as arguments to the invoked function. Finally, the original memory instruction is emulated by one that uses the unwatched address. The choice of which vtable function to invoke depends on the size of the memory operand (1, 2, 4, or 8 bytes) and whether the operation reads or writes its operand from/to memory.
 
-\begin{figure}
-\begin{lstlisting}[language=C,basicstyle=\footnotesize\ttfamily]
-FUNC_WRAPPER(__kmalloc, (size, flags), {
-  void *addr = __kmalloc(size, flags);
-  ADD_WATCHPOINT(addr, size);
-  return addr;
-})
-\end{lstlisting}
-\caption{\label{fig:kmalloc_wrapper}Definition of the \texttt{\_\_kmalloc} function wrapper in Granary. The above code expands into a function for wrapping the \texttt{\_\_kmalloc} kernel memory allocator. Calls to \texttt{\_\_kmalloc} are transparently substituted with calls to the generated wrapper. The wrapper invokes the original \texttt{\_\_kmalloc} function and returns a watched version of the allocated address.}
-\end{figure}
 
 \section{Applications\label{sec:applications}}
 The following sub-sections describe four applications of behavioural watchpoints and their implementations. In these sub-sections, we use the term \emph{object} to refer to a range of memory locations that are allocated together.% as a unit.
@@ -719,12 +709,23 @@ address of another), and thus each object can be distinguished and uniquely iden
 %Accessing poisoned memory is an error because it does not exist as a named program entity. However, 
 %Our approach is similar in that memory adjacent to a watched object is considered poisoned; however, we do not rely on compiler support, nor do we allocate or mark poisoned memory as such.
 
+\begin{figure}
+\begin{lstlisting}[language=C,basicstyle=\footnotesize\ttfamily]
+FUNC_WRAPPER(__kmalloc, (size, flags), {
+  void *addr = __kmalloc(size, flags);
+  ADD_WATCHPOINT(addr, size);
+  return addr;
+})
+\end{lstlisting}
+\caption{\label{fig:kmalloc_wrapper}Definition of the \texttt{\_\_kmalloc} function wrapper in Granary. The above code expands into a function for wrapping the \texttt{\_\_kmalloc} allocator. Calls to \texttt{\_\_kmalloc} are transparently substituted with calls to the generated wrapper. The wrapper invokes the original \texttt{\_\_kmalloc} function and returns a watched version of the allocated address.}
+\end{figure}
+
 We employ two overflow detection policies: heap-based, and stack-based. % All three policies depend on the same extension to the meta-information of watchpoint descriptors: a \emph{limit address}. Together, the base address (stored in the descriptor) and the limit address delineate an object's boundaries in memory \cite{BccFatPointers}.
 
 
-\paragraph{Heap-based overflow detection \label{sec:heap_overflow}}
-The heap-based detection policy detects buffer overflow errors on all heap-allocated objects. We use Granary to wrap the kernel's memory allocator functions (e.g., \texttt{kmalloc}) and add watchpoints to the addresses returned by those allocators (\Figref{kmalloc_wrapper}). The lifetime of a watchpoint added in this way is tied to the lifetime of the memory it watches. Each watchpoint's descriptor records bounds information about the allocated memory in the form of the object's base and limit address \cite{BccFatPointers}. A buffer overflow is detected when a dereference of a watched address occurs outside of the bounds recorded by the watchpoint's descriptor. %(\Figref{detect_overflow}). 
-The memory operand size-specific feature of vtable functions is helpful in catching corner cases where memory reads or writes access both an object and its adjacent memory cells.%, as shown in case $(3)$ of \Figref{detect_overflow}.
+\paragraph{Heap-based overflow detection\label{sec:heap_overflow}}
+The heap-based detection policy detects buffer overflow errors on all heap-allocated objects. We use Granary to wrap the kernel's memory allocator (e.g., \texttt{kmalloc}) and add watchpoints to the addresses returned by the allocators (\Figref{kmalloc_wrapper}). The lifetime of a watchpoint added is tied to the lifetime of the memory it watches. Each watchpoint's descriptor records bounds information about the allocated memory in the form of the object's base and limit address \cite{BccFatPointers}. A buffer overflow is detected when a dereference of watched address occurs outside of the bounds recorded by the watchpoint's descriptor. %(\Figref{detect_overflow}). 
+The memory operand size-specific vtable functions are helpful in catching corner cases where memory reads or writes access both an object and its adjacent memory cells.%, as shown in case $(3)$ of \Figref{detect_overflow}.
 
 %intersect an object's memory and the adjacent memory cells.
 %The vtable functions used by these watchpoints detects buffer overflows when a dereference of a watched address 
@@ -1093,7 +1094,7 @@ WATCH_WRITE(struct file_operations, ioctl, {
   }
 })
 \end{lstlisting}
-\caption{\label{fig:field_invariant_check}This code example shows how to check invariant 1(h) from \cite{GibraltarKernelInvariants} using field-accessor API. The invariant checked prevents a (potential) kernel rootkit from installing its own \texttt{ioctl} handler into the Real-Time Clock. Anti-virus programs depend on this built-in \texttt{ioctl} handler to periodically schedule scans. Replacing the handler can prevent such scans from being scheduled, thus allowing the rootkit to go undetected.}
+\caption{\label{fig:field_invariant_check}This code example shows how to check invariant 1(h) from \cite{GibraltarKernelInvariants} using field-accessor API. The invariant checked prevents a (potential) kernel rootkit from installing its own \texttt{ioctl} handler into the Real-Time Clock and preventing virus-scans from being scheduled, thus allowing rootkit to go undetected.}%. Anti-virus programs depend on this built-in \texttt{ioctl} handler to periodically schedule scans. Replacing the handler can prevent such scans from being scheduled, thus allowing the rootkit to go undetected.}
 \end{figure}
 
 \subsection{Field-grained Access Policies\label{sec:access_policies}}
@@ -1119,8 +1120,6 @@ In this section, we briefly describe using watchpoints at the granularity of obj
 %\end{figure*}
 
 We evaluated behavioural watchpoints using a microbenchmark and measured the performance of common filesystem operations on an in-memory disk. Our tests ran on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ 2 Duo 2.93 GHz CPU with 4GB physical memory. %Watchpoint instrumentation was enabled for every memory operation. We measured the overhead of the watchpoint framework using a null client and heap-based buffer overflow detector. %We also evaluated the performance of heap-based buffer overflow detector developed using watchpoints.
-
-
 %we used a null client and a heap-based buffer overflow detector to measure the overhead of using watchpoints. 
 %The null client includes the instrumentation for dereferencing watchpoint address.
 %To evaluated the cost of watchpoint framework we used a null client 
@@ -1130,13 +1129,10 @@ We evaluated behavioural watchpoints using a microbenchmark and measured the per
  %}
 \ORIGcaption{\label{fig:iozone-workload-overhead} Filesystem module (\texttt{ext3}) I/O performance at different workloads (write workloads (w), read workloads (r)).}
 \end{figure}
-
- %and we evaluated the cost of using watchpoint framework with null client and heap-based buffer overflow detector which we developed as one of the application. 
+%and we evaluated the cost of using watchpoint framework with null client and heap-based buffer overflow detector which we developed as one of the application. 
 %buffer overflow detecting watchpoints were added to all memory returned from kernel heap allocators.
-
 %We compare native execution, passive execution, and active execution to evaluate the performance of our watchpoint implementation. Passive and active execution both run the Granary DBT framework; however, passive execution only performs basic translation of module code, while active execution translates and adds watchpoint-specific instrumentation to module code. Our choice of network and filesystem modules depend on the fact that they are
-
-\paragraph{Microbenchmark} %We performed a microbenchmark consisting of a tight-loop of memory operations which exibits the worst-case overhead of using the watchpoint framework.% with null client and buffer-overflow detector. 
+%\paragraph{Microbenchmark} %We performed a microbenchmark consisting of a tight-loop of memory operations which exibits the worst-case overhead of using the watchpoint framework.% with null client and buffer-overflow detector. 
 The microbenchmark performed a tight-loop of memory operations and exhibited the CPU overhead of using watchpoint instrumentaion (3.8{\footnotesize$\times$}). The extra cost of the buffer-overflow detector (\texttildelow 21{\footnotesize$\times$}) comes from the instrumentation required for bounds checking.
 
 
@@ -1169,7 +1165,7 @@ The microbenchmark performed a tight-loop of memory operations and exhibited the
 
 %\paragraph*{Netperf} We tested network throughput and latency using the \texttt{e1000e} network device driver module. CPU utilization increased by {\texttildelow}6\%, UDP throughput decreased by at most 50\%, TCP throughput was unaffected, and both the TCP and UDP request-response latency increased by no more than 50\%. 
 
-\paragraph*{IOzone} In our experimental setup, \texttt{ext3} filesystem module was mounted on a RAMDisk of size 1GB. IOzone creates two processes (reader, writer) performing common file operations on to a file of size 480Mb with record size of 1Kb. %We wrapped the two most used allocators in \texttt{ext3} \& \texttt{jbd}\footnote{The journaling module used by \texttt{ext3}} -- \texttt{\_\_kmalloc} and \texttt{kmem\_cache\_alloc}, to add watchpoints at allocated objects. \Figref{iozone-workload-overhead} shows the drop in throughput of filesystem operations when using the watchpoint framework. \emph{watchpoint\_null} represents the overhead of watchpoint instrumentation and \emph{watchpoint\_watched} shows the cost of watching all module allocated objects. 
+\paragraph*{IOzone} In our experimental setup, \texttt{ext3} filesystem module was mounted on a RAMDisk of size 1GB. IOzone creates two processes (reader, writer) performing common file operations on to a file of size 480Mb with record size of 1Kb. We wrapped the two most used allocators in \texttt{ext3} \& \texttt{jbd}-- \texttt{\_\_kmalloc} and \texttt{kmem\_cache\_alloc}, to add watchpoints at allocated objects. \Figref{iozone-workload-overhead} shows the drop in throughput of filesystem operations when using the watchpoint framework. \emph{watchpoint\_null} represents the overhead of watchpoint instrumentation and \emph{watchpoint\_watched} shows the cost of watching all module allocated objects. 
 
 
 %overhead of using watchpoints for debugging purpose. 
@@ -1232,7 +1228,7 @@ The microbenchmark performed a tight-loop of memory operations and exhibited the
 \section{Related Work}
 %Watchpoints are an important debugging facility that help developers track accesses to memory. Most state-of-the-art processors provide some support for hardware watchpoints, but such watchpoints are usually scarce or require specialised hardware support \cite{Mondrix,UnlimitedWatchpoints}. 
 
-\paragraph{Hardware-based}
+%\paragraph{Hardware-based}
 Greathouse \emph{et al.}~\cite{UnlimitedWatchpoints} propose a hardware solution that efficiently supports an unlimited number of watchpoints. Witchel and Asanovic \cite{Mondrix} describes the implementation of memory protection domains for the Linux kernel. Protection domains are implemented using specialised hardware and enable fine- and coarse-grained memory protection using a mechanism similar to hardware watchpoints. Unlike our approach, both of these depend on specialised hardware and require that applications using this hardware separately maintain context-specific information. Suh \emph{et al.} \cite{SecureProgramExecFlowTracking} propose a method of secure program execution by tracking dynamic information flow. Memory tagging at the hardware level allows their system to track tainted data as it propagates through a running program. Behavioural watchpoints are similar insofar as a watched address is tagged, and this tag propagates through a program.
 
 
@@ -1240,8 +1236,9 @@ Greathouse \emph{et al.}~\cite{UnlimitedWatchpoints} propose a hardware solution
 
 %In , 
 
-\paragraph{Software-based}
-Zhao \emph{et al.} \cite{DynamoRIOWatchpoints} describe a method of implementing an efficient and scalable DBT-based watchpoint system. Method uses page protection and indirection through a hash table to track watched memory. This approach does not support watching ranges of memory, nor does it support context-specific information. Lueck \emph{et al.} \cite{PinADX} introduce semantic watchpoints as part of the PinADX system, an extension of the PIN DBT framework. PinADX enables interactive debugging by triggering debugger breakpoints when semantic conditions are met. While similar in spirit to behavioural watchpoints, semantic watchpoints do not maintain context-specific, per-watchpoint state. 
+%\paragraph{Software-based}
+Zhao \emph{et al.} \cite{DynamoRIOWatchpoints} describe a method of implementing an efficient and scalable DBT-based watchpoint system. It uses page protection and indirection through a hash table to track watched memory. This approach does not support watching ranges of memory, and context-specific information. Lueck \emph{et al.} \cite{PinADX} introduce semantic watchpoints as part of the PinADX system. %, an extension of the PIN DBT framework. 
+It enables interactive debugging by triggering debugger breakpoints when semantic conditions are met. While similar in spirit to behavioural watchpoints, semantic watchpoints do not maintain context-specific, per-watchpoint state. 
 
 %In this respect, a semantic watchpoint is similar to a behavioural watchpoint whose vtable functions trap when a semantic condition is met.
 % using DynamoRIO, a popular user-space DBT framework. The method described is very efficient, but unlike behavioural watchpoints, views memory as an opaque sequence of bytes. 
