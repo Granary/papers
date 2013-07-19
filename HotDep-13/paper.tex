@@ -5,6 +5,9 @@
 %\usepackage{multicol,tabularx}
 \usepackage{textcomp} % for tilde
 \usepackage{paralist} % for in-paragraph lists
+\usepackage{graphicx}
+%\usepackage{epstopdf}
+%\epstopdfsetup{update} % only regenerate pdf files when eps file is newer
 
 % Used for code snippets
 \usepackage{listings,courier}
@@ -554,7 +557,8 @@ Behavioral watchpoints also support the following important features:
 
 \begin{figure}[t]
 \begin{center}
-\epsfig{file=watchpoints.eps, width=3.0in, height=1.4in}
+%\epsfig{file=watchpoints.eps, width=3.0in, height=1.4in}
+\includegraphics[width=3.0in, height=1.4in]{watchpoints.pdf}
 \end{center}
 \vspace{-15pt}
 \caption{\label{fig:watchpoint_descriptor_table}A watched address (bottom left) and its corresponding unwatched address (top left) are compared. The process of resolving the watchpoint descriptor is shown.}
@@ -1188,7 +1192,8 @@ The microbenchmark performed a tight-loop of memory operations and exhibits the 
 \begin{figure}[t!]
 %\subfloat{
 %\epsfig{file=watchpoint.eps,width=2.9in, height=1.4in}
-\epsfig{file=watchpoint.eps,width=.99\linewidth}
+%\epsfig{file=watchpoint.eps,width=.99\linewidth}
+\includegraphics[width=.99\linewidth]{watchpoint.pdf}
  %}
 \vspace{-6pt}
 \caption{\label{fig:iozone-workload-overhead} Throughput (in Mb/sec) for common file system operations (write workloads (w), read workloads (r)).}
