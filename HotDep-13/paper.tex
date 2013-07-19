@@ -49,7 +49,7 @@
 %\renewcommand{\bibliography}[1]{{\footnotesize \ORIGbibliography{#1}}}
 
 % Add a horizontal rule above captions, and make captions closer to their figures
-\DeclareCaptionFormat{ruled_caption}{#1#2#3\hrulefill\vspace{-1.5em}}
+\DeclareCaptionFormat{ruled_caption}{#1#2#3\vspace{-0.6em}\hrulefill\vspace{-1.6em}}
 \captionsetup[figure]{format=ruled_caption}
 %\let\ORIGcaption\caption
 %\renewcommand{\caption}[2][\compressedcaption]{%
@@ -76,7 +76,7 @@
 \date{}
 
 %make title bold and 14 pt font (Latex default is non-bold, 16 pt)
-\title{\Large \bf Behave or Be Watched: Debugging with Behavioural Watchpoints}
+\title{\Large \bf Behave or Be Watched: Debugging with Behavioral Watchpoints}
 
 %for single author (just remove % characters)
 \author{
@@ -89,24 +89,24 @@ University of Toronto
 \subsection*{Abstract}
 Finding, understanding, and fixing bugs in an operating system is challenging. Dynamic binary translation (DBT) systems provide a powerful facility for building program analysis and debugging tools. However, DBT abstractions are too low-level and provide limited contextual information at instrumentation.
 
-We introduce \emph{behavioural watchpoints}: a new software-based watchpoint framework that simplifies the implementation of DBT-based program analysis and debugging tools. Behavioural watchpoints extend the traditional approach of using a DBT system by providing context-specific information at the instruction level and specialising instrumentation to individual data structures. We describe four applications developed using our watchpoint framework: detecting buffer overflows, detecting read-before-write and memory freeing bugs, detecting memory leaks and enforcing fine-grained memory access policies. We implemented behavioural watchpoints using Granary, a new DBT framework. We show the overheads are reasonable for their intended use in analysing and debugging kernel modules.
+We introduce \emph{behavioral watchpoints}: a new software-based watchpoint framework that simplifies the implementation of DBT-based program analysis and debugging tools. Behavioral watchpoints extend the traditional approach of using a DBT system by providing context-specific information at the instruction level and specialising instrumentation to individual data structures. We describe four applications developed using our watchpoint framework: detecting buffer overflows, detecting read-before-write and memory freeing bugs, detecting memory leaks and enforcing fine-grained memory access policies. We implemented behavioral watchpoints using Granary, a new DBT framework. We show the overheads are reasonable for their intended use in analysing and debugging kernel modules.
 
 
 \section{Introduction}
 
 Program debugging is a tedious and time-consuming part of software development. Detecting software bugs such as data corruption, bad pointers, and data races requires developers to manually inspect millions of instructions that may modify data. The advent of multicore systems and the ever-increasing size and complexity of software has made debugging even more challenging. 
 
-Dynamic binary translation (DBT) systems provide a powerful facility for building debugging and analysis tools because they allow instrumenting the entire program at an instruction granularity~\cite{DynamoRIOKernel}. For example, Valgrind's Memcheck \cite{Seward:2005:UVD:1247360.1247362} and Helgrind \cite{Muehlenfeld:2007:FDM:1229428.1229457} use binary translation to detect common memory errors (e.g. use-after-free, read-before-write, memory leaks) and threading bugs (e.g. data races) in user space programs. These tools are powerful but developing them is challenging for the following three reasons.
+Dynamic binary translation (DBT) systems provide a powerful facility for building debugging and analysis tools because they allow instrumenting the entire program at an instruction granularity~\cite{DynamoRIOKernel}. For example, Valgrind's Memcheck \cite{Seward:2005:UVD:1247360.1247362} and Helgrind \cite{Muehlenfeld:2007:FDM:1229428.1229457} use binary translation to detect common memory errors (e.g., use-after-free, read-before-write, memory leaks) and threading bugs (e.g., data races) in user space programs. These tools are powerful but developing them is challenging for the following three reasons.
 
-First, DBT system provides infrastructure for code-centric instrumentation, whereas many interesting debugging applications would prefer to have data-centric instrumentation. Applications like data race detection, memory usage bugs, or performance debuggers that find false sharing hotspots are all naturally data-centric. 
-Second, DBT abstractions are too low-level: individual instructions only reveal what memory addresses are being accessed. This is at odds with specialising instruction-level instrumentation with higher-level abstractions. For example, developing a tool to debug the data corruption problem in a specific field of a data structure (e.g. \texttt{i\_flags} field of \texttt{inode} structure), or detecting invariant violation in a data structure requires instrumentation to be specialised to individual data structures.
-Third, existing DBT systems instrument everything to give comprehensive coverage, which introduces significant overheads for realistic instrumentation. If a bug occurs because the \texttt{i\_flags} field of one of the \texttt{inode} structure is corrupted then instrumenting every memory access in the kernel is excessive. In practice, we would like to instrument only the code that operates on \texttt{inode}s.
+First, a DBT system provides infrastructure for code-centric instrumentation, whereas many interesting debugging applications would prefer to have data-centric instrumentation. Applications such as data race detection, memory usage bugs, or performance debuggers that find false sharing hotspots are all naturally data-centric. 
+Second, DBT abstractions are too low-level: individual instructions only reveal what memory addresses are being accessed. This is at odds with specialising instruction-level instrumentation with higher-level abstractions. For example, developing a tool to debug the data corruption problem in a specific field of a data structure (e.g., \texttt{i\_flags} field of \texttt{inode} structure), or detecting invariant violation in a data structure requires instrumentation to be specialised to individual data structures.
+Third, existing DBT systems instrument everything to give comprehensive coverage, which introduces significant overheads for realistic instrumentation. For example, if a memory corruption bug affects only \texttt{inode} structures, then instrumenting every memory access in the kernel is excessive. In practice, we would like to instrument only the code that operates on \texttt{inode}s.
 
 
 
 
 %that detects corruption in a particular field of all data structures of a specific type. DBT systems don't provide information about what data structures are accessed, only what instructions are accessing what memory addresses
-%track meta-data for each in-memory data structure (e.g. to detect if a byte was written before it was read) because this meta-data must be queried on each memory access.
+%track meta-data for each in-memory data structure (e.g., to detect if a byte was written before it was read) because this meta-data must be queried on each memory access.
 %For example, the challenge is that we want to detect corruption in a particular field of all data structures of a specific type. However, DBT systems don't provide information about what data structures are accessed, only what instructions are accessing what memory addresses
 %Second, DBT systems are unable to specialise instruction-level instrumentation to individual data structures. For example, detecting corruption specialise in \texttt{i\_opflags} field of \texttt{inode} structure requires inspecting the permissions referenced by the related \texttt{i\_op} field. This is challenging to do in existing DBT-based debugging tools, which view data structures as opaque sequences of bytes. In practice, we would like our tool to be able to target only memory of specific kinds, and allow instrumentation to be specialised to the targeted memory.
 %Third, Existing instrumentation system runs on all code, introducing significant overheads for realistic instrumentation. 
@@ -302,19 +302,19 @@ Third, existing DBT systems instrument everything to give comprehensive coverage
 %This severely limits its practical and ubiquitous use.
 %As a result, watchpoint-based analysis tools are harder to design and implement because they must maintain separate bookkeeping mechanisms to recover contextual information about watched memory.
 
-%In this paper, we introduce \emph{Behavioural Watchpoints}: a new form of software-based watchpoints that simplify the implementation of program analysis and debugging tools. Behavioural watchpoints address the usability concerns of hardware-based watchpoints and overcome the incongruency between how software implements watchpoints and how program analysis tools use them. The main characteristic which defines behavioural watchpoints are: 
+%In this paper, we introduce \emph{Behavioral Watchpoints}: a new form of software-based watchpoints that simplify the implementation of program analysis and debugging tools. Behavioral watchpoints address the usability concerns of hardware-based watchpoints and overcome the incongruency between how software implements watchpoints and how program analysis tools use them. The main characteristic which defines behavioral watchpoints are: 
 %\begin{enumerate*}
 %  \item[i)] Context-specific information is embedded in each watchpoint. The information is directly available when a watched address is accessed. %This provides significant versatility in monitoring large number of memory. 
 %  \item[ii)] The action taken when a watched address is accessed is a component of the context-specific information. This implies that different watchpoints can \emph{behave} differently.
 %\end{enumerate*}
 
-%We implemented behavioural watchpoints using Granary: a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. Granary instruments arbitrary, binary Linux kernel modules efficiently and without imposing overhead when the core kernel is running. We also developed applications based on behavioural watchpoints, which can be used to debug kernel modules. The buffer-overflow and leak detection tool can be used to identify the memory errors in kernel modules. We are using selctive-shadowing technique to detect the access pattern of different kernel/module objects. This will be useful in prototying different module and detecting its malicious behaviour. Fine-grained access policies can be used to implement control-flow integrity and data integrity in the kernel modules.   
+%We implemented behavioral watchpoints using Granary: a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. Granary instruments arbitrary, binary Linux kernel modules efficiently and without imposing overhead when the core kernel is running. We also developed applications based on behavioral watchpoints, which can be used to debug kernel modules. The buffer-overflow and leak detection tool can be used to identify the memory errors in kernel modules. We are using selctive-shadowing technique to detect the access pattern of different kernel/module objects. This will be useful in prototying different module and detecting its malicious behaviour. Fine-grained access policies can be used to implement control-flow integrity and data integrity in the kernel modules.   
 
 
-In this paper, we introduce \emph{behavioural watchpoints}, a novel software-based watchpoint framework that simplifies the implementation of DBT-based program analysis and debugging tools. Similar to previous software-based watchpoints~\cite{DynamoRIOWatchpoints}, we support millions of watchpoints, enabling large-scale program analysis. However, unlike previous approaches that are limited by their view of memory as an opaque sequence of bytes, behavioral watchpoints embed \emph{context-specific} information in each watchpoint, and this information is available when a watched address is accessed. Upon access, the watchpoint action taken depends on this context, implying that different watchpoints \emph{behave} differently. For example, if a programmer wishes to debug corruption to a specific field of a data structure such as a field in the TCP buffer header, then a behavioral watchpoint will be triggered only when the specific field is updated in any TCP buffer header. This approach simplifies building powerful DBT tools because the context-specific information can be arbitrarily rich (e.g. derived from static analysis), and is available as needed at runtime. 
+In this paper, we introduce \emph{behavioral watchpoints}, a novel software-based watchpoint framework that simplifies the implementation of DBT-based program analysis and debugging tools. Similar to previous software-based watchpoints~\cite{DynamoRIOWatchpoints}, we support millions of watchpoints, enabling large-scale program analysis. However, unlike previous approaches that are limited by their view of memory as an opaque sequence of bytes, behavioral watchpoints embed \emph{context-specific} information in each watchpoint, and this information is available when a watched address is accessed. Upon access, the watchpoint action taken depends on this context, implying that different watchpoints \emph{behave} differently. For example, if a programmer wishes to debug corruption to a specific field of a data structure such as a field in the TCP buffer header, then a behavioral watchpoint will be triggered only when the specific field is updated in any TCP buffer header. This approach simplifies building powerful DBT tools because the context-specific information can be arbitrarily rich (e.g., derived from static analysis), and is available as needed at runtime. 
 %(comment - possibly add another example).
 
-A key feature of behavioral watchpoints is that they enable adding instrumentation selectively, by enabling or disabling binary translation on demand, so that overhead is introduced only when instrumentation is needed. A watchpoint can be triggered by a hardware trap that starts binary translation and watchpoint interpretation. The translation may continue until the end of the basic block or current function. This approach benefits from the lower overhead of binary translation when several watchpoints are likely to be triggered, and the lower overhead of infrequent trap when watchpoints are unlikely to be triggered. For example, kernel modules may initialize structures (such as the \texttt{sk\_buff} used by network drivers) that are shared with the core kernel. The kernel expects such structures to contain legitimate data pointers when they are received from the module, however a module can pass a bad
+A key feature of behavioral watchpoints is that they enable adding instrumentation selectively, by enabling or disabling binary translation on demand, so that overhead is introduced only when instrumentation is needed. A watchpoint can be triggered by a hardware trap that starts binary translation and watchpoint interpretation. The translation may continue until the end of the basic block or current function. This approach benefits from the lower overhead of binary translation when several watchpoints are likely to be triggered, and the lower overhead of infrequent traps when watchpoints are unlikely to be triggered. For example, kernel modules may initialize structures (such as the \texttt{sk\_buff} used by network drivers) that are shared with the core kernel. The kernel expects such structures to contain legitimate data pointers when they are received from the module, however a module can pass a bad
 pointer and trick the kernel into accessing illegal memory. Finding the source of this corruption requires complete visibility into all memory accesses to the structure, whether in the module or the kernel. Behavioral watchpoints enable this visibility with low overhead by comprehensive instrumentation of module code and on-demand translation of kernel code. %a programmer needs to find the corruption of packet data in \texttt{sk\_buff} structure. When module passes \texttt{sk\_buff} structure to the kernel, it expects it to provide a legitimate data pointer. Instead a module can pass bad pointer and trick kernel to access illegal memory. Finding this requires complete visibility on all memory accesses to the packet data even in uninstrumented kernel code. Behavioral watchpoints enable it by comprehensively instrumenting module code and on-demand translation of kernel code. 
 %Similarly a module allocates several independent data structure which gets accessed frequently by the module and occasionally by the kernel and on-demand translation provides specialised approach for them.% to debug the access of those objects.
 
@@ -367,7 +367,7 @@ pointer and trick the kernel into accessing illegal memory. Finding the source o
 %For example, we have problem of finding  
 
 %For example, a watchpoint can be triggered by a hardware trap that starts binary translation and watchpoint interpretation. The translation may continue until the end of the current function or basic block. This approach benefits from the lower overhead of binary translation when several watchpoints are likely to be triggered, and the lower overhead of traps when watchpoints are unlikely to be triggered.
-%For example, if a programmer wants to debug the data corruption in a field of TCP buffer header, behavioural watchpoint will only trigger the trap when TCP code is executing and will attach DBT. This will save the cost of using DBT system for entire program execution.  
+%For example, if a programmer wants to debug the data corruption in a field of TCP buffer header, behavioral watchpoint will only trigger the trap when TCP code is executing and will attach DBT. This will save the cost of using DBT system for entire program execution.  
 
 %For example, we have the problem of finding corruption in some fields of some data structures allocated by a module. We know our module allocates the bad objects, so for efficiency we don't want to instrument the whole kernel/system. However, for comprehensiveness, we want to ensure that we have visibility on all memory writes, even in uninstrumented kernel code (data-driven instrumentation). Our module also allocates a lot of independent data structures from the one we care about, so we want to specialise our instrumentation to debug accesses to only one kind of object. This motivated the use of a watchpoints-based approach. However, existing implementations lacked generality in the mechanism used to "watch" an entire datastructure, as well as generality in how contextual information is associated with those data structures. Our approach solves these limitations by allowing a single watchpoint to watch an entire data structure.
 
@@ -378,22 +378,22 @@ pointer and trick the kernel into accessing illegal memory. Finding the source o
 
 %  Give example of debugging TCP buffer header ... DBT would operate only when TCP code is executing.
 
-We have implemented behavioural watchpoints using Granary, a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. Granary instruments arbitrary, binary Linux kernel modules efficiently and without imposing overhead when the core kernel is running. We have rapidly prototyped several module debugging tools using behavioral watchpoints. These tools include buffer-overflow detector, memory leak detector, and a shadow memory based tool for logging the access patterns of different types of modules for detecting buggy or malicious behavior. We describe these tools in more detail in section~\ref{sec:applications}.
+We have implemented behavioral watchpoints using Granary, a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. Granary instruments arbitrary, binary Linux kernel modules efficiently and without imposing overhead when the core kernel is running. We have rapidly prototyped several module debugging tools using behavioral watchpoints. These tools include buffer-overflow detector, memory leak detector, and a shadow memory based tool for logging the access patterns of different types of modules for detecting buggy or malicious behavior. We describe these tools in more detail in section~\ref{sec:applications}.
 
-%We also developed behavioural watchpoints based application which can be used to debug kernel modules. 
+%We also developed behavioral watchpoints based application which can be used to debug kernel modules. 
 
 
 %The paper also introduce a new approach of data-driven instrumentation and set of optimizations to reduce the cost of runtime checking.
 
 
-%This paper makes two primary contributions: 1) It introduces the design of behavioural watchpoints and identifies the challenges involved in implementing them and 2) It discusses the possible application of these watchpoints in detecting memory errors. We implemented behavioural watchpoints using Granary: a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. The paper also introduce a new approach of data-driven instrumentation and set of optimizations to reduce the cost of runtime checking.
+%This paper makes two primary contributions: 1) It introduces the design of behavioral watchpoints and identifies the challenges involved in implementing them and 2) It discusses the possible application of these watchpoints in detecting memory errors. We implemented behavioral watchpoints using Granary: a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. The paper also introduce a new approach of data-driven instrumentation and set of optimizations to reduce the cost of runtime checking.
 
 %We also a new method of data-driven instrumentation and set of optimizations to reduce the cost of runtime checking.
 
 
 %different debugging tools. The paper makes additional contribution by introducing a new method of data-driven instrumentation and set of optimizations to reduce the cost of runtime checking.  
 
-%Behavioural watchpoints are implemented using Granary: a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. 
+%Behavioral watchpoints are implemented using Granary: a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. 
 
 
 
@@ -405,18 +405,18 @@ We have implemented behavioural watchpoints using Granary, a dynamic binary tran
 %and challenges involved in implementing such watchpoint solution.   
 
 
-%the design involved in implementing behavioural watchpoints. 
+%the design involved in implementing behavioral watchpoints. 
 
-%The paper presents the design and challenges of implementing behavioural watchpoints using an in-kernel dynamic binary translation (DBT) framework. It also discuss the concept of data-driven instrumentation and set of optimization which is enabled by framework to reduce the cost of runtime checking. Data-driven instrumentation works as an extension of traditional data breakpoint and allows instrumentation framework to attach when program encounters watchpoint. This reduces the cost of debugging when using limited number of watchpoints.
+%The paper presents the design and challenges of implementing behavioral watchpoints using an in-kernel dynamic binary translation (DBT) framework. It also discuss the concept of data-driven instrumentation and set of optimization which is enabled by framework to reduce the cost of runtime checking. Data-driven instrumentation works as an extension of traditional data breakpoint and allows instrumentation framework to attach when program encounters watchpoint. This reduces the cost of debugging when using limited number of watchpoints.
 
-%We implemented behavioural watchpoints using Granary: a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. Behavioural watchpoints also introduces the concept of data-driven instrumentation and set of optimization to reduce the cost of checking for runtime system. Data-driven instrumentation works as an extension of traditional data breakpoint and allows instrumentation framework to attach when program encounters watchpoint.
+%We implemented behavioral watchpoints using Granary: a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. Behavioral watchpoints also introduces the concept of data-driven instrumentation and set of optimization to reduce the cost of checking for runtime system. Data-driven instrumentation works as an extension of traditional data breakpoint and allows instrumentation framework to attach when program encounters watchpoint.
 
 
 
 %when program encounters watchpoints, instrumenting a basic block of program. This reduces the cost of using watchpoints specially for the program using less or no watchpoints.
 
 
-%Two characteristics define behavioural watchpoints:
+%Two characteristics define behavioral watchpoints:
 %\begin{enumerate*}
 %  \item[i)] Context-specific information is embedded in each watchpoint. This information is directly available when a watched address is accessed.
  % \item[ii)] The action taken when a watched address is accessed is a component of the context-specific information. This implies that different watchpoints can \emph{behave} differently.
@@ -447,9 +447,9 @@ We have implemented behavioural watchpoints using Granary, a dynamic binary tran
 
 %There are two categories of watchpoints: i) Hardware-based approach and ii) Software-based approach. Hardware-based watchpoints are fast but scarce and requires additional hardware support. This limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints}, but are limited by their view of memory as an opaque sequence of bytes. This view is at odds with program analysis tools, which require contextual information about a program's memory. Embedding such informations in existing software approach will require to maintain separate bookkeeping mechanisms which will lead to large computational and lookup overheads. This severely limits its practical and ubiquitous use and impede their adoptation by developers
 
-%In this paper, we introduce \emph{behavioural watchpoints}: a new form of software-based watchpoints which addresses the usability concern of hardware-based watchpoints and overcome the incongruency between how software implements watchpoints and how program analysis tools use them. We describes our prototype implementation of Behavioural Watchpoints using binary instrumentation and code manipulation framework and ability to watch large number of memory locations with 2x overhead. We also demonstrate how the ability to store contextual information simplify and broaden the scope of developing new debugging tools. 
+%In this paper, we introduce \emph{behavioral watchpoints}: a new form of software-based watchpoints which addresses the usability concern of hardware-based watchpoints and overcome the incongruency between how software implements watchpoints and how program analysis tools use them. We describes our prototype implementation of Behavioral Watchpoints using binary instrumentation and code manipulation framework and ability to watch large number of memory locations with 2x overhead. We also demonstrate how the ability to store contextual information simplify and broaden the scope of developing new debugging tools. 
 
- %Two characteristics define behavioural watchpoints:
+ %Two characteristics define behavioral watchpoints:
 %\begin{enumerate*}
 %  \item[i)] Context-specific information is embedded in each watchpoint. This information is directly available when a watched address is accessed.
   %\item[ii)] The action taken when a watched address is accessed is a component of the context-specific information. This implies that different watchpoints can \emph{behave} differently.
@@ -459,13 +459,13 @@ We have implemented behavioural watchpoints using Granary, a dynamic binary tran
 
 %removes memory opaqueness and provide debugger useful information about the memory state thus simplifing the implementation of new program analysis and debugging tools. It also de
 
-%Behavioural watchpoints address the usability concerns of hardware-based watchpoints and overcome the incongruency between how software implements watchpoints and how program analysis tools use watchpoints.
+%Behavioral watchpoints address the usability concerns of hardware-based watchpoints and overcome the incongruency between how software implements watchpoints and how program analysis tools use watchpoints.
 
 %Watchpoints are an integral feature of program analysis and debugging tools because they correlate watched memory locations with the program points accessing those memory locations. There are two categories of watchpoints: hardware-based and software-based. Hardware-based watchpoints are fast but scarce, which limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints}, but are limited by their view of memory as an opaque sequence of bytes. This view is at odds with program analysis tools, which require contextual information about a program's memory. As a result, watchpoint-based analysis tools are harder to design and implement because they must maintain separate bookkeeping mechanisms to recover contextual information about watched memory.
 
 %There are two cwith increase in software complexity there is a need of better toolsategories of watchpoints: i) Hardware-based approach and ii) Software-based approach. Hardware-based watchpoints are fast but scarce, which limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints}, but are limited by their view of memory as an opaque sequence of bytes. This view is at odds with program analysis tools, which require contextual information about a program's memory and severely limits its usefulness.
 
-%In this paper, we introduce \emph{behavioural watchpoints}: a new form of software-based watchpoints that simplify the implementation of program analysis and debugging tools.  Behavioural watchpoints address the usability concerns of hardware-based watchpoints and overcome the incongruency between how software implements watchpoints and how program analysis tools use watchpoints.
+%In this paper, we introduce \emph{behavioral watchpoints}: a new form of software-based watchpoints that simplify the implementation of program analysis and debugging tools.  Behavioral watchpoints address the usability concerns of hardware-based watchpoints and overcome the incongruency between how software implements watchpoints and how program analysis tools use watchpoints.
 
 
 %\section{Implementation}
@@ -474,12 +474,12 @@ We have implemented behavioural watchpoints using Granary, a dynamic binary tran
 %Granary was the DBT framework of choice for two reasons: 
 %\begin{enumerate*}
 %	\item[i)] Our goal was to analyse Linux kernel modules. Granary permits fine-grained instrumentation of the instructions of a running Linux kernel module.
-%	\item[ii)] Granary exposes rich type information about the Linux kernel. Granary has the ability to substitute the execution of a known function with a \emph{wrapped} version of itself. A wrapped function has the same type specification as its unwrapped counterpart and can freely modify its arguments and return value. This feature of Granary exposes type information which is used by behavioural watchpoints.
+%	\item[ii)] Granary exposes rich type information about the Linux kernel. Granary has the ability to substitute the execution of a known function with a \emph{wrapped} version of itself. A wrapped function has the same type specification as its unwrapped counterpart and can freely modify its arguments and return value. This feature of Granary exposes type information which is used by behavioral watchpoints.
 %\end{enumerate*}
 
 
 %\noindent
-%Behavioural watchpoints have several novel features:
+%Behavioral watchpoints have several novel features:
 %\begin{enumerate*}
 %	\item[i)] {\bf Unrestricted:} A single watchpoint watches many addresses. In \Secref{buffer_overflows}, we use this feature to detect various kinds of buffer overflows.
 %	\item[ii)] {\bf Extensible:} Watchpoints are easily extended by programmers. In \Secref{uninitialised_memory}, we use this feature to implement selective memory shadowing and detect reads from uninitialised memory.
@@ -487,23 +487,24 @@ We have implemented behavioural watchpoints using Granary, a dynamic binary tran
 %\end{enumerate*}
 
 \section{Design}\label{sec:design}
-A behavioural watchpoint is a software-based watchpoint that triggers the invocation of a function when any watched memory is accessed. Unlike most software-based watchpoints, a behavioural watchpoint watches a \emph{range} of addresses, enabling object-granularity watchpoints.% For example, one watchpoint can monitor all memory accesses to an object.
+A behavioral watchpoint is a software-based watchpoint that triggers the invocation of a function when any watched memory is accessed. Unlike most software-based watchpoints, a behavioral watchpoint watches a \emph{range} of addresses, enabling object-granularity watchpoints. 
+%For example, one watchpoint can monitor all memory accesses to an object.
 
 %. This design supports our goal of allowing one watchpoint to monitor all memory accesses to a single object.
 
 %To achieve this design goal, we implemented 
-We implement behavioral watchpoints by adding an extra level of indirection to memory addresses. An unwatched address is converted into a watched address by changing its high-order bits. These high-order bits indirectly identify context-specific information about the range of memory being watched. This information, called the watchpoint's \emph{descriptor}, contains the originating watched address, meta informations and a set of functions to invoke when watched memory is dereferenced. Since watchpoint information is embedded in the high-order bits, a typical offset of a watched address is another watched address that shares the same descriptor. 
+We implement behavioral watchpoints by adding an extra level of indirection to memory addresses. An unwatched address is converted into a watched address by changing its high-order bits. These high-order bits indirectly identify context-specific information about the range of memory being watched. This information, called the watchpoint's \emph{descriptor}, contains the originating watched address, meta-information and a set of functions to invoke when watched memory is dereferenced. Since watchpoint information is embedded in the high-order bits, a typical offset of a watched address is another watched address that shares the same descriptor. 
 
-Our design as described(\Figref{watchpoint_descriptor_table}) uses 15 high-order bits (called the \emph{counter index}) and additional 8 bits (bits 20-27, called the \emph{inherited index}) of a watched address to identify the index into a global \emph{watchpoint descriptor table} which stores the pointer to watchpoint's descriptor. %This extends the number of possible watchpoints to 8M. 
+Our design (see \Figref{watchpoint_descriptor_table}) uses 15 high-order bits (called the \emph{counter index}) and an additional 8 bits (bits 20-27, called the \emph{inherited index}) of a watched address to identify the index into a global \emph{watchpoint descriptor table} which stores the pointer to the watchpoint's descriptor. %This extends the number of possible watchpoints to 8M. 
 The key advantage of our watchpoint scheme is the ability to directly map watched addresses to unwatched addresses using a simple bitmask. One drawback of the scheme is that an offset of a watched address can cause the low-order bits to overflow into the inherited index. We overcome this problem by assigning multiple descriptors for the watched objects holding same meta-information and put them in adjacent indices. 
 
 %is to manage multiple descriptors for a watched object.
 
 %The watched addresses are non-canonical addresses that trigger a hardware exception when dereferenced. 
 We take advantage of the x86-64 architecture for implementing watched addresses. In kernel space on x86-64, canonical addresses have their 16 high-order bits set to 1. Watched addresses do not take this form; they are non-cannonical addresses that trigger a hardware exception when dereferenced. 
-The watchpoint framework uses two approach to perform memory operations on watched objects. 1) When watchpoints are expected to be triggered frequently, It dynamically adds instrumentation at every memory load and store to avoid the hardware exceptions. Watched addresses are detected before they are dereferenced and resolved to their unwatched counterparts (by masking the 16 high-order bits to 1). 2) When watchpoints are unlikely to be triggered, the alternative approach is to dereference a watched address and implement behavioural watchpoints in the trap handler. This enables on-demand binary translation and allows adding instrumentation only when a watchpoint gets triggered.%, which lowers the overhead of binary translation. % when watchpoints are fewer in number and unlikely to be triggered. 
+The watchpoint framework uses two approaches to perform memory operations on watched objects. 1) When watchpoints are expected to be triggered frequently, it dynamically adds instrumentation at every memory load and store to avoid the hardware exceptions. Watched addresses are detected before they are dereferenced and resolved to their unwatched counterparts (by masking the 16 high-order bits to 1). 2) When watchpoints are unlikely to be triggered, the alternative approach is to dereference a watched address and implement behavioral watchpoints in the trap handler. This enables on-demand binary translation and allows adding instrumentation only when a watchpoint gets triggered.%, which lowers the overhead of binary translation. % when watchpoints are fewer in number and unlikely to be triggered. 
 
-%To prevent hardware exceptions, instrumentation is dynamically added to memory loads and stores. Watched addresses are detected before they are dereferenced and resolved to their unwatched counterparts (by masking the 16 high-order bits to 1). An alternative approach is to dereference a watched address and implement behavioural watchpoints in the trap handler. This enables on-demand binary translation to selectively instrument the 
+%To prevent hardware exceptions, instrumentation is dynamically added to memory loads and stores. Watched addresses are detected before they are dereferenced and resolved to their unwatched counterparts (by masking the 16 high-order bits to 1). An alternative approach is to dereference a watched address and implement behavioral watchpoints in the trap handler. This enables on-demand binary translation to selectively instrument the 
 
 
 %the binary translation and instrumentation on demand, thus selctively instrumenting the code based on the usage of watchpoints. This is important when you are handling with less watchpoints and don't want to take overhead of instrumenting entire code.
@@ -528,9 +529,9 @@ The watchpoint framework uses two approach to perform memory operations on watch
 
 %\paragraph{A watched address must be distinguishable from an unwatched address.} 
 
-%Behavioural watchpoint framework provides API \emph{add\_watchpoints()} which is used to add watchpoints to an arbitrory object. It takes the obeject address and size to creates the descriptor for the object. The descriptor can be based on the type or size of the object. The descriptor can be changed dynamically if required. The descriptor is then stored into descriptor table at the next free index generated by counter and partial index. If some object doesn't need descriptor they are only assigned the watched address with corrosponding index in the descriptor table assigned NULL. 
+%Behavioral watchpoint framework provides API \emph{add\_watchpoints()} which is used to add watchpoints to an arbitrory object. It takes the obeject address and size to creates the descriptor for the object. The descriptor can be based on the type or size of the object. The descriptor can be changed dynamically if required. The descriptor is then stored into descriptor table at the next free index generated by counter and partial index. If some object doesn't need descriptor they are only assigned the watched address with corrosponding index in the descriptor table assigned NULL. 
 
-%Behavioural watchpoint provides support where two copies of an address (e.g., two pointers to the same object) can be separately watched, so long as they manage different descriptors, the high-order bits index different entries in the watchpoint descriptor table. 
+%Behavioral watchpoint provides support where two copies of an address (e.g., two pointers to the same object) can be separately watched, so long as they manage different descriptors, the high-order bits index different entries in the watchpoint descriptor table. 
 %This is useful for distinguishing between logically different objects that occupy the same memory. For example, this feature enables efficient detection of use-after-free bugs without preventing deallocated memory from being immediately reallocated for another use. This efficiency comes from our ability to have one watchpoint for the freed memory, and another watchpoint for newly allocated memory occupying the same space.
 
 
@@ -540,20 +541,21 @@ The watchpoint framework uses two approach to perform memory operations on watch
 %\paragraph{Millions of watchpoints are supported.} Our design as described uses 15 high-order bits (called the \emph{counter index}) and additional 8 bits (bits 20-27, called the \emph{inherited index}) of a watched address for identifying a watchpoint's descriptor.  This extends the number of possible watchpoints to 8M.  %and is left unchanged when converting an unwatched address into a watched address.
 %The key advantage of our watchpoint scheme is the ability to directly map watched addresses to unwatched addresses using a simple bitmask. The main drawback of the scheme is that an offset of a watched address can cause the low-order bits to overflow into the inherited index. One solution to overcome this problem is to manage multiple descriptors for a watched object. 
 
-Behavioural watchpoints also support the following important features:
+Behavioral watchpoints also support the following important features:
 
-\paragraph{Multiple watchpoints can watch the same range of memory.} Two copies of an address (e.g. two pointers to the same object) can be separately watched, so long as they manage different descriptors. This is useful for distinguishing logically different objects that occupy the same memory. This feature enables efficient detection of use-after-free bugs without preventing deallocated memory from being immediately reallocated for use. This efficiency comes from our ability to have one watchpoint for the freed memory, and another watchpoint for newly allocated memory occupying the same space. %Watchpoint gets added with a call to \texttt{ADD\_WATCHPOINT} which takes the reference of object and corrosponding meta-information as parameter. \texttt{REMOVE\_WATCHPOINT} is used to remove watchpoint from a watched object. 
+\paragraph{Multiple watchpoints can watch the same range of memory.} Two copies of an address (e.g., two pointers to the same object) can be separately watched, so long as they manage different descriptors. This is useful for distinguishing logically different objects that occupy the same memory. For example, this feature enables efficient detection of use-after-free bugs without preventing deallocated memory from being immediately reallocated for use, due to our ability to have one watchpoint for the freed memory, and another watchpoint for newly allocated memory occupying the same space. %Watchpoint gets added with a call to \texttt{ADD\_WATCHPOINT} which takes the reference of object and corrosponding meta-information as parameter. \texttt{REMOVE\_WATCHPOINT} is used to remove watchpoint from a watched object. 
 
 
 
 %For example, this feature enables efficient detection of use-after-free bugs without preventing deallocated memory from being immediately reallocated for another use. This efficiency comes from our ability to have one watchpoint for the freed memory, and another watchpoint for newly allocated memory occupying the same space.
 	
-\paragraph{Watchpoints are viral.} If an address $A$ is watched, then every address derived from $A$ (e.g. through copying or offsetting) is also watched. This is useful for memory and taint analysis tools: a watchpoint that is added early on in the lifetime of an address (e.g., immediately before the address of newly allocated memory is returned from an allocator) can persist and propagate until no more derived addresses exist.
+\paragraph{Watchpoints are viral.} If an address $A$ is watched, then every address derived from $A$ (e.g., through copying or offsetting) is also watched. This is useful for memory and taint analysis tools: a watchpoint that is added early in the lifetime of an address (e.g., immediately before the address of newly allocated memory is returned from an allocator) can persist and propagate until no more derived addresses exist.
 
 \begin{figure}[t]
 \begin{center}
 \epsfig{file=watchpoints.eps, width=2.9in, height=1.4in}
 \end{center}
+\vspace{-15pt}
 \caption{\label{fig:watchpoint_descriptor_table}A watched address (bottom left) and its corresponding unwatched address (top left) are compared. The process of resolving the watchpoint descriptor is shown.}
 %for the watched address is shown.}
 \end{figure}
@@ -574,7 +576,7 @@ Behavioural watchpoints also support the following important features:
 
 %This approach has some drawbacks when an offset of a watched address causes the low-order bits to overflow into the counter index; however, we have several solutions to this problem. 
 
-\paragraph{Watchpoint descriptors are context specific.} Our design separates the allocation and management of descriptors from the watchpoint framework. It is the responsibility of the client to manage its descriptor. %, which % and declare the corrosponding descriptor type for the framework. provides complete flexibility in handling it. 
+\paragraph{Watchpoint descriptors are context-specific.} Our design separates the allocation and management of descriptors from the watchpoint framework. It is the responsibility of the client to manage its descriptor. %, which % and declare the corrosponding descriptor type for the framework. provides complete flexibility in handling it. 
 When a watchpoint gets added to an object, the client determines \emph{type}, \emph{meta-information} and \emph{vtable} which needs to be stored in the descriptor. These descriptors can be arbitrarily customized or extended based on the need of the client. %One powerful application of this extension is discussed in section~\ref{sec:access_policies}.
 
 
@@ -586,15 +588,15 @@ When a watchpoint gets added to an object, the client determines \emph{type}, \e
 %Arbitrary extension of descriptors supports our goal of overcoming the incongruency between the needs of debugging an analysis tools (contextual information about watched memory), and how existing software implements watchpoints (watched memory is opaque).
 
 %\subsection{Extensions}
-%Our design includes the following extensions to watchpoints, which expand on the behavioural aspect of our watchpoint implementation.
-%principally enable the \emph{behavioural} aspect of our software-based watchpoint .
+%Our design includes the following extensions to watchpoints, which expand on the behavioral aspect of our watchpoint implementation.
+%principally enable the \emph{behavioral} aspect of our software-based watchpoint .
 %Our goal of using watchpoints to watch the memory of objects required the following 
 
 %\paragraph{Watchpoints are type-specific.} When a watchpoint is added to an address, the \emph{type} of the address determines what meta-information is included in the descriptor, as well as what functions to invoke when memory watched by the watchpoint is accessed. Two powerful applications of this extension are discussed in \Secref{type_overflow} and \Secref{access_policies}.
 
-\paragraph{Triggered watchpoint functions are polymorphic.} The function invoked when watched memory is accessed is decided using a descriptor-specific \emph{vtable}. Each vtable provides eight functions: four read and four write functions. Each function is specific to a memory operand size (1, 2, 4, or 8 bytes). A watchpoint descriptor is initialised with either a generic or a type-specific vtable, which are specific to the \emph{type} of the watched address. %Behavioural watchpoints earn their name from vtable because they allow watchpoints to behave differently when watched memory is accessed.
+\paragraph{Triggered watchpoint functions are polymorphic.} The function invoked when watched memory is accessed is decided using a descriptor-specific \emph{vtable}. Each vtable provides eight functions: four read and four write functions. Each function is specific to a memory operand size (1, 2, 4, or 8 bytes). A watchpoint descriptor is initialised with either a generic or a type-specific vtable, which is specific to the \emph{type} of the watched address. %Behavioral watchpoints earn their name from vtable because they allow watchpoints to behave differently when watched memory is accessed.
 
-%When invoked, a vtable function operates on the watched address and its descriptor. Behavioural watchpoints earn their name from their ability to behave differently based on the meta-information stored in the descriptor and the (type-specific) vtable function invoked.
+%When invoked, a vtable function operates on the watched address and its descriptor. Behavioral watchpoints earn their name from their ability to behave differently based on the meta-information stored in the descriptor and the (type-specific) vtable function invoked.
 
 %\paragraph{Watchpoints remember their originating address.} The address to which a watchpoint is first added is called its \emph{base address}, and is stored in the watchpoint descriptor. We designed watchpoints to remember their base address because it helps to ``anchor" contextual information. When a watchpoint is added, \emph{something} is known about the watched address. Later in a program's execution, an offset of the watched address might be dereferenced. Little can be said about the dereferenced address in relation to the watchpoint's originating address without knowing the originating address.
 
@@ -620,7 +622,7 @@ When a watchpoint gets added to an object, the client determines \emph{type}, \e
 %changing part of an address, not by 
 %The watched range is \emph{anchored} on the address on which the watchpoint is initially added (called the base address). 
 
-%Behavioural watchpoints are implemented by changing an address to-be-watched into a non-canonical address\footnote{In kernel space on x86, a canonical virtual address has its 16 high-order bits set to 1. Current x86 processors require that the 8 high-order bits of an address match the $9^{th}$ highest order bit.}. The translation from unwatched to watched alters the unused high-order bits of an address. 
+%Behavioral watchpoints are implemented by changing an address to-be-watched into a non-canonical address\footnote{In kernel space on x86, a canonical virtual address has its 16 high-order bits set to 1. Current x86 processors require that the 8 high-order bits of an address match the $9^{th}$ highest order bit.}. The translation from unwatched to watched alters the unused high-order bits of an address. 
 
 %There are several implications of this design decision:
 %\begin{enumerate}
@@ -629,28 +631,28 @@ When a watchpoint gets added to an object, the client determines \emph{type}, \e
 
 
 
-%Behavioural watchpoints were designed with the following goals in mind:
+%Behavioral watchpoints were designed with the following goals in mind:
 %\begin{enumerate}
 %	\item 
 %\end{enumerate}
 
 %\subsection{Design Challenges}
-%The design of behavioural watchpoint put following restrictions in the way it can be used:
+%The design of behavioral watchpoint put following restrictions in the way it can be used:
 %\begin{enumerate*}
 %\item[i)] A watchpoint must be added at the object source. Adding watchpoints at arbitrary location must be avoided since there is a possibility of another unwatched copy of the same object existing in the program data. This will introduce incosistency and object will be partially watched.
-%\item[ii)] Behavioural watchpoints can't be used in applications playing with high-order bits. Such operation will introduce incosistency in descriptor information attached with watched addresses. Applications doing similar things like depending on sign-extension of the 64-bit addresses or handling of 32-bit addresses is also not supported. Identifying and ignoring such cases is a problem and we are exploring solutions to this.
-%\item[iii)] Behavioural watchpoints are implemented for Linux kernel and one should be careful when using page-table lookup for watched addresses. Operations such as \texttt{\_\_pfn\_to\_page} and \texttt{\_\_page\_to\_pfn} can lead to wrong \texttt{page} structure or loss of descriptor information.
+%\item[ii)] Behavioral watchpoints can't be used in applications playing with high-order bits. Such operation will introduce incosistency in descriptor information attached with watched addresses. Applications doing similar things like depending on sign-extension of the 64-bit addresses or handling of 32-bit addresses is also not supported. Identifying and ignoring such cases is a problem and we are exploring solutions to this.
+%\item[iii)] Behavioral watchpoints are implemented for Linux kernel and one should be careful when using page-table lookup for watched addresses. Operations such as \texttt{\_\_pfn\_to\_page} and \texttt{\_\_page\_to\_pfn} can lead to wrong \texttt{page} structure or loss of descriptor information.
 %One should also be careful when using kernel functions for page-table lookup on watched addresses.
 %We found some cases where fast method of mapping virtual addresses to physical addresses for page table lookup was depending on sign extension of 64-bit addresses which is not the case when it is changed to watched addresses. 
 
  %can't be used in applications playing with high-order bits. Such operation will introduce incosistency in descriptor information attached with watched addresses. Applications doing similar things like depending on sign-extension of the 64-bit addresses or handling of 32-bit addresses is also not supported. Identifying and ignoring such cases is a problem and we are exploring solutions to this.
 %\end{enumerate*} 
 
-%put some restrictions on the range of applications which it can handle. Behavioural watchpoint tags the higer-order bits with the descriptor information and it can't handle the application which is also doing similar things. Such operation will corrupt the embedded descriptor information and once lost we don't have a way to recover it. Identifying applications doing such operation is challenging. Applications which are only handling with 32-bit address is also not supported. We designed behavioural watchpoints for the Linux kernel but all the functionalities in the kernel is not very suitable for the approach. We found some cases where fast method of mapping virtual addresses to physical addresses for page table lookup was depending on sign extension of 64-bit addresses which is not the case when it is changed to watched addresses. 
+%put some restrictions on the range of applications which it can handle. Behavioral watchpoint tags the higer-order bits with the descriptor information and it can't handle the application which is also doing similar things. Such operation will corrupt the embedded descriptor information and once lost we don't have a way to recover it. Identifying applications doing such operation is challenging. Applications which are only handling with 32-bit address is also not supported. We designed behavioral watchpoints for the Linux kernel but all the functionalities in the kernel is not very suitable for the approach. We found some cases where fast method of mapping virtual addresses to physical addresses for page table lookup was depending on sign extension of 64-bit addresses which is not the case when it is changed to watched addresses. 
 
 %has the following design implications. 
 
-%are designed for Linux kernel and generated by providing an extra-level of indirection and storing the descriptor information in higher order bits of the address. This puts restrictions on the range of applications which behavioural watchpoints can handle. The applications storing tagging information with the high-order bits of the address works against the design of behavioural watchpoints. Identifying such operations in an application is an open problem for us. Our solution of embedding descriptor information in object address is not very friendly with some of the kernel functions.   
+%are designed for Linux kernel and generated by providing an extra-level of indirection and storing the descriptor information in higher order bits of the address. This puts restrictions on the range of applications which behavioral watchpoints can handle. The applications storing tagging information with the high-order bits of the address works against the design of behavioral watchpoints. Identifying such operations in an application is an open problem for us. Our solution of embedding descriptor information in object address is not very friendly with some of the kernel functions.   
 
 
 %However identifying such operations in an application is an  
@@ -672,7 +674,7 @@ When a watchpoint gets added to an object, the client determines \emph{type}, \e
 
 %\subsection{Architecture}
 
-%The implementation of behavioural watchpoints distinguishes between watched addresses and their descriptors.
+%The implementation of behavioral watchpoints distinguishes between watched addresses and their descriptors.
 
 %A \emph{watched address} is a pointer with an index into the \emph{watchpoint descriptor table} embedded in its bits (\Figref{watchpoint_descriptor_table}). The $23$-bit index into the descriptor table is formed by concatenating bits $[20,27]$ (called the \emph{counter index}) with bits $[48,62]$ (called the \emph{partial index}). A watched address and its unwatched counterpart share the same counter index; however, the partial index of a watched address varies\footnote{This feature of watchpoints allows for a one-to-one mapping between a watched and unwatched address, and a one-to-many mapping between a watchpoint and all addresses watched by that watchpoint. The one-to-one mapping is formed by masking the high-order bits containing the partial index.}. Partial indexes are recorded in the \emph{partial index counter table}. When a watchpoint is allocated, the current value stored in the counter table for that specific counter index is incremented and returned as the watchpoint's partial index. This allocation strategy allows for at most $2^{15}$ watchpoints per counter index or megabyte of memory\footnote{x86 has byte-addressable memory. The counter index begins at bit $20$, giving each watchpoint $1$ MB = $2^{20}$ B degrees of freedom. However, if an over/underflow across the 1 MB-aligned boundary occurs then the counter index will be corrupted. We can correct one bit of corruption by requiring that the counter index and the partial index have the same sign. An alternative solution is uses a different indexing scheme. We have successfully experimented with a different indexing scheme that solves the aforementioned overflow errors, but sacrifices the one-to-one relationship between a watched and unwatched address.}.
 
@@ -681,11 +683,11 @@ When a watchpoint gets added to an object, the client determines \emph{type}, \e
 
 \section{Implementation}
 %Granary is a DBT framework that is under development. Its primary novelty is its ability to efficiently instrument arbitrary, binary Linux kernel modules without imposing overhead on the kernel. 
-We implemented behavioural watchpoints using Granary, a dynamic binary translation (DBT) framework \cite{GranaryAtOSDI}. Granary instruments arbitrary, binary Linux kernel modules efficiently and without imposing overhead when the core kernel is running. Our aim is to use Granary to analyse and debug kernel modules, which are a frequent source of vulnerabilities in operating systems \cite{BGI,LXFI}.
+We implemented behavioral watchpoints using Granary, a dynamic binary translation (DBT) framework \cite{GranaryAtOSDI}. Granary instruments arbitrary, binary Linux kernel modules efficiently and without imposing overhead when the core kernel is running. Our aim is to use Granary to analyse and debug kernel modules, which are a frequent source of vulnerabilities in operating systems \cite{BGI,LXFI}.
 
 Granary is unique among DBT systems because it understands and uses program type information. For example, Granary can substitute the execution of a function with a \emph{wrapped} version of itself. A wrapped function has the same type specification as its unwrapped counterpart and can freely modify its arguments and return value. Granary can wrap some module functions in this way, even if the module source code is unavailable.
 
-While Granary provides a framework for instrumenting kernel modules, we found it was hard to write powerful instrumentation code using low-level DBT abstractions, which motivated the design of behavioural watchpoints. Next, we describe examples of watchpoint-based debugging applications developed for kernel modules.
+While Granary provides a framework for instrumenting kernel modules, we found it was hard to write powerful instrumentation code using low-level DBT abstractions, which motivated the design of behavioral watchpoints. Next, we describe examples of watchpoint-based debugging applications developed for kernel modules.
 
 %We are developing Granary as a framework for building kernel module analysis and debugging tools. Analysing kernel modules is important because they extend the functionality and bug count of operating systems [TODO CITATION]. However, analysing module behavior is challenging. Static analysis of module source code is difficult because of the tight interaction between modules and the kernel. Some modules, however, are only distributed in a binary format, which can make static analysis intractable (on x86).
 
@@ -697,14 +699,14 @@ While Granary provides a framework for instrumenting kernel modules, we found it
 
 
 \section{Applications\label{sec:applications}}
-The following sub-sections describe four applications of behavioural watchpoints and their implementations. In these sub-sections, we use the term \emph{object} to refer to a range of memory locations that are allocated together.% as a unit.
+The following sub-sections describe four applications of behavioral watchpoints and their implementations. In these sub-sections, we use the term \emph{object} to refer to a range of memory locations that are allocated together.% as a unit.
 
 %to describe a value or aggregate of values stored in memory and referenced by a memory address.
 
 \subsection{Buffer Overflows \label{sec:buffer_overflows}}
-A buffer overflow occurs when a program--in an attempt to write to some object's memory--actually writes to adjacent memory cells. One method of detecting buffer overflows relies on the compiler to allocate ``poisoned" regions of memory around each object \cite{AddressSanitizer}. Small overflows (e.g., off-by-one errors) are detected by this approach because they access poisoned memory. Big overflows that ``skip" over poisoned memory and access nearby objects in memory are not detected.
+A buffer overflow occurs when a program---in an attempt to write to some object's memory---actually writes to adjacent memory cells. One method of detecting buffer overflows relies on the compiler to allocate ``poisoned" regions of memory around each object \cite{AddressSanitizer}. Small overflows (e.g., off-by-one errors) are detected by this approach because they access poisoned memory. Big overflows that ``skip" over poisoned memory and access nearby objects in memory are not detected.
 
-Our insight is that unrelated objects will have different base addresses (i.e. the address of one object will not be derived from the base %address of another), and therefore a watched object can be adjacent to a different un/watched object without conflict.
+Our insight is that unrelated objects will have different base addresses (i.e., the address of one object will not be derived from the base %address of another), and therefore a watched object can be adjacent to a different un/watched object without conflict.
 address of another), and thus each object can be distinguished and uniquely identified with a separate watchpoint address%, even when objects are adjacent to each other.
 %to an unwatched one, or one with a distinct watchpoint, without conflict.
 %\emph{addresses} stored in hardware registers, like high-level programming language variable names, are typically not used to simultaneously access two unrelated objects.
@@ -719,6 +721,7 @@ FUNC_WRAPPER(__kmalloc, (size, flags), {
   return addr;
 })
 \end{lstlisting}
+\vspace{-10pt}
 \caption{\label{fig:kmalloc_wrapper}Definition of the \texttt{\_\_kmalloc} function wrapper in Granary. The above code expands into a function for wrapping the \texttt{\_\_kmalloc} allocator. Calls to \texttt{\_\_kmalloc} are transparently substituted with calls to the generated wrapper. The wrapper invokes the original \texttt{\_\_kmalloc} function and returns a watched version of the allocated address.}
 \end{figure}
 
@@ -726,8 +729,8 @@ We employ two overflow detection policies: heap-based, and stack-based. % All th
 
 
 \paragraph{Heap-based overflow detection\label{sec:heap_overflow}}
-The heap-based detection policy detects buffer overflow errors on all heap-allocated objects. We use Granary to wrap the kernel's memory allocators (e.g., \texttt{kmalloc}) and add watchpoints to the addresses returned by those allocators (\Figref{kmalloc_wrapper}). The lifetime of a watchpoint added is tied to the lifetime of the memory it watches. Each watchpoint's descriptor records bounds information about the allocated memory in the form of the object's base and limit address \cite{BccFatPointers}. A buffer overflow is detected when a dereference of watched address occurs outside of the bounds recorded by the watchpoint's descriptor. %(\Figref{detect_overflow}). 
-The memory operand size-specific vtable functions are helpful in catching corner cases where memory reads or writes access both an object and its adjacent memory cells.%, as shown in case $(3)$ of \Figref{detect_overflow}.
+The heap-based detection policy detects buffer overflow errors on all heap-allocated objects. We use Granary to wrap the kernel's memory allocators (e.g., \texttt{kmalloc}) and add watchpoints to the addresses returned by those allocators (see \Figref{kmalloc_wrapper}). The lifetime of an added watchpoint is tied to the lifetime of the memory it watches. Each watchpoint's descriptor records bounds information about the allocated memory in the form of the object's base and limit address \cite{BccFatPointers}. A buffer overflow is detected when a dereference of a watched address occurs outside of the bounds recorded by the watchpoint's descriptor. %(\Figref{detect_overflow}). 
+The memory operand-size-specific vtable functions help catch corner cases where memory reads or writes access both an object and its adjacent memory cells.%, as shown in case $(3)$ of \Figref{detect_overflow}.
 
 %intersect an object's memory and the adjacent memory cells.
 %The vtable functions used by these watchpoints detects buffer overflows when a dereference of a watched address 
@@ -759,7 +762,7 @@ The memory operand size-specific vtable functions are helpful in catching corner
 
 % If the type of an object is known then it can reveal semantic relationships which can enable further type- or heap-based overflow detection. For example, the fields within a structure might encode memory bounds information (as would be the case for a vector-like data structure)
 
-%The type-based detection policy is applied when the type of a pointer is known (i.e. not \texttt{void*}). The simplest use case of type information is to infer the limit address of a typed pointer. A more complex use case arises when the fields within a structure encode memory bounds information. In both cases, the vtable functions for typed and untyped memory operate in the same way.
+%The type-based detection policy is applied when the type of a pointer is known (i.e., not \texttt{void*}). The simplest use case of type information is to infer the limit address of a typed pointer. A more complex use case arises when the fields within a structure encode memory bounds information. In both cases, the vtable functions for typed and untyped memory operate in the same way.
 
 %The type of an addressable object becomes known to Granary in the context of a wrapped function. The run-time system performs a type-specific initialisation of a watchpoint's descriptor when a watchpoint is added to a pointer/address with a known type. Type-specific descriptor initialisation is a powerful feature because it allows for new watchpoints to be lazily added (thus propagating our detecting capabilities) to newly discovered objects referenced \emph{within} an object of a known type. We automatically propagate type-based watchpoints using type specifications generated from parsing \texttt{C} header files. %Some manual post-processing is required if one is to inform the system of semantic relationships between function arguments or structure fields.
 
@@ -774,11 +777,11 @@ The memory operand size-specific vtable functions are helpful in catching corner
 To detect stack overflows, we view the memory occupied by the activation frame of an invoked function as a dynamically-sized buffer. %Like our other buffer overflow policies, we use a watchpoint to detect accesses to memory outside of this buffer. %Unlike our other policies, %we only \emph{associate} a descriptor with this buffer, and rely on a different mechanism to \emph{add} the watchpoint to stack addresses.
 %, and manage what addresses are watched with this descriptor using a separate mechanism.
 %We separate adding watchpoints from allocating descriptors for stack overflow detection. In particular, 
-We associate a descriptor with the buffer represented by the activation frame of a called function. This descriptor tracks the bounds of the frame over the lifetime of the function call. We update the bounds of the frame (in the descriptor) when the frame grows or shrinks. When a function returns, the descriptor's bounds shrink to zero leaving descriptor allocated.% , but the descriptor remains allocated.
+We associate a descriptor with the buffer represented by the activation frame of a called function. This descriptor tracks the bounds of the frame over the lifetime of the function call. We update the bounds of the frame (in the descriptor) when the frame grows or shrinks. When a function returns, the descriptor's bounds shrink to zero, but the descriptor remains allocated.
 
 %We add an activation frame's watchpoint to a stack address under two circumstances. 
 
-Separately managing descriptors allows us to optimize for the two most common sources of stack overflows. First, if we see an instruction that copies the stack or frame pointers, then we assume that the copied address can escape the function. A stack address escaping a function is a potential stack-overflow risk. Adding the frame's watchpoint to this address \emph{taints} the copied address. Future copies or displacements of the watched address implicitly propagate its taintedness because offsets of a watched address reference the same descriptor. A dereference of an escaped pointer--even one happening after the function has returned--is detected as an overflow because the watchpoint descriptor remains live. Second, if we see an indexed dereference of the stack or frame pointers that uses a dynamically bound index, then we assume that the effective memory address accessed is a potential stack-overflow risk. We translate the dereferencing instruction to add the frame's watchpoint to the effective address before the address is dereferenced.
+Separately managing descriptors allows us to optimize for the two most common sources of stack overflows. First, if we see an instruction that copies the stack or frame pointers, then we assume that the copied address can escape the function. A stack address escaping a function is a potential stack-overflow risk. Adding the frame's watchpoint to this address \emph{taints} the copied address. Future copies or displacements of the watched address implicitly propagate its taintedness because offsets of a watched address reference the same descriptor. A dereference of an escaped pointer---even one happening after the function has returned---is detected as an overflow because the watchpoint descriptor remains live. Second, if we see an indexed dereference of the stack or frame pointers that uses a dynamically bound index, then we assume that the effective memory address accessed is a potential stack-overflow risk. We translate the dereferencing instruction to add the frame's watchpoint to the effective address before the address is dereferenced.
 
 %and addresses that we want to have watched by 
 %Under this lens, we associate a watchpoint descriptor with each function call that tracks the bounds of each activation frame. 
@@ -795,7 +798,7 @@ Separately managing descriptors allows us to optimize for the two most common so
 
 %Detecting stack overflows is important because they are commonly used in remote code execution and privilege-escalation attacks against operating systems \cite{SecureProgramExecFlowTracking}.
 
-% more support from Granary's run-time system. At a high level, each activation frame is assigned a dedicated watchpoint when a function is called. The effect of an instruction that grows or shrinks an activation frame's size is reflected by a similar change to the base address\footnote{The run-time call stack on x86 grows into lower memory.\comment{ Modifying the base address instead of the limit address allows us to maintain one set of vtable functions for all three buffer overflow detection policies.}} of the frame's watchpoint descriptor. When a function returns, the descriptor of its activation frame is cleared, but remains allocated\footnote{Reclaiming/reusing allocated but unlikey-to-be-used watchpoints is challenging. One overflow-specific approach is to ensure that the next use of the watchpoint is for a buffer whose bounds do not intersect with the current use's bounds. Another approach is to use some number of context switches as a grace period in which the watchpoint cannot be reused, but after which it can be reused. We leave this as future work.} lest the address of a local variable escape the function\footnote{If the address of a stack-allocated object escapes its function activation frame, then that pointer is said to be \emph{dangling}. Dereferences of dangling pointers can cause stack overflow errors. In the kernel, data stored in unallocated stack memory (e.g. through a dangling pointer) is at risk of being clobbered by interrupt stack frames and by function activation frames.}.  
+% more support from Granary's run-time system. At a high level, each activation frame is assigned a dedicated watchpoint when a function is called. The effect of an instruction that grows or shrinks an activation frame's size is reflected by a similar change to the base address\footnote{The run-time call stack on x86 grows into lower memory.\comment{ Modifying the base address instead of the limit address allows us to maintain one set of vtable functions for all three buffer overflow detection policies.}} of the frame's watchpoint descriptor. When a function returns, the descriptor of its activation frame is cleared, but remains allocated\footnote{Reclaiming/reusing allocated but unlikey-to-be-used watchpoints is challenging. One overflow-specific approach is to ensure that the next use of the watchpoint is for a buffer whose bounds do not intersect with the current use's bounds. Another approach is to use some number of context switches as a grace period in which the watchpoint cannot be reused, but after which it can be reused. We leave this as future work.} lest the address of a local variable escape the function\footnote{If the address of a stack-allocated object escapes its function activation frame, then that pointer is said to be \emph{dangling}. Dereferences of dangling pointers can cause stack overflow errors. In the kernel, data stored in unallocated stack memory (e.g., through a dangling pointer) is at risk of being clobbered by interrupt stack frames and by function activation frames.}.  
 
 %We assume that a memory instruction operating on a constant displacement of the stack or frame pointer registers is well-behaved. However, if the stack or frame pointer registers participate in a memory instruction and the displacement from the register is dynamically-bound then that instruction is suspect. An instruction that copies the address in the stack or frame pointer registers is also suspect because the copied address might escape the current function or participate in a local stack overflow. All suspect instructions are translated to transparently add the frame's dedicated watchpoint to the dereferenced or copied address.
 
@@ -803,7 +806,7 @@ Separately managing descriptors allows us to optimize for the two most common so
 
 \subsection{Selective Memory Shadowing\label{sec:uninitialised_memory}}
 
-In this section, we show how to use behavioural watchpoints to shadow memory. Previous work has focused on full memory shadowing \cite{Memcheck}, while watchpoints enable \emph{selective} shadowing of watched objects. We describe how the initialisation state of each byte of watched memory is tracked using shadow memory, and how to detect bugs related to the usage of heap-allocated memory.
+In this section, we show how to use behavioral watchpoints to shadow memory. Previous work has focused on full memory shadowing \cite{Memcheck}, while watchpoints enable \emph{selective} shadowing of watched objects. We describe how the initialisation state of each byte of watched memory is tracked using shadow memory, and how to detect bugs related to the usage of heap-allocated memory.
 
 We use Granary to wrap kernel memory allocators and deallocators (e.g., \texttt{kmalloc}, \texttt{kfree}). Wrapped allocators add watchpoints to allocated memory, and wrapped deallocators remove watchpoints before invoking the kernel's deallocators. Selective shadow memory is maintained as a watchpoint descriptor-specific, variable-sized bitset. %\footnote{As an optimisation, shadow memory for small objects is embedded in the watchpoint descriptor.}. 
 Each byte of allocated memory corresponds to one bit of descriptor-specific shadow memory. The bits in shadow memory are initialised to zero. Individual bits are flipped to one by write-specific vtable functions when there is a write to the bytes of memory shadowed by those bits. 
@@ -831,7 +834,7 @@ Read-specific vtable functions detect read-before-write bugs by checking if the 
 \paragraph{Memory freeing bugs}
 We detect freeing of non-heap memory when the argument to a kernel memory deallocator is not a watched address. We detect an invalid free, such as freeing an offset of an allocated object, when the unwatched address of a watched object being deallocated is different than the watchpoint descriptor's base address. We detect use-after-free bugs by marking the descriptor of a watched address being deallocated as dead. The lifetime of a dead descriptor extends beyond that of the object so that a later use of any watched address with that descriptor will report a use-after-free bug. We detect double-free bugs when the descriptor of a watched address being deallocated is already marked as dead.
 
-%We use Granary to wrap the kernel's deallocation functions (e.g. \texttt{kfree}). Because all allocators are wrapped and add watchpoints, freeing of non-heap memory is easily detected when  
+%We use Granary to wrap the kernel's deallocation functions (e.g., \texttt{kfree}). Because all allocators are wrapped and add watchpoints, freeing of non-heap memory is easily detected when  
 
 %We detect freeing of non-heap memory 
 
@@ -842,19 +845,20 @@ We detect freeing of non-heap memory when the argument to a kernel memory deallo
 %Two positive side-effects of our approach is that it detects double-free bugs and freeing of non-heap memory bugs. A double-free is detected when a watched address for an already deallocated object is passed as an argument to a deallocator. An attempt to free non-heap memory is detected when an unwatched address is passed as an argument to a deallocator.
 
 \subsection{Memory Leak Detection\label{sec:memory_leaks}}
-We built a memory leak detector for module-owned objects. We define an module-owned object to be one that the module must deallocate. Not all module-owned objects are allocated by modules. For example, \texttt{sk\_buff} objects used by network modules are allocated by kernel interrupt handlers, but must be deallocated by modules. Our approach ensures that all module-owned objects are watched when allocated.
+We built a memory leak detector for module-owned objects. We define a module-owned object to be one that the module must deallocate. Not all module-owned objects are allocated by modules. For example, \texttt{sk\_buff} objects used by network modules are allocated by kernel interrupt handlers, but must be deallocated by modules. Our approach ensures that all module-owned objects are watched when allocated.
 
-The leak detector scans kernel memory using the conventional mark/sweep algorithm \cite{Boehm:1991:MPG:113445.113459} to detect if/when module-owned objects become unreachable starting from a set of ``root'' objects. This is challenging because modules regularly lose internal references to the objects that they own. For example, network modules allocate and pass \texttt{net\_device} structures to the kernel, without retaining references to those objects. Network modules can later indirectly access these objects using the kernel's \texttt{netdev\_priv} interface. Tracking the liveness of these objects requires a view on kernel execution not normally provided by module-only instrumentation. Behavioural watchpoints solves this problem by giving the leak detector visibility on kernel accesses to watched objects, which trigger hardware traps that attach instrumentation to the kernel code. This instrumentation marks kernel-acessed watched objects as live.
+The leak detector scans kernel memory using the conventional mark/sweep algorithm \cite{Boehm:1991:MPG:113445.113459} to detect if/when module-owned objects become unreachable starting from a set of ``root'' objects. This is challenging because modules regularly lose internal references to the objects that they own. For example, network modules allocate and pass \texttt{net\_device} structures to the kernel, without retaining references to those objects. Network modules can later indirectly access these objects using the kernel's \texttt{netdev\_priv} interface. Tracking the liveness of these objects requires a view on kernel execution not normally provided by module-only instrumentation. Behavioral watchpoints solve this problem by giving the leak detector visibility into kernel accesses to watched objects, which trigger hardware traps that attach instrumentation to the kernel code. This instrumentation marks kernel-accessed watched objects as live.
 
 Three benefits of our watchpoints solution are: \begin{inparaenum}[i)]
 	\item watched addresses are easily disambiguated from normal memory addresses and integers that look like watched addresses;
-	\item descriptors provide extra meta-information that allows our system to limit the scope of scanning; and
+%        \item the scope of scanning can be limited using the meta-information provided by descriptors
+	\item descriptors provide meta-information that allows our system to limit the scope of scanning; and
 	\item scanning can stop if all watched objects are reached.
 \end{inparaenum}
 
 %Two key benefits of our watchpoints solution is that watched addresses are easily disambiguated from normal memory addresses, and that we can stop scanning memory if all watched objects are live and reachable.
 
-%Detecting leaks of such objects with a limited view of module is challenging. Behavioural watchpoints provide a way to ensure the visibility of such objects by triggering a hardware trap on its access and mark them as live.
+%Detecting leaks of such objects with a limited view of module is challenging. Behavioral watchpoints provide a way to ensure the visibility of such objects by triggering a hardware trap on its access and mark them as live.
 %on memory access of these objects by enabling demand-based translation and marking them as live.
 
 
@@ -866,11 +870,11 @@ Three benefits of our watchpoints solution are: \begin{inparaenum}[i)]
 %All module owned objects are not directly allocated by the module and kernel can allocate it on behalf of the module. 
 %All module-owned objects are not directly allocated by the module. For example, a network driver module may make a call to an skb allocator (to allocate a \texttt{sk\_buff} structure) in an interrupt context. Once the buffer is send over the network, it is the responsibility of the network module to deallocate the buffer. In Granary, we use wrappers to add watchpoints at relevant allocators such as \texttt{\_\_alloc\_skb}. The leak detector keeps track of these watched objects and reports possible leaks. 
 
-%Module holds partial view of the kernel and to detect leaked object there is a need to perform reachability analysis on both kernel and module objects. Behavioural watchpoints helps in identifying the objects owned by the module, thus limiting the type of objects which needs to be tracked. Watched object holds descriptor information in high-order bits, making it easy to track the memory state information. This is helpful in identifying live objects and reduces the chance of false positive. The leak detector uses the conventional mark and sweep algorithm and mostly-parallel collector~\cite{Boehm:1991:MPG:113445.113459} to perform the rechability analysis.
+%Module holds partial view of the kernel and to detect leaked object there is a need to perform reachability analysis on both kernel and module objects. Behavioral watchpoints helps in identifying the objects owned by the module, thus limiting the type of objects which needs to be tracked. Watched object holds descriptor information in high-order bits, making it easy to track the memory state information. This is helpful in identifying live objects and reduces the chance of false positive. The leak detector uses the conventional mark and sweep algorithm and mostly-parallel collector~\cite{Boehm:1991:MPG:113445.113459} to perform the rechability analysis.
  
 %Watched addresses are also more easily disambiguated 
 
-%Behavioural watchpoints are important for implementing the leak detector because they help in identifying the objects owned by the module, thus limiting the type of objects that need to be tracked. Each watched object holds the memory state information embedded in its descriptor, making it easy to identify objects that are live and reachable. % from one of the root-sets\footnote{The root-set for leak detector reachability-analysis includes both kernel and module data structures.}. 
+%Behavioral watchpoints are important for implementing the leak detector because they help in identifying the objects owned by the module, thus limiting the type of objects that need to be tracked. Each watched object holds the memory state information embedded in its descriptor, making it easy to identify objects that are live and reachable. % from one of the root-sets\footnote{The root-set for leak detector reachability-analysis includes both kernel and module data structures.}. 
 %The leak detector uses the conventional mark and sweep algorithm and mostly-parallel collector~\cite{Boehm:1991:MPG:113445.113459} to perform the reachability analysis.
 
 
@@ -910,7 +914,7 @@ Three benefits of our watchpoints solution are: \begin{inparaenum}[i)]
 
 %In Granary, we use wrappers to add watchpoints to the relevant allocators (e.g., \texttt{\_\_alloc\_skb, skb\_clone}). The leak detector keeps track of these watched objects and reports possible leak. 
 
-%Behavioural watchpoints are important for implementing the leak detector because: 1) They help in identifying the objects owned by the module, thus limiting the type of objects which needs to be tracked, 2) The watched addresses are easily identifiable because they hold the descriptor table index in high-order bits and 3) Each watched object holds the memory state information with it. Thus making it easy to identify the the objects which are live and reachable from one of the root-sets. The leak detector uses the conventional mark and sweep algorithm and mostly-parallel collector~\cite{Boehm:1991:MPG:113445.113459} to perform the rechability analysis. % from its root-sets. 
+%Behavioral watchpoints are important for implementing the leak detector because: 1) They help in identifying the objects owned by the module, thus limiting the type of objects which needs to be tracked, 2) The watched addresses are easily identifiable because they hold the descriptor table index in high-order bits and 3) Each watched object holds the memory state information with it. Thus making it easy to identify the the objects which are live and reachable from one of the root-sets. The leak detector uses the conventional mark and sweep algorithm and mostly-parallel collector~\cite{Boehm:1991:MPG:113445.113459} to perform the rechability analysis. % from its root-sets. 
 %Based on this leak detector divides the watchpoints into three different categories: 
 %\begin{enumerate*}
 %   \item[i)] Watched objects which are reachable from one of its rootset. They are not considered as leak.  
@@ -942,7 +946,7 @@ Three benefits of our watchpoints solution are: \begin{inparaenum}[i)]
 
 %The module ownership of an object is identified by its context of allocation and access pattern. 
 
-%Behavioural watchpoints track the ownership of an object by identifying its source of allocation and access pattern.
+%Behavioral watchpoints track the ownership of an object by identifying its source of allocation and access pattern.
 
 
 %However, 
@@ -952,7 +956,7 @@ Three benefits of our watchpoints solution are: \begin{inparaenum}[i)]
 
 %Every time kernel losses a piece of memory, it is gone until the next boot and a serious memory leak in the kernel modules can easily make the system unstable. One method of detecting memory leak in kernel modules is to perform rechability analysis on all allocated objects. This is challenging because not all module owned objects are directly allocated by the module and there is frequent transfer in ownership of the objects at kernel/module interface.
 
-%Behavioural watchpoints track the ownership of an object by identifying its source of allocation and access pattern. To detect the memory leak, Leak detector performs rechability-based analysis only on the objects owned by the module. Study of object ownership also helps in fixing the responsibility for deallocating the object and any default in this is considered as memory leak.
+%Behavioral watchpoints track the ownership of an object by identifying its source of allocation and access pattern. To detect the memory leak, Leak detector performs rechability-based analysis only on the objects owned by the module. Study of object ownership also helps in fixing the responsibility for deallocating the object and any default in this is considered as memory leak.
 
 %We use Granary to wrap the kernel’s memory allocator functions (e.g., \texttt{\_\_kmalloc}) and add watchpoints to the objects allocated in the module context. It decides this based on the call graph of the allocator functions. Granary also tracks the kernel objects passed to the module at interface and mark them as module known objects. Leak detector use these module known objects along with kernel and module static data as rootset to perform rechability analysis. Other alternative for rechability-analysis is to scan entire kernel heap.  
 
@@ -977,9 +981,9 @@ Three benefits of our watchpoints solution are: \begin{inparaenum}[i)]
 %Memory leaks can be a problem in applications, especially those which run for a long time
 %Memory leak bugs are common in Linux kernel and its modules which are mostly developed in C. These bugs are difficult to identify or track-down without the help of a dedicated tool. 
 %Memory leaks in kernel is worse because of its long running nature and every time a piece of memory is lost, it is gone until the next boot. 
-%Linux kernel modules works as an extension of Operating system providing additional features, while running in the privilege mode and a serious memory leak in the kernel modules can make the operating system unstable. In this section we will describe our approach of using behavioural watchpoints in detecting memory leak bugs in kernel modules.
+%Linux kernel modules works as an extension of Operating system providing additional features, while running in the privilege mode and a serious memory leak in the kernel modules can make the operating system unstable. In this section we will describe our approach of using behavioral watchpoints in detecting memory leak bugs in kernel modules.
 
-%\paragraph{Liveness Analysis} Our approch of leak detector is based on the liveness analysis of heap objects, which are directly or indirectly allocated by the modules. Similar to existing solution like Purify \cite{Rs_purify:fast} and Dr Memory \cite{Bruening:2011:PMC:2190025.2190067}, leak detector uses garbage collection algorithm to detect memory leaks. %Behavioural Watchpoints being able to hold context-specific information with each objects and are equally efficient for both the methods
+%\paragraph{Liveness Analysis} Our approch of leak detector is based on the liveness analysis of heap objects, which are directly or indirectly allocated by the modules. Similar to existing solution like Purify \cite{Rs_purify:fast} and Dr Memory \cite{Bruening:2011:PMC:2190025.2190067}, leak detector uses garbage collection algorithm to detect memory leaks. %Behavioral Watchpoints being able to hold context-specific information with each objects and are equally efficient for both the methods
 %It uses conventional mark and sweep algorithm and recursively follows potential pointers from the data, stack segment and heaps to mark the objects live and reachable. Many implementation of mark and sweep based tracing algorithm exist and a straightforward implementation invloves stopping the client(mutator) to perform the liveness analysis. This solution is not very efficient when client operates on very large heap-memory as it will increase the pause-time and touching heap memory will blow away the cache, seriously affecting the system performance. One solution to reduce the pause time is using generational collection based algorithm. However, this avoids the problem by scheduling the collector thread less frequently, thus doesn't remove the problem completely. In our leak detector we remove this problem by using mostly parallel collector. Mostly-parallel collectors takes an orthogonal approach and reduces the problem by having collector doing most of the work parallel to the client and using stop-the-world to prepare the system. 
 
 
@@ -1010,7 +1014,7 @@ Three benefits of our watchpoints solution are: \begin{inparaenum}[i)]
 %The existing solution for memory leak detection uses two methods to perform livness analysis: the reference counting \cite{Maebe_precisedetection} and tracing methods \cite{Bruening:2011:PMC:2190025.2190067}. 
 
 
-%The existing solution for memory leak detection uses two methods to perform the liveness analysis: the direct method and the indirect method. Direct method requires that a record be associated with each object in the heap on behalf of the objects which gets updated based on if a pointer is set to refer to this object or the reference of the object is lost. Reference counting is one of the common direct method for detecting leaks. The indirect method includes the tracing algorithm where the live-ness analysis is performed at later point of time independent of client. Behavioural Watchpoints embed context-specific information with each objects and are equally efficient for implementing both direct and indirect method of leak detection but we decided to use the tracing algorithm which has no overhead cost for maintaining and updating the records for each objects.
+%The existing solution for memory leak detection uses two methods to perform the liveness analysis: the direct method and the indirect method. Direct method requires that a record be associated with each object in the heap on behalf of the objects which gets updated based on if a pointer is set to refer to this object or the reference of the object is lost. Reference counting is one of the common direct method for detecting leaks. The indirect method includes the tracing algorithm where the live-ness analysis is performed at later point of time independent of client. Behavioral Watchpoints embed context-specific information with each objects and are equally efficient for implementing both direct and indirect method of leak detection but we decided to use the tracing algorithm which has no overhead cost for maintaining and updating the records for each objects.
 
 %\paragraph{Leak Scan}
 %A common tracing algorithm used to implement garbage collector is mark-and-sweep operation. We used similar method to perform the liveness analysis on module allocated objects. A straigntforward implementation of tracing based collector involves stoping the client when collector is in the process performing liveness-analysis. This solution is not very efficient when client operates on very large heap-memory as it stops the clients for longer time. The solution to reduce the pause time in tracing algorithm based leak detector is generational or parallel collection. Generational collection avoids stop-the-world time by running the collector thread occasionally, thus doesn't remove the problem completely. However the parallel collectors takes orthogonal approach and reduces the time of pause by running collector parallel to client. We took similar approach of mostly-parallel collector to perform the object liveness analysis.  
@@ -1074,7 +1078,7 @@ Three benefits of our watchpoints solution are: \begin{inparaenum}[i)]
 %or root that object is reachable. A most common direct method of garbage detection/collection is the reference counting. In this method each object is associated with the reference count which gets incremented when a pointer is set to refer to this object and is decremented when a reference of the object gets deleted. The reference counting mechanism is advantageous in the sense that the memory management overhead in this case gets distributed throughout the program execution but it is weak in resolving cycles and collecting the cyclic data structure.  The other indirect method includes the tracing algorithm for garbage collection. The tracing algorithm based garbage collector maintains a set of roots and periodically perform the reachability analysis to check the liveness of the objects. The tracing technique has an advantage over the reference counting is that no precaution is needed while handling cycles and also the overhead for maintaining and updating the records(reference counting) is not there.   
 
 
-% developed in C or C++ and can be difficult to identify without the help of a dedicated tool. The problem is particularly important in applications which run for a long time. Memory leak in kernel is worse because of its long running nature and every time a piece of memory is lost, it is gone until next boot. In this section we will describe our approach of using behavioural watchpoints in detecting memory leak bugs in kernel modules. Linux kernel module is a software component which extends the functionality of Operating system. Once loaded these modules executes in privilege mode having full control on the kernel resources and a serious memory leak in the kernel modules can make the system unstable.
+% developed in C or C++ and can be difficult to identify without the help of a dedicated tool. The problem is particularly important in applications which run for a long time. Memory leak in kernel is worse because of its long running nature and every time a piece of memory is lost, it is gone until next boot. In this section we will describe our approach of using behavioral watchpoints in detecting memory leak bugs in kernel modules. Linux kernel module is a software component which extends the functionality of Operating system. Once loaded these modules executes in privilege mode having full control on the kernel resources and a serious memory leak in the kernel modules can make the system unstable.
 
 %Our approch of leak detection is based on the reachability analysis of heap objects, directly or indirectly allocated by the modules, as opposed to considering unfreed memory as a leak. This is similar to tracing garbage collector’s mark-and-sweep operation. A straigntforward implementation of tracing garbage collector algorithm involves stoping the client when collector is in the process performing liveness-analysis. This solution when applied with mutators operating on very large heap is not very efficient. This is one of the primary argument against using the tracing algorithm in memory leak detection. The other solution to reduce the pause time in tracing algorithm based leak detector is: i) generational collection ii) parallel collection.  Generational collection concentrate on reclaiming recently allocated objects and it reduces the stop-the-world pause time by running the collector occasionally in-order to perform the reachability analysis on older objects. Thus, the problem of stop-the-world is not completely removed. Parallel collectors takes orthogonal approach and reduces the time of pause by running it parallel to the mutator(client). The parallel collector imposes overhead on the mutator but it eliminates long pause due to stop the world. While designing the collector we took middle approach and used mostly parallel tracing collector to perform the reachability analysis. We update the root-set in stop-the-world collector and perform the rechability analysis on these rootsets by running collector parallel to the mutators.
 
@@ -1098,6 +1102,12 @@ Three benefits of our watchpoints solution are: \begin{inparaenum}[i)]
 %To detect memory leaks in the kernel modules we perform reachability-based analysis, where a leak is defined as a heap memory that is no longer has any pointer to it as considering any unfreed memory as a leak.
 
  %to wrap kernel memory allocators and deallocators (e.g., \texttt{kmalloc}, \texttt{kfree}). Wrapped allocators add watchpoints to the addresses returned by the kernel's allocators, and wrapped deallocators remove watchpoints before invoking the kernel's deallocators. Selective shadow memory is maintained as a watchpoint descriptor-specific, variable-sized bitset\footnote{As an optimisation, shadow memory for small objects is embedded in the watchpoint descriptor.}. Each byte of allocated memory corresponds to one bit of descriptor-specific shadow memory. The bits in shadow memory are initialised to zero. Individual bits are flipped to one by write-specific vtable functions when there is a write to the bytes of memory shadowed by those bits. 
+
+\subsection{Field-grained Access Policies\label{sec:access_policies}}
+
+We briefly describe the use of watchpoints at the granularity of object fields. Using a field-accessor API, we can detect Linux kernel rootkits, which is challenging because rootkits actively try to hide their existence. However, rootkits often leave hints of their presence in the form of violated data structure invariants \cite{GibraltarKernelInvariants,OSck}. 
+\Figref{field_invariant_check} shows an example use of the field-accessor API that checks an invariant on the \texttt{ioctl} field of any watched object whose type is \texttt{struct file\_operations}. A rootkit violating this invariant can prevent an anti-virus program from scheduling periodic scans---scans which might otherwise detect the presence of a rootkit. However, a violation of this invariant is immediately detected by our run-time system because the field-accessor API enables active rather than passive checking of invariants.
+
 \begin{figure}[t]
 \begin{lstlisting}[language=C,basicstyle=\footnotesize\ttfamily]
 // Invariant: rtc_fops->ioctl == &rtc_ioctl
@@ -1109,14 +1119,10 @@ WATCH_WRITE(struct file_operations, ioctl, {
   }
 })
 \end{lstlisting}
-\vspace{-1em}
+\vspace{-8pt}
 \caption{\label{fig:field_invariant_check}This code example shows how to check invariant 1(h) from \cite{GibraltarKernelInvariants} using field-accessor API. The invariant checked prevents a (potential) kernel rootkit from installing its own \texttt{ioctl} handler into the Real-Time Clock and preventing virus-scans from being scheduled, thus allowing rootkit to go undetected.}
 %. Anti-virus programs depend on this built-in \texttt{ioctl} handler to periodically schedule scans. Replacing the handler can prevent such scans from being scheduled, thus allowing the rootkit to go undetected.}
 \end{figure}
-
-\subsection{Field-grained Access Policies\label{sec:access_policies}}
-In this section, we briefly describe using watchpoints at the granularity of object fields. Using a field-accessor API, we can detect Linux kernel rootkits, which is challenging because rootkits actively try to hide their existence. However, rootkits often leave hints of their existence in the form of violated data structure invariants \cite{GibraltarKernelInvariants,OSck}. 
-\Figref{field_invariant_check} shows an example use of the field-accessor API that checks an invariant on the \texttt{ioctl} field of any watched object whose type is \texttt{struct file\_operations}. A rootkit violating this invariant can prevent an anti-virus program from scheduling periodic scans---scans which might otherwise detect the presence of a rootkit. However, a violation of this invariant is immediately detected by our run-time system because the field-accessor API enables active rather than passive checking of invariants.
 
 %The field-accessor API connects to type-specific watchpoint vtables through automatically generated code. Generating this code involves parsing \texttt{C} structure type layout information from the \texttt{C} header files of the Linux kernel.
 
@@ -1136,22 +1142,15 @@ In this section, we briefly describe using watchpoints at the granularity of obj
 %\end{multicols}
 %\end{figure*}
 
-We evaluated behavioural watchpoints using a microbenchmark and measured the performance of common filesystem operations on an in-memory disk. Our tests ran on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ 2 Duo 2.93 GHz CPU with 4GB physical memory. %Watchpoint instrumentation was enabled for every memory operation. We measured the overhead of the watchpoint framework using a null client and heap-based buffer overflow detector. %We also evaluated the performance of heap-based buffer overflow detector developed using watchpoints.
+We evaluated behavioral watchpoints using a microbenchmark and measured the performance of common filesystem operations on an in-memory disk. Our tests ran on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ 2 Duo 2.93 GHz CPU with 4GB physical memory. %Watchpoint instrumentation was enabled for every memory operation. We measured the overhead of the watchpoint framework using a null client and heap-based buffer overflow detector. %We also evaluated the performance of heap-based buffer overflow detector developed using watchpoints.
 %we used a null client and a heap-based buffer overflow detector to measure the overhead of using watchpoints. 
 %The null client includes the instrumentation for dereferencing watchpoint address.
 %To evaluated the cost of watchpoint framework we used a null client 
-\begin{figure}
-%\subfloat{
-\epsfig{file=watchpoint.eps,width=2.9in, height=1.4in}
- %}
-\caption{\label{fig:iozone-workload-overhead} Throughput (in Mb/sec) for common file system operations (write workloads (w), read workloads (r)).}
-\end{figure}
 %and we evaluated the cost of using watchpoint framework with null client and heap-based buffer overflow detector which we developed as one of the application. 
 %buffer overflow detecting watchpoints were added to all memory returned from kernel heap allocators.
 %We compare native execution, passive execution, and active execution to evaluate the performance of our watchpoint implementation. Passive and active execution both run the Granary DBT framework; however, passive execution only performs basic translation of module code, while active execution translates and adds watchpoint-specific instrumentation to module code. Our choice of network and filesystem modules depend on the fact that they are
 %\paragraph{Microbenchmark} %We performed a microbenchmark consisting of a tight-loop of memory operations which exibits the worst-case overhead of using the watchpoint framework.% with null client and buffer-overflow detector. 
 The microbenchmark performed a tight-loop of memory operations and exhibits the worst-case baseline CPU overhead of the watchpoints instrumentaion (3.8{\footnotesize$\times$}). For the same microbenchmark, the buffer-overflow detector's overhead was \texttildelow 21{\footnotesize$\times$}, which comes from the instrumentation required for precise bounds checking.
-
 
 
 %The extra cost of the buffer-overflow detector comes from the instrumentation required for bounds checking.
@@ -1182,7 +1181,16 @@ The microbenchmark performed a tight-loop of memory operations and exhibits the 
 
 %\paragraph*{Netperf} We tested network throughput and latency using the \texttt{e1000e} network device driver module. CPU utilization increased by {\texttildelow}6\%, UDP throughput decreased by at most 50\%, TCP throughput was unaffected, and both the TCP and UDP request-response latency increased by no more than 50\%. 
 
-\paragraph*{IOzone} In our experimental setup, the \texttt{ext3} filesystem and \texttt{jbd} journalling modules were mounted on a 1GB RAMDisk. IOzone creates two processes (reader, writer) performing common file operations on to a file of size 480Mb with a record size of 1Kb. Watchpoints were added to addresses returned by the two most used allocators in \texttt{ext3} and \texttt{jbd}: \texttt{\_\_kmalloc} and \texttt{kmem\_cache\_alloc}. \Figref{iozone-workload-overhead} shows the drop in throughput of filesystem operations when using the watchpoints instrumentation. In the figure, \emph{watchpoint\_null} represents the overhead of baseline watchpoints instrumentation with no added watchpoints, and \emph{watchpoint\_watched} shows the overhead where module-allocated objects are watched. Figure also shows the overhead of the heap-allocated buffer overflow application developed using behavioural watchpoints. Our implementation of buffer-overflow detector doesn't uses the standard optimizations that avoids spilling and restoring of dead registers and CPU's arithmetic flags.
+\paragraph*{IOzone} In our experimental setup, the \texttt{ext3} filesystem was mounted on a 1GB RAMDisk (mounting loads the \texttt{ext3} and \texttt{jbd} journaling kernel modules). IOzone creates two processes (reader, writer) performing common file operations on a file of size 480Mb with a record size of 1Kb. Watchpoints were added to addresses returned by the two most-used allocators in \texttt{ext3} and \texttt{jbd}: \texttt{\_\_kmalloc} and \texttt{kmem\_cache\_alloc}. \Figref{iozone-workload-overhead} shows the drop in throughput of filesystem operations when using the watchpoints instrumentation; \emph{watchpoint\_null} represents the overhead of baseline watchpoints instrumentation with no added watchpoints, and \emph{watchpoint\_watched} shows the overhead where module-allocated objects are watched. \Figref{iozone-workload-overhead} also shows the overhead of the heap-allocated buffer overflow detection using behavioral watchpoints. Our implementation of the buffer-overflow detector does not yet use the standard optimizations that avoid spilling and restoring of dead registers and the CPU's arithmetic flags.
+
+
+\begin{figure}[t!]
+%\subfloat{
+\epsfig{file=watchpoint.eps,width=2.9in, height=1.4in}
+ %}
+\vspace{-4pt}
+\caption{\label{fig:iozone-workload-overhead} Throughput (in Mb/sec) for common file system operations (write workloads (w), read workloads (r)).}
+\end{figure}
 
 %overhead of using watchpoints for debugging purpose. 
 
@@ -1201,7 +1209,7 @@ The microbenchmark performed a tight-loop of memory operations and exhibits the 
 
 %We studied the I/O performance of \texttt{ext3} module using IOzone while running it with the watchpoint framework.
 %The \texttt{ext3} module was mounted on ramdisk of size 1GB to avoid disk I/O bottleneck and measure the CPU overhead. IOzone creates two reader/ writer processes each operating on a file of 480MB written in 1Kb records. We also enabled the direct I/O to avoid the effect of buffer cache. 
-%Watchpoint framework is developed over Granary, a DBT framework. To study the performance overhead of the watchpoint framework, we first evaluated the overhead of Granary by running it with null client. This is the minimum cost associated with any client developed over Granary. We compared the performance of Granary with the watchpoint framework using the null client. The null client doesn't add watchpoints and gives the cost of using watchpoint instrumentation. We also wrapped the two most used allocators of \texttt{ext3} (e.g. \texttt{\_\_kmalloc} and \texttt{kmem\_cache\_alloc}) to add watchpoints to the allocated objects. 
+%Watchpoint framework is developed over Granary, a DBT framework. To study the performance overhead of the watchpoint framework, we first evaluated the overhead of Granary by running it with null client. This is the minimum cost associated with any client developed over Granary. We compared the performance of Granary with the watchpoint framework using the null client. The null client doesn't add watchpoints and gives the cost of using watchpoint instrumentation. We also wrapped the two most used allocators of \texttt{ext3} (e.g., \texttt{\_\_kmalloc} and \texttt{kmem\_cache\_alloc}) to add watchpoints to the allocated objects. 
 %As shown (\Figref{iozone-workload-overhead}), Granary itself causes a drop in throughput by {\texttildelow}35\% and using the watchpoint framework leads to a further drop of {\texttildelow}20\%. We also noticed that there is a further drop of {\texttildelow}10\% in throughput by adding watchpoints with \texttt{ext3}-allocated object. This is because many of these watched objects were shared with the kernel and any attempt to dereference them triggers the hardware-exception and attaches the watchpoint framework, instrumenting a part of the kernel code. These overheads are acceptable for a tool that detects complex memory usage bugs.
 
 
@@ -1239,13 +1247,13 @@ The microbenchmark performed a tight-loop of memory operations and exhibits the 
 %On the microbenchmark, passive instrumentation has a 4\% overhead and active instrumentation has a 20x overhead. For the \texttt{rcutorture} module, 
 %the overhead of passive instrumentation is 4\% and the overhead of active instrumentation is 20x
 %under a worst-case scenario with a microbenc
-%Our evaluation of the performance of behavioural watchpoints 
+%Our evaluation of the performance of behavioral watchpoints 
 
 \section{Related Work}
 %Watchpoints are an important debugging facility that help developers track accesses to memory. Most state-of-the-art processors provide some support for hardware watchpoints, but such watchpoints are usually scarce or require specialised hardware support \cite{Mondrix,UnlimitedWatchpoints}. 
 
 %\paragraph{Hardware-based}
-Greathouse \emph{et al.}~\cite{UnlimitedWatchpoints} propose a hardware solution that efficiently supports an unlimited number of watchpoints. Witchel and Asanovic \cite{Mondrix} describes the implementation of memory protection domains for the Linux kernel. Protection domains are implemented using specialised hardware and enable fine- and coarse-grained memory protection using a mechanism similar to hardware watchpoints. Unlike our approach, both of these depend on specialised hardware and require that applications using this hardware separately maintain context-specific information. Suh \emph{et al.} \cite{SecureProgramExecFlowTracking} propose a method of secure program execution by tracking dynamic information flow. Memory tagging at the hardware level allows their system to track tainted data as it propagates through a running program. Behavioural watchpoints are similar insofar as a watched address is tagged, and this tag propagates through a program.
+Greathouse \emph{et al.}~\cite{UnlimitedWatchpoints} propose a hardware solution that efficiently supports an unlimited number of watchpoints. Witchel and Asanovic \cite{Mondrix} describe the implementation of memory protection domains for the Linux kernel. Protection domains are implemented using specialised hardware and enable fine- and coarse-grained memory protection using a mechanism similar to hardware watchpoints. Unlike our approach, both of these depend on specialised hardware and require that applications using this hardware separately maintain context-specific information. Suh \emph{et al.} \cite{SecureProgramExecFlowTracking} propose a method of secure program execution by tracking dynamic information flow. Memory tagging at the hardware level allows their system to track tainted data as it propagates through a running program. Behavioral watchpoints are similar insofar as a watched address is tagged, and this tag propagates through a program.
 
 
 %makes the case for supporting an unlimited number of watchpoints. A hardware solution is proposed and multiple applications are described. Unlike our approach, the cited approach depends on specialised hardware and requires that applications using these watchpoints maintain their own context-specific information.
@@ -1254,10 +1262,10 @@ Greathouse \emph{et al.}~\cite{UnlimitedWatchpoints} propose a hardware solution
 
 %\paragraph{Software-based}
 Zhao \emph{et al.} \cite{DynamoRIOWatchpoints} describe a method of implementing an efficient and scalable DBT-based watchpoint system. It uses page protection and indirection through a hash table to track watched memory. This approach does not support watching ranges of memory, and context-specific information. Lueck \emph{et al.} \cite{PinADX} introduce semantic watchpoints as part of the PinADX system. %, an extension of the PIN DBT framework. 
-It enables interactive debugging by triggering debugger breakpoints when semantic conditions are met. While similar in spirit to behavioural watchpoints, semantic watchpoints do not maintain context-specific, per-watchpoint state. 
+It enables interactive debugging by triggering debugger breakpoints when semantic conditions are met. While similar in spirit to behavioral watchpoints, semantic watchpoints do not maintain context-specific, per-watchpoint state. 
 
-%In this respect, a semantic watchpoint is similar to a behavioural watchpoint whose vtable functions trap when a semantic condition is met.
-% using DynamoRIO, a popular user-space DBT framework. The method described is very efficient, but unlike behavioural watchpoints, views memory as an opaque sequence of bytes. 
+%In this respect, a semantic watchpoint is similar to a behavioral watchpoint whose vtable functions trap when a semantic condition is met.
+% using DynamoRIO, a popular user-space DBT framework. The method described is very efficient, but unlike behavioral watchpoints, views memory as an opaque sequence of bytes. 
 %There have been several proposals on implementing watchpoints in software. 
 %Zhao introduced a method for supporting millions of software-based watchpoints using DynamoRIO, a popular user-space DBT framework \cite{DynamoRIOWatchpoints}. Their method is very efficient and does not require inspecting all memory. 
 %Our approach differs from theirs in that we e
@@ -1267,19 +1275,23 @@ It enables interactive debugging by triggering debugger breakpoints when semanti
 
 
 \section{Conclusions and Future Work}
-%We created behavioural watchpoints with the goal of simplifying the implementation of program analysis and debugging tools. We implemented behavioural watchpoints in software because hardware approaches to watchpoints do not meet the needs of program analysis tools. We identified an incongruency between how existing software implements watchpoints and how program analysis tools use watchpoints. Finally, we overcame this incongruency by developing a new form of watchpoint that maintains its own context-specific information---information that is required for large-scale program analysis. We demonstrated the usability of behavioural watchpoints by describing the implementation of three memory error detection and protection policies.
+%We created behavioral watchpoints with the goal of simplifying the implementation of program analysis and debugging tools. We implemented behavioral watchpoints in software because hardware approaches to watchpoints do not meet the needs of program analysis tools. We identified an incongruency between how existing software implements watchpoints and how program analysis tools use watchpoints. Finally, we overcame this incongruency by developing a new form of watchpoint that maintains its own context-specific information---information that is required for large-scale program analysis. We demonstrated the usability of behavioral watchpoints by describing the implementation of three memory error detection and protection policies.
 
-We created behavioural watchpoints with the goal of simplifying the implementation of DBT-based program analysis and debugging tools. Behavioural watchpoints are a new type of software watchpoint, which address both the scalability limits of hardware watchpoints and the lack of contextual information with traditional software watchpoints.  The key innovation is to maintain context-specific information about the memory being watched---information that is required for large-scale program analysis---with the watchpoint itself.  Thus, behavioural watchpoints resolve the incongruency between how existing software implements watchpoints and how program analysis tools use watchpoints. We demonstrated the usability of behavioural watchpoints by describing the implementation of several memory error detection and protection policies. Although our evaluation is limited at this stage, the overheads of behavioural watchpoints, as implemented in Granary, are quite reasonable for the target use of debugging kernel modules.
+We created behavioral watchpoints to simplify the implementation of DBT-based program analysis and debugging tools. Behavioral watchpoints 
+%are a new type of software watchpoint, which 
+address both the scalability limits of hardware watchpoints and the lack of contextual information with traditional software watchpoints.  The key innovation is to maintain context-specific information about the memory being watched, which is required for large-scale program analysis, with the watchpoint itself.  Thus, behavioral watchpoints resolve the incongruency between how existing software implements watchpoints and how program analysis tools use watchpoints. We demonstrated the usability of behavioral watchpoints by describing several memory error detection and protection applications. Although our current evaluation is limited, the overheads of behavioral watchpoints
+%, as implemented in Granary, 
+are quite reasonable for the target use of debugging kernel modules.
 
-As future work, we will investigate the applicability of behavioural watchpoints as a means of isolating and enforcing control-flow integrity policies on Linux kernel modules.
+As future work, we will investigate the applicability of behavioral watchpoints as a means of isolating and enforcing control-flow integrity policies on Linux kernel modules.
 
 
-%Behavioural watchpoints make it easier to implement program analysis and 
+%Behavioral watchpoints make it easier to implement program analysis and 
 
 %overcome the incongruency
 
 
-%We have established that behavioural watchpoints are useful for implementing memory error detection and protection policies. In summary, we conclude.
+%We have established that behavioral watchpoints are useful for implementing memory error detection and protection policies. In summary, we conclude.
 
 % The bibliography should be embedded for final submission.
 \bibliographystyle{acm}
