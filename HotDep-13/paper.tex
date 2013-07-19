@@ -80,7 +80,7 @@
 
 %for single author (just remove % characters)
 \author{
-{\rm Peter Goodman} \hspace{1.5em} {\rm Akshay Kumar} \hspace{1.5em} {\rm Angela Demke Brown} \hspace{1.5em} {\rm Ashvin Goel}\\
+{\rm Akshay Kumar} \hspace{1.5em} {\rm Peter Goodman} \hspace{1.5em}  {\rm Angela Demke Brown} \hspace{1.5em} {\rm Ashvin Goel}\\
 University of Toronto
 } % end author
 
@@ -378,7 +378,7 @@ pointer and trick the kernel into accessing illegal memory. Finding the source o
 
 %  Give example of debugging TCP buffer header ... DBT would operate only when TCP code is executing.
 
-We have implemented behavioral watchpoints using Granary, a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. Granary instruments arbitrary, binary Linux kernel modules efficiently and without imposing overhead when the core kernel is running. We have rapidly prototyped several module debugging tools using behavioral watchpoints. These tools include buffer-overflow detector, memory leak detector, and a shadow memory based tool for logging the access patterns of different types of modules for detecting buggy or malicious behavior. We describe these tools in more detail in section~\ref{sec:applications}.
+We have implemented behavioral watchpoints using Granary, a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. Granary instruments arbitrary, binary Linux kernel modules efficiently and without imposing overhead when the core kernel is running. We have rapidly prototyped several module debugging tools using behavioral watchpoints. These tools include a buffer-overflow detector, a memory leak detector, and a shadow memory based tool for logging the access patterns of different types of modules for detecting buggy or malicious behavior. We describe these tools in more detail in Section~\ref{sec:applications}.
 
 %We also developed behavioral watchpoints based application which can be used to debug kernel modules. 
 
@@ -487,7 +487,7 @@ We have implemented behavioral watchpoints using Granary, a dynamic binary trans
 %\end{enumerate*}
 
 \section{Design}\label{sec:design}
-A behavioral watchpoint is a software-based watchpoint that triggers the invocation of a function when any watched memory is accessed. Unlike most software-based watchpoints, a behavioral watchpoint watches a \emph{range} of addresses, enabling object-granularity watchpoints. 
+A behavioral watchpoint is a software-based watchpoint that triggers the invocation of a function when any watched memory is accessed. Unlike most software-based watchpoints, a behavioral watchpoint watches a \emph{range} of addresses, enabling object-granularity watchpoints (i.e., one watchpoint watches an entire object). 
 %For example, one watchpoint can monitor all memory accesses to an object.
 
 %. This design supports our goal of allowing one watchpoint to monitor all memory accesses to a single object.
@@ -544,7 +544,7 @@ The watchpoint framework uses two approaches to perform memory operations on wat
 
 Behavioral watchpoints also support the following important features:
 
-\paragraph{Multiple watchpoints can watch the same range of memory.} Two copies of an address (e.g., two pointers to the same object) can be separately watched, so long as they manage different descriptors. This is useful for distinguishing logically different objects that occupy the same memory. For example, this feature enables efficient detection of use-after-free bugs without preventing deallocated memory from being immediately reallocated for use, due to our ability to have one watchpoint for the freed memory, and another watchpoint for newly allocated memory occupying the same space. %Watchpoint gets added with a call to \texttt{ADD\_WATCHPOINT} which takes the reference of object and corrosponding meta-information as parameter. \texttt{REMOVE\_WATCHPOINT} is used to remove watchpoint from a watched object. 
+\paragraph{Multiple watchpoints can watch the same range of memory.} Two copies of an address (e.g., two pointers to the same object) can be watched separately, so long as they manage different descriptors. This feature is useful for distinguishing logically different objects that occupy the same memory. For example, this feature enables efficient detection of use-after-free bugs without preventing deallocated memory from being immediately reallocated for use. Having one watchpoint for the freed memory, and another watchpoint for newly allocated memory occupying the same space, is critical for this application. %Watchpoint gets added with a call to \texttt{ADD\_WATCHPOINT} which takes the reference of object and corrosponding meta-information as parameter. \texttt{REMOVE\_WATCHPOINT} is used to remove watchpoint from a watched object. 
 
 
 
@@ -554,7 +554,7 @@ Behavioral watchpoints also support the following important features:
 
 \begin{figure}[t]
 \begin{center}
-\epsfig{file=watchpoints.eps, width=2.9in, height=1.4in}
+\epsfig{file=watchpoints.eps, width=3.0in, height=1.4in}
 \end{center}
 \vspace{-15pt}
 \caption{\label{fig:watchpoint_descriptor_table}A watched address (bottom left) and its corresponding unwatched address (top left) are compared. The process of resolving the watchpoint descriptor is shown.}
@@ -782,7 +782,7 @@ We associate a descriptor with the buffer represented by the activation frame of
 
 %We add an activation frame's watchpoint to a stack address under two circumstances. 
 
-Separately managing descriptors allows us to optimize for the two most common sources of stack overflows. First, if we see an instruction that copies the stack or frame pointers, then we assume that the copied address can escape the function. A stack address escaping a function is a potential stack-overflow risk. Adding the frame's watchpoint to this address \emph{taints} the copied address. Future copies or displacements of the watched address implicitly propagate its taintedness because offsets of a watched address reference the same descriptor. A dereference of an escaped pointer---even one happening after the function has returned---is detected as an overflow because the watchpoint descriptor remains live. Second, if we see an indexed dereference of the stack or frame pointers that uses a dynamically bound index, then we assume that the effective memory address accessed is a potential stack-overflow risk. We translate the dereferencing instruction to add the frame's watchpoint to the effective address before the address is dereferenced.
+Separately managing descriptors allows us to optimize for the two most common sources of stack overflows. First, if we see an instruction that copies the stack or frame pointers, then we assume that the copied address can escape the function. A stack address escaping a function is a potential stack-overflow risk. Adding the frame's watchpoint to this address \emph{taints} the copied address. Future copies or displacements of the watched address implicitly propagate its taintedness because offsets of a watched address reference the same descriptor. A dereference of an escaped pointer---even one happening after the function has returned---is detected as an overflow because the watchpoint descriptor remains live. Second, if we see an indexed dereference of the stack or frame pointers that uses a dynamically bound index, then we assume that the effective memory address accessed is a potential stack-overflow risk. We instrument the dereferencing instruction to add the frame's watchpoint to the effective address before the address is dereferenced.
 
 %and addresses that we want to have watched by 
 %Under this lens, we associate a watchpoint descriptor with each function call that tracks the bounds of each activation frame. 
@@ -846,7 +846,7 @@ We detect freeing of non-heap memory when the argument to a kernel memory deallo
 %Two positive side-effects of our approach is that it detects double-free bugs and freeing of non-heap memory bugs. A double-free is detected when a watched address for an already deallocated object is passed as an argument to a deallocator. An attempt to free non-heap memory is detected when an unwatched address is passed as an argument to a deallocator.
 
 \subsection{Memory Leak Detection\label{sec:memory_leaks}}
-We built a memory leak detector for module-owned objects. We define a module-owned object to be one that the module must deallocate. Not all module-owned objects are allocated by modules. For example, \texttt{sk\_buff} objects used by network modules are allocated by kernel interrupt handlers, but must be deallocated by modules. Our approach ensures that all module-owned objects are watched when allocated.
+We built a memory leak detector for module-owned objects. We define a module-owned object to be one that the module must deallocate. Not all module-owned objects are allocated by modules. For example, \texttt{sk\_buff} objects used by network modules are allocated by kernel interrupt handlers, but must be deallocated by the network modules. Our approach ensures that all module-owned objects are watched when allocated.
 
 The leak detector scans kernel memory using the conventional mark/sweep algorithm \cite{Boehm:1991:MPG:113445.113459} to detect if/when module-owned objects become unreachable starting from a set of ``root'' objects. This is challenging because modules regularly lose internal references to the objects that they own. For example, a network module can allocate and pass \texttt{net\_device} objects to the kernel, without retaining references to those objects. The network module can later indirectly access these objects using the kernel's \texttt{netdev\_priv} interface. Tracking the liveness of these objects requires a view on kernel execution not normally provided by module-only instrumentation. Behavioral watchpoints solve this problem by giving the leak detector visibility into kernel accesses to watched objects, which trigger hardware traps that attach instrumentation to the kernel code. This instrumentation marks kernel-accessed watched objects as live.
 
@@ -1187,9 +1187,10 @@ The microbenchmark performed a tight-loop of memory operations and exhibits the 
 
 \begin{figure}[t!]
 %\subfloat{
-\epsfig{file=watchpoint.eps,width=2.9in, height=1.4in}
+%\epsfig{file=watchpoint.eps,width=2.9in, height=1.4in}
+\epsfig{file=watchpoint.eps,width=.99\linewidth}
  %}
-\vspace{-4pt}
+\vspace{-6pt}
 \caption{\label{fig:iozone-workload-overhead} Throughput (in Mb/sec) for common file system operations (write workloads (w), read workloads (r)).}
 \end{figure}
 
@@ -1284,7 +1285,7 @@ address both the scalability limits of hardware watchpoints and the lack of cont
 %, as implemented in Granary, 
 are quite reasonable for the target use of debugging kernel modules.
 
-As future work, we will investigate the applicability of behavioral watchpoints as a means of isolating and enforcing control-flow integrity policies on Linux kernel modules.
+As future work, we will investigate the applicability of behavioral watchpoints for isolating and enforcing control-flow integrity policies on Linux kernel modules.
 
 
 %Behavioral watchpoints make it easier to implement program analysis and 
