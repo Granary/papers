@@ -4,6 +4,7 @@
 \usepackage{epsfig,subfigure,framed}
 %\usepackage{multicol,tabularx}
 \usepackage{textcomp} % for tilde
+\usepackage{paralist} % for in-paragraph lists
 
 % Used for code snippets
 \usepackage{listings,courier}
@@ -48,14 +49,14 @@
 %\renewcommand{\bibliography}[1]{{\footnotesize \ORIGbibliography{#1}}}
 
 % Add a horizontal rule above captions, and make captions closer to their figures
-\DeclareCaptionFormat{ruled_caption}{#1#2#3\hrulefill}
+\DeclareCaptionFormat{ruled_caption}{#1#2#3\hrulefill\vspace{-1.5em}}
 \captionsetup[figure]{format=ruled_caption}
-\let\ORIGcaption\caption
-\renewcommand{\caption}[2][\compressedcaption]{%
-\def\compressedcaption{#2}%
-    \vspace{-12pt}%
-    \ORIGcaption[#1]{#2}%
-    \vspace{-12pt}}
+%\let\ORIGcaption\caption
+%\renewcommand{\caption}[2][\compressedcaption]{%
+%\def\compressedcaption{#2}%
+%    \vspace{-12pt}%
+%    \ORIGcaption[#1]{#2}%
+%    \vspace{-12pt}}
 
 % Decrease spacing before \paragraphs
 \titlespacing{\paragraph}{%
@@ -97,9 +98,9 @@ Program debugging is a tedious and time-consuming part of software development. 
 
 Dynamic binary translation (DBT) systems provide a powerful facility for building debugging and analysis tools because they allow instrumenting the entire program at an instruction granularity~\cite{DynamoRIOKernel}. For example, Valgrind's Memcheck \cite{Seward:2005:UVD:1247360.1247362} and Helgrind \cite{Muehlenfeld:2007:FDM:1229428.1229457} use binary translation to detect common memory errors (e.g. use-after-free, read-before-write, memory leaks) and threading bugs (e.g. data races) in user space programs. These tools are powerful but developing them is challenging for the following three reasons.
 
-First, DBT system provides infrastructure for code-centric instrumentation, where as many interesting debugging applications would prefer to have data-centric instrumentation. Applications like data race detection, memory usage bugs, or performance debugging such as finding false sharing hotspots are all naturally data-centric. 
-Second, DBT abstractions are too low-level and individual instructions only reveal what memory addresses are being accessed. This is at odds with specialising instruction-level instrumentation with higher-level abstractions. For example, developing a tool to debug the data corruption problem in a specific field of a data structure (e.g. \texttt{i\_flags} field of \texttt{inode} structure), or detecting invariant violation in a data structure requires instrumentation to be specialised to individual data structures.
-Third, existing DBT system instruments everything to give comprehensive coverage, but introduces significant overheads for realistic instrumentation. If a bug occurs because the \texttt{i\_flags} field of one of the \texttt{inode} structure is corrupted then instrumenting every memory access in the kernel is excessive. In practice, we would like to instrument only the code that operates on \texttt{inode}.
+First, DBT system provides infrastructure for code-centric instrumentation, whereas many interesting debugging applications would prefer to have data-centric instrumentation. Applications like data race detection, memory usage bugs, or performance debuggers that find false sharing hotspots are all naturally data-centric. 
+Second, DBT abstractions are too low-level: individual instructions only reveal what memory addresses are being accessed. This is at odds with specialising instruction-level instrumentation with higher-level abstractions. For example, developing a tool to debug the data corruption problem in a specific field of a data structure (e.g. \texttt{i\_flags} field of \texttt{inode} structure), or detecting invariant violation in a data structure requires instrumentation to be specialised to individual data structures.
+Third, existing DBT systems instrument everything to give comprehensive coverage, which introduces significant overheads for realistic instrumentation. If a bug occurs because the \texttt{i\_flags} field of one of the \texttt{inode} structure is corrupted then instrumenting every memory access in the kernel is excessive. In practice, we would like to instrument only the code that operates on \texttt{inode}s.
 
 
 
@@ -553,7 +554,8 @@ Behavioural watchpoints also support the following important features:
 \begin{center}
 \epsfig{file=watchpoints.eps, width=2.9in, height=1.1in}
 \end{center}
-\caption{\label{fig:watchpoint_descriptor_table}A watched address (bottom left) and its corresponding unwatched address (top left) are compared. The process of resolving the watchpoint descriptor is shown.}%for the watched address is shown.}
+\caption{\label{fig:watchpoint_descriptor_table}A watched address (bottom left) and its corresponding unwatched address (top left) are compared. The process of resolving the watchpoint descriptor is shown.}
+%for the watched address is shown.}
 \end{figure}
 
 %We are exploring several solutions to this problem.
@@ -724,7 +726,7 @@ We employ two overflow detection policies: heap-based, and stack-based. % All th
 
 
 \paragraph{Heap-based overflow detection\label{sec:heap_overflow}}
-The heap-based detection policy detects buffer overflow errors on all heap-allocated objects. We use Granary to wrap the kernel's memory allocator (e.g., \texttt{kmalloc}) and add watchpoints to the addresses returned by the allocators (\Figref{kmalloc_wrapper}). The lifetime of a watchpoint added is tied to the lifetime of the memory it watches. Each watchpoint's descriptor records bounds information about the allocated memory in the form of the object's base and limit address \cite{BccFatPointers}. A buffer overflow is detected when a dereference of watched address occurs outside of the bounds recorded by the watchpoint's descriptor. %(\Figref{detect_overflow}). 
+The heap-based detection policy detects buffer overflow errors on all heap-allocated objects. We use Granary to wrap the kernel's memory allocators (e.g., \texttt{kmalloc}) and add watchpoints to the addresses returned by those allocators (\Figref{kmalloc_wrapper}). The lifetime of a watchpoint added is tied to the lifetime of the memory it watches. Each watchpoint's descriptor records bounds information about the allocated memory in the form of the object's base and limit address \cite{BccFatPointers}. A buffer overflow is detected when a dereference of watched address occurs outside of the bounds recorded by the watchpoint's descriptor. %(\Figref{detect_overflow}). 
 The memory operand size-specific vtable functions are helpful in catching corner cases where memory reads or writes access both an object and its adjacent memory cells.%, as shown in case $(3)$ of \Figref{detect_overflow}.
 
 %intersect an object's memory and the adjacent memory cells.
@@ -803,7 +805,7 @@ Separately managing descriptors allows us to optimize for the two most common so
 
 In this section, we show how to use behavioural watchpoints to shadow memory. Previous work has focused on full memory shadowing \cite{Memcheck}, while watchpoints enable \emph{selective} shadowing of watched objects. We describe how the initialisation state of each byte of watched memory is tracked using shadow memory, and how to detect bugs related to the usage of heap-allocated memory.
 
-We use Granary to wrap kernel memory allocators and deallocators (e.g., \texttt{kmalloc}, \texttt{kfree}). Wrapped allocators add watchpoints to the addresses returned by the kernel's allocators, and wrapped deallocators remove watchpoints before invoking the kernel's deallocators. Selective shadow memory is maintained as a watchpoint descriptor-specific, variable-sized bitset. %\footnote{As an optimisation, shadow memory for small objects is embedded in the watchpoint descriptor.}. 
+We use Granary to wrap kernel memory allocators and deallocators (e.g., \texttt{kmalloc}, \texttt{kfree}). Wrapped allocators add watchpoints to allocated memory, and wrapped deallocators remove watchpoints before invoking the kernel's deallocators. Selective shadow memory is maintained as a watchpoint descriptor-specific, variable-sized bitset. %\footnote{As an optimisation, shadow memory for small objects is embedded in the watchpoint descriptor.}. 
 Each byte of allocated memory corresponds to one bit of descriptor-specific shadow memory. The bits in shadow memory are initialised to zero. Individual bits are flipped to one by write-specific vtable functions when there is a write to the bytes of memory shadowed by those bits. 
 
 %When a wrapped allocator is invoked, a watchpoint is added to the addresses returned by those allocators
@@ -840,8 +842,19 @@ We detect freeing of non-heap memory when the argument to a kernel memory deallo
 %Two positive side-effects of our approach is that it detects double-free bugs and freeing of non-heap memory bugs. A double-free is detected when a watched address for an already deallocated object is passed as an argument to a deallocator. An attempt to free non-heap memory is detected when an unwatched address is passed as an argument to a deallocator.
 
 \subsection{Memory Leak Detection\label{sec:memory_leaks}}
-We have built a detector for memory leaks caused by modules. Our approach is based on performing reachability analysis on module-owned objects. %The challenges involved in developing leak detector makes behavioural watchpoint a natural fit.
-Module allocates objects that they share with the kernel. Module may lose the references of objects passed to the kernel. For example, a network module can allocate an object and pass it to the kernel with \texttt{net\_device} structure. Module doesn't hold the reference of the object and accesses it only through the kernel interface \texttt{netdev\_priv}. Detecting leaks of such objects with limited view of module is challenging. Behavioural watchpoints provide a way to ensure the visibility of such objects by triggering a hardware trap on its access and mark them as live.
+We built a memory leak detector for module-owned objects, where we say that an object is owned by a module if that module deallocates the object. Not all module-owned objects are allocated by modules. For example, \texttt{sk\_buff} objects used by network modules are allocated by kernel interrupt handlers, but must be deallocated by modules. Our approach ensures that all module-owned objects are watched when allocated.
+
+The leak detector scans kernel memory using the conventional mark/sweep algorithm \cite{Boehm:1991:MPG:113445.113459} to detect if/when module-owned objects become unreachable starting from a set of ``root'' objects. This is challenging because modules regularly lose internal references to the objects that they own. For example, network modules allocate and pass \texttt{net\_device} structures to the kernel, without retaining references to those objects. Network modules can later indirectly access these objects using the kernel's \texttt{netdev\_priv} interface. Tracking the liveness of these objects requires a view on kernel execution not normally provided by module-only instrumentation. Behavioural watchpoints solves this problem by giving the leak detector visibility on kernel accesses to watched objects, which trigger hardware traps that attach instrumentation to the kernel code. This instrumentation marks kernel-acessed watched objects as live.
+
+Three benefits of our watchpoints solution are: \begin{inparaenum}[i)]
+	\item watched addresses are easily disambiguated from normal memory addresses and integers that look like watched addresses;
+	\item descriptors provide extra meta-information that allows our system to limit the scope of scanning; and
+	\item scanning can stop if all watched objects are reached.
+\end{inparaenum}
+
+%Two key benefits of our watchpoints solution is that watched addresses are easily disambiguated from normal memory addresses, and that we can stop scanning memory if all watched objects are live and reachable.
+
+%Detecting leaks of such objects with a limited view of module is challenging. Behavioural watchpoints provide a way to ensure the visibility of such objects by triggering a hardware trap on its access and mark them as live.
 %on memory access of these objects by enabling demand-based translation and marking them as live.
 
 
@@ -851,12 +864,14 @@ Module allocates objects that they share with the kernel. Module may lose the re
 %The object becomes invisible to the module and gets accessed through the kernel interface \texttt{netdev\_priv}. This makes it difficult to detect leaks based on module's limited view. Bhavioural watchpoints provides a way to ensure complete visibility on memory access of these objects by enabling demand-based translation and marking them as live.
 
 %All module owned objects are not directly allocated by the module and kernel can allocate it on behalf of the module. 
-All module-owned objects are not directly allocated by the module. For example, a network driver module may make a call to an skb allocator (to allocate a \texttt{sk\_buff} structure) in an interrupt context. Once the buffer is send over the network, it is the responsibility of the network module to deallocate the buffer. In Granary, we use wrappers to add watchpoints at relevant allocators such as \texttt{\_\_alloc\_skb}. The leak detector keeps track of these watched objects and reports possible leaks. 
+%All module-owned objects are not directly allocated by the module. For example, a network driver module may make a call to an skb allocator (to allocate a \texttt{sk\_buff} structure) in an interrupt context. Once the buffer is send over the network, it is the responsibility of the network module to deallocate the buffer. In Granary, we use wrappers to add watchpoints at relevant allocators such as \texttt{\_\_alloc\_skb}. The leak detector keeps track of these watched objects and reports possible leaks. 
 
 %Module holds partial view of the kernel and to detect leaked object there is a need to perform reachability analysis on both kernel and module objects. Behavioural watchpoints helps in identifying the objects owned by the module, thus limiting the type of objects which needs to be tracked. Watched object holds descriptor information in high-order bits, making it easy to track the memory state information. This is helpful in identifying live objects and reduces the chance of false positive. The leak detector uses the conventional mark and sweep algorithm and mostly-parallel collector~\cite{Boehm:1991:MPG:113445.113459} to perform the rechability analysis.
+ 
+%Watched addresses are also more easily disambiguated 
 
-Behavioural watchpoints are important for implementing the leak detector because they help in identifying the objects owned by the module, thus limiting the type of objects that need to be tracked. Each watched object holds the memory state information embedded in its descriptor, making it easy to identify objects that are live and reachable. % from one of the root-sets\footnote{The root-set for leak detector reachability-analysis includes both kernel and module data structures.}. 
-The leak detector uses the conventional mark and sweep algorithm and mostly-parallel collector~\cite{Boehm:1991:MPG:113445.113459} to perform the reachability analysis.
+%Behavioural watchpoints are important for implementing the leak detector because they help in identifying the objects owned by the module, thus limiting the type of objects that need to be tracked. Each watched object holds the memory state information embedded in its descriptor, making it easy to identify objects that are live and reachable. % from one of the root-sets\footnote{The root-set for leak detector reachability-analysis includes both kernel and module data structures.}. 
+%The leak detector uses the conventional mark and sweep algorithm and mostly-parallel collector~\cite{Boehm:1991:MPG:113445.113459} to perform the reachability analysis.
 
 
 %are easily identifiable because they hold the descriptor table index in high-order bits and 3) Each watched object holds the memory state information with it. Thus making it easy to identify the the objects which are live and reachable from one of the root-sets. The leak detector uses the conventional mark and sweep algorithm and mostly-parallel collector~\cite{Boehm:1991:MPG:113445.113459} to perform the rechability analysis.
@@ -1094,7 +1109,9 @@ WATCH_WRITE(struct file_operations, ioctl, {
   }
 })
 \end{lstlisting}
-\caption{\label{fig:field_invariant_check}This code example shows how to check invariant 1(h) from \cite{GibraltarKernelInvariants} using field-accessor API. The invariant checked prevents a (potential) kernel rootkit from installing its own \texttt{ioctl} handler into the Real-Time Clock and preventing virus-scans from being scheduled, thus allowing rootkit to go undetected.}%. Anti-virus programs depend on this built-in \texttt{ioctl} handler to periodically schedule scans. Replacing the handler can prevent such scans from being scheduled, thus allowing the rootkit to go undetected.}
+\vspace{-1em}
+\caption{\label{fig:field_invariant_check}This code example shows how to check invariant 1(h) from \cite{GibraltarKernelInvariants} using field-accessor API. The invariant checked prevents a (potential) kernel rootkit from installing its own \texttt{ioctl} handler into the Real-Time Clock and preventing virus-scans from being scheduled, thus allowing rootkit to go undetected.}
+%. Anti-virus programs depend on this built-in \texttt{ioctl} handler to periodically schedule scans. Replacing the handler can prevent such scans from being scheduled, thus allowing the rootkit to go undetected.}
 \end{figure}
 
 \subsection{Field-grained Access Policies\label{sec:access_policies}}
@@ -1127,13 +1144,13 @@ We evaluated behavioural watchpoints using a microbenchmark and measured the per
 %\subfloat{
 \epsfig{file=watchpoint.eps,width=2.5in}
  %}
-\ORIGcaption{\label{fig:iozone-workload-overhead} Filesystem module (\texttt{ext3}) I/O performance at different workloads (write workloads (w), read workloads (r)).}
+\caption{\label{fig:iozone-workload-overhead} Filesystem module (\texttt{ext3}) I/O performance at different workloads (write workloads (w), read workloads (r)).}
 \end{figure}
 %and we evaluated the cost of using watchpoint framework with null client and heap-based buffer overflow detector which we developed as one of the application. 
 %buffer overflow detecting watchpoints were added to all memory returned from kernel heap allocators.
 %We compare native execution, passive execution, and active execution to evaluate the performance of our watchpoint implementation. Passive and active execution both run the Granary DBT framework; however, passive execution only performs basic translation of module code, while active execution translates and adds watchpoint-specific instrumentation to module code. Our choice of network and filesystem modules depend on the fact that they are
 %\paragraph{Microbenchmark} %We performed a microbenchmark consisting of a tight-loop of memory operations which exibits the worst-case overhead of using the watchpoint framework.% with null client and buffer-overflow detector. 
-The microbenchmark performed a tight-loop of memory operations and exhibited the CPU overhead of using watchpoint instrumentaion (3.8{\footnotesize$\times$}). The extra cost of the buffer-overflow detector (\texttildelow 21{\footnotesize$\times$}) comes from the instrumentation required for bounds checking.
+The microbenchmark performed a tight-loop of memory operations and exhibits the worst-case baseline CPU overhead of the watchpoints instrumentaion (3.8{\footnotesize$\times$}). For the same microbenchmark, the buffer-overflow detector's overhead was \texttildelow 21{\footnotesize$\times$}, which comes from the instrumentation required for precise bounds checking.
 
 
 
@@ -1165,7 +1182,7 @@ The microbenchmark performed a tight-loop of memory operations and exhibited the
 
 %\paragraph*{Netperf} We tested network throughput and latency using the \texttt{e1000e} network device driver module. CPU utilization increased by {\texttildelow}6\%, UDP throughput decreased by at most 50\%, TCP throughput was unaffected, and both the TCP and UDP request-response latency increased by no more than 50\%. 
 
-\paragraph*{IOzone} In our experimental setup, \texttt{ext3} filesystem module was mounted on a RAMDisk of size 1GB. IOzone creates two processes (reader, writer) performing common file operations on to a file of size 480Mb with record size of 1Kb. We wrapped the two most used allocators in \texttt{ext3} \& \texttt{jbd}-- \texttt{\_\_kmalloc} and \texttt{kmem\_cache\_alloc}, to add watchpoints at allocated objects. \Figref{iozone-workload-overhead} shows the drop in throughput of filesystem operations when using the watchpoint framework. \emph{watchpoint\_null} represents the overhead of watchpoint instrumentation and \emph{watchpoint\_watched} shows the cost of watching all module allocated objects. 
+\paragraph*{IOzone} In our experimental setup, the \texttt{ext3} filesystem and \texttt{jbd} journalling modules were mounted on a 1GB RAMDisk. IOzone creates two processes (reader, writer) performing common file operations on to a file of size 480Mb with a record size of 1Kb. Watchpoints were added to addresses returned by the two most used allocators in \texttt{ext3} and \texttt{jbd}: \texttt{\_\_kmalloc} and \texttt{kmem\_cache\_alloc}. \Figref{iozone-workload-overhead} shows the drop in throughput of filesystem operations when using the watchpoints instrumentation. In the figure, \emph{watchpoint\_null} represents the overhead of baseline watchpoints instrumentation with no added watchpoints, and \emph{watchpoint\_watched} shows the overhead where every module-allocated object. 
 
 
 %overhead of using watchpoints for debugging purpose. 
