@@ -1,11 +1,12 @@
 %!PS-Adobe-3.0 EPSF-3.0
 %%Title: 
 %%Creator: fig2dev Version 3.2 Patchlevel 5d
-%%CreationDate: Fri Jul 19 14:42:19 2013
+%%CreationDate: Fri Jul 19 18:03:06 2013
 %%BoundingBox: 0 0 538 233
 %Magnification: 1.0000
 %%EndComments
 %%BeginProlog
+/MyAppDict 100 dict dup begin def
 /$F2psDict 200 dict def
 $F2psDict begin
 $F2psDict /mtrx matrix put
@@ -55,13 +56,351 @@ $F2psDict /mtrx matrix put
 /col42 {0.400 0.400 1.000 srgb} bind def
 /col43 {0.133 0.133 0.133 srgb} bind def
 /col44 {0.267 0.267 0.267 srgb} bind def
-/col45 {0.400 0.400 0.400 srgb} bind def
-/col46 {0.533 0.533 0.533 srgb} bind def
-/col47 {0.667 0.667 0.667 srgb} bind def
-/col48 {0.800 0.800 0.800 srgb} bind def
-/col49 {0.933 0.933 0.933 srgb} bind def
+/col45 {0.333 0.333 0.333 srgb} bind def
+/col46 {0.400 0.400 0.400 srgb} bind def
+/col47 {0.533 0.533 0.533 srgb} bind def
+/col48 {0.667 0.667 0.667 srgb} bind def
+/col49 {0.800 0.800 0.800 srgb} bind def
+/col50 {0.933 0.933 0.933 srgb} bind def
 
 end
+
+% This junk string is used by the show operators
+/PATsstr 1 string def
+/PATawidthshow { 	% cx cy cchar rx ry string
+  % Loop over each character in the string
+  {  % cx cy cchar rx ry char
+    % Show the character
+    dup				% cx cy cchar rx ry char char
+    PATsstr dup 0 4 -1 roll put	% cx cy cchar rx ry char (char)
+    false charpath		% cx cy cchar rx ry char
+    /clip load PATdraw
+    % Move past the character (charpath modified the
+    % current point)
+    currentpoint			% cx cy cchar rx ry char x y
+    newpath
+    moveto			% cx cy cchar rx ry char
+    % Reposition by cx,cy if the character in the string is cchar
+    3 index eq {			% cx cy cchar rx ry
+      4 index 4 index rmoveto
+    } if
+    % Reposition all characters by rx ry
+    2 copy rmoveto		% cx cy cchar rx ry
+  } forall
+  pop pop pop pop pop		% -
+  currentpoint
+  newpath
+  moveto
+} bind def
+/PATcg {
+  7 dict dup begin
+    /lw currentlinewidth def
+    /lc currentlinecap def
+    /lj currentlinejoin def
+    /ml currentmiterlimit def
+    /ds [ currentdash ] def
+    /cc [ currentrgbcolor ] def
+    /cm matrix currentmatrix def
+  end
+} bind def
+% PATdraw - calculates the boundaries of the object and
+% fills it with the current pattern
+/PATdraw {			% proc
+  save exch
+    PATpcalc			% proc nw nh px py
+    5 -1 roll exec		% nw nh px py
+    newpath
+    PATfill			% -
+  restore
+} bind def
+% PATfill - performs the tiling for the shape
+/PATfill { % nw nh px py PATfill -
+  PATDict /CurrentPattern get dup begin
+    setfont
+    % Set the coordinate system to Pattern Space
+    PatternGState PATsg
+    % Set the color for uncolored pattezns
+    PaintType 2 eq { PATDict /PColor get PATsc } if
+    % Create the string for showing
+    3 index string		% nw nh px py str
+    % Loop for each of the pattern sources
+    0 1 Multi 1 sub {		% nw nh px py str source
+	% Move to the starting location
+	3 index 3 index		% nw nh px py str source px py
+	moveto			% nw nh px py str source
+	% For multiple sources, set the appropriate color
+	Multi 1 ne { dup PC exch get PATsc } if
+	% Set the appropriate string for the source
+	0 1 7 index 1 sub { 2 index exch 2 index put } for pop
+	% Loop over the number of vertical cells
+	3 index 		% nw nh px py str nh
+	{			% nw nh px py str
+	  currentpoint		% nw nh px py str cx cy
+	  2 index oldshow	% nw nh px py str cx cy
+	  YStep add moveto	% nw nh px py str
+	} repeat		% nw nh px py str
+    } for
+    5 { pop } repeat
+  end
+} bind def
+
+% PATkshow - kshow with the current pattezn
+/PATkshow {			% proc string
+  exch bind			% string proc
+  1 index 0 get			% string proc char
+  % Loop over all but the last character in the string
+  0 1 4 index length 2 sub {
+				% string proc char idx
+    % Find the n+1th character in the string
+    3 index exch 1 add get	% string proc char char+1
+    exch 2 copy			% strinq proc char+1 char char+1 char
+    % Now show the nth character
+    PATsstr dup 0 4 -1 roll put	% string proc chr+1 chr chr+1 (chr)
+    false charpath		% string proc char+1 char char+1
+    /clip load PATdraw
+    % Move past the character (charpath modified the current point)
+    currentpoint newpath moveto
+    % Execute the user proc (should consume char and char+1)
+    mark 3 1 roll		% string proc char+1 mark char char+1
+    4 index exec		% string proc char+1 mark...
+    cleartomark			% string proc char+1
+  } for
+  % Now display the last character
+  PATsstr dup 0 4 -1 roll put	% string proc (char+1)
+  false charpath		% string proc
+  /clip load PATdraw
+  neewath
+  pop pop			% -
+} bind def
+% PATmp - the makepattern equivalent
+/PATmp {			% patdict patmtx PATmp patinstance
+  exch dup length 7 add		% We will add 6 new entries plus 1 FID
+  dict copy			% Create a new dictionary
+  begin
+    % Matrix to install when painting the pattern
+    TilingType PATtcalc
+    /PatternGState PATcg def
+    PatternGState /cm 3 -1 roll put
+    % Check for multi pattern sources (Level 1 fast color patterns)
+    currentdict /Multi known not { /Multi 1 def } if
+    % Font dictionary definitions
+    /FontType 3 def
+    % Create a dummy encoding vector
+    /Encoding 256 array def
+    3 string 0 1 255 {
+      Encoding exch dup 3 index cvs cvn put } for pop
+    /FontMatrix matrix def
+    /FontBBox BBox def
+    /BuildChar {
+	mark 3 1 roll		% mark dict char
+	exch begin
+	Multi 1 ne {PaintData exch get}{pop} ifelse  % mark [paintdata]
+	  PaintType 2 eq Multi 1 ne or
+	  { XStep 0 FontBBox aload pop setcachedevice }
+	  { XStep 0 setcharwidth } ifelse
+	  currentdict		% mark [paintdata] dict
+	  /PaintProc load	% mark [paintdata] dict paintproc
+	end
+	gsave
+	  false PATredef exec true PATredef
+	grestore
+	cleartomark		% -
+    } bind def
+    currentdict
+  end				% newdict
+  /foo exch			% /foo newlict
+  definefont			% newfont
+} bind def
+% PATpcalc - calculates the starting point and width/height
+% of the tile fill for the shape
+/PATpcalc {	% - PATpcalc nw nh px py
+  PATDict /CurrentPattern get begin
+    gsave
+	% Set up the coordinate system to Pattern Space
+	% and lock down pattern
+	PatternGState /cm get setmatrix
+	BBox aload pop pop pop translate
+	% Determine the bounding box of the shape
+	pathbbox			% llx lly urx ury
+    grestore
+    % Determine (nw, nh) the # of cells to paint width and height
+    PatHeight div ceiling		% llx lly urx qh
+    4 1 roll				% qh llx lly urx
+    PatWidth div ceiling		% qh llx lly qw
+    4 1 roll				% qw qh llx lly
+    PatHeight div floor			% qw qh llx ph
+    4 1 roll				% ph qw qh llx
+    PatWidth div floor			% ph qw qh pw
+    4 1 roll				% pw ph qw qh
+    2 index sub cvi abs			% pw ph qs qh-ph
+    exch 3 index sub cvi abs exch	% pw ph nw=qw-pw nh=qh-ph
+    % Determine the starting point of the pattern fill
+    %(px, py)
+    4 2 roll				% nw nh pw ph
+    PatHeight mul			% nw nh pw py
+    exch				% nw nh py pw
+    PatWidth mul exch			% nw nh px py
+  end
+} bind def
+
+% Save the original routines so that we can use them later on
+/oldfill	/fill load def
+/oldeofill	/eofill load def
+/oldstroke	/stroke load def
+/oldshow	/show load def
+/oldashow	/ashow load def
+/oldwidthshow	/widthshow load def
+/oldawidthshow	/awidthshow load def
+/oldkshow	/kshow load def
+
+% These defs are necessary so that subsequent procs don't bind in
+% the originals
+/fill	   { oldfill } bind def
+/eofill	   { oldeofill } bind def
+/stroke	   { oldstroke } bind def
+/show	   { oldshow } bind def
+/ashow	   { oldashow } bind def
+/widthshow { oldwidthshow } bind def
+/awidthshow { oldawidthshow } bind def
+/kshow 	   { oldkshow } bind def
+/PATredef {
+  MyAppDict begin
+    {
+    /fill { /clip load PATdraw newpath } bind def
+    /eofill { /eoclip load PATdraw newpath } bind def
+    /stroke { PATstroke } bind def
+    /show { 0 0 null 0 0 6 -1 roll PATawidthshow } bind def
+    /ashow { 0 0 null 6 3 roll PATawidthshow }
+    bind def
+    /widthshow { 0 0 3 -1 roll PATawidthshow }
+    bind def
+    /awidthshow { PATawidthshow } bind def
+    /kshow { PATkshow } bind def
+  } {
+    /fill   { oldfill } bind def
+    /eofill { oldeofill } bind def
+    /stroke { oldstroke } bind def
+    /show   { oldshow } bind def
+    /ashow  { oldashow } bind def
+    /widthshow { oldwidthshow } bind def
+    /awidthshow { oldawidthshow } bind def
+    /kshow  { oldkshow } bind def
+    } ifelse
+  end
+} bind def
+false PATredef
+% Conditionally define setcmykcolor if not available
+/setcmykcolor where { pop } {
+  /setcmykcolor {
+    1 sub 4 1 roll
+    3 {
+	3 index add neg dup 0 lt { pop 0 } if 3 1 roll
+    } repeat
+    setrgbcolor - pop
+  } bind def
+} ifelse
+/PATsc {		% colorarray
+  aload length		% c1 ... cn length
+    dup 1 eq { pop setgray } { 3 eq { setrgbcolor } { setcmykcolor
+  } ifelse } ifelse
+} bind def
+/PATsg {		% dict
+  begin
+    lw setlinewidth
+    lc setlinecap
+    lj setlinejoin
+    ml setmiterlimit
+    ds aload pop setdash
+    cc aload pop setrgbcolor
+    cm setmatrix
+  end
+} bind def
+
+/PATDict 3 dict def
+/PATsp {
+  true PATredef
+  PATDict begin
+    /CurrentPattern exch def
+    % If it's an uncolored pattern, save the color
+    CurrentPattern /PaintType get 2 eq {
+      /PColor exch def
+    } if
+    /CColor [ currentrgbcolor ] def
+  end
+} bind def
+% PATstroke - stroke with the current pattern
+/PATstroke {
+  countdictstack
+  save
+  mark
+  {
+    currentpoint strokepath moveto
+    PATpcalc				% proc nw nh px py
+    clip newpath PATfill
+    } stopped {
+	(*** PATstroke Warning: Path is too complex, stroking
+	  with gray) =
+    cleartomark
+    restore
+    countdictstack exch sub dup 0 gt
+	{ { end } repeat } { pop } ifelse
+    gsave 0.5 setgray oldstroke grestore
+  } { pop restore pop } ifelse
+  newpath
+} bind def
+/PATtcalc {		% modmtx tilingtype PATtcalc tilematrix
+  % Note: tiling types 2 and 3 are not supported
+  gsave
+    exch concat					% tilingtype
+    matrix currentmatrix exch			% cmtx tilingtype
+    % Tiling type 1 and 3: constant spacing
+    2 ne {
+	% Distort the pattern so that it occupies
+	% an integral number of device pixels
+	dup 4 get exch dup 5 get exch		% tx ty cmtx
+	XStep 0 dtransform
+	round exch round exch			% tx ty cmtx dx.x dx.y
+	XStep div exch XStep div exch		% tx ty cmtx a b
+	0 YStep dtransform
+	round exch round exch			% tx ty cmtx a b dy.x dy.y
+	YStep div exch YStep div exch		% tx ty cmtx a b c d
+	7 -3 roll astore			% { a b c d tx ty }
+    } if
+  grestore
+} bind def
+/PATusp {
+  false PATredef
+  PATDict begin
+    CColor PATsc
+  end
+} bind def
+
+% crosshatch30
+11 dict begin
+/PaintType 1 def
+/PatternType 1 def
+/TilingType 1 def
+/BBox [0 0 1 1] def
+/XStep 1 def
+/YStep 1 def
+/PatWidth 1 def
+/PatHeight 1 def
+/Multi 2 def
+/PaintData [
+  { clippath } bind
+  { 32 16 true [ 32 0 0 -16 0 16 ]
+	{<033003300c0c0c0c30033003c000c000300330030c0c0c0c
+	0330033000c000c0033003300c0c0c0c30033003c000c000
+	300330030c0c0c0c0330033000c000c0>}
+     imagemask } bind
+] def
+/PaintProc {
+	pop
+	exec fill
+} def
+currentdict
+end
+/P3 exch def
 
 /cp {closepath} bind def
 /ef {eofill} bind def
@@ -267,52 +606,52 @@ n 1962 1351 m 1962 4565 l
 0 slc
 7.500 slw
 n 2396 4563 m 2396 4343 l 2743 4343 l 2743 4563 l
- 2396 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 2396 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 2743 4563 m 2743 4210 l 3090 4210 l 3090 4563 l
- 2743 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 2743 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #6 
 % Polyline
 n 3471 4563 m 3471 4155 l 3818 4155 l 3818 4563 l
- 3471 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 3471 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 3818 4563 m 3818 4277 l 4165 4277 l 4165 4563 l
- 3818 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 3818 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #10 
 % Polyline
 n 4547 4563 m 4547 3419 l 4894 3419 l 4894 4563 l
- 4547 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 4547 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 4894 4563 m 4894 1490 l 5241 1490 l 5241 4563 l
- 4894 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 4894 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #14 
 % Polyline
 n 5622 4563 m 5622 3511 l 5969 3511 l 5969 4563 l
- 5622 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 5622 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 5969 4563 m 5969 2267 l 6316 2267 l 6316 4563 l
- 5969 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 5969 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #18 
 % Polyline
 n 6698 4563 m 6698 3562 l 7045 3562 l 7045 4563 l
- 6698 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 6698 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 7045 4563 m 7045 2452 l 7392 2452 l 7392 4563 l
- 7045 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 7045 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #22 
 % Polyline
 n 7773 4563 m 7773 3699 l 8120 3699 l 8120 4563 l
- 7773 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 7773 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 8120 4563 m 8120 2736 l 8467 2736 l 8467 4563 l
- 8120 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 8120 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #26 
 % Polyline
 n 8849 4563 m 8849 3823 l 9196 3823 l 9196 4563 l
- 8849 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 8849 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 9196 4563 m 9196 3630 l 9543 3630 l 9543 4563 l
- 9196 4563 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 9196 4563 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 % here ends figure;
 % 
 % here starts figure with depth 94
@@ -322,52 +661,52 @@ n 9196 4563 m 9196 3630 l 9543 3630 l 9543 4563 l
 0 slc
 7.500 slw
 n 2396 4563 m 2396 4417 l 2743 4417 l 2743 4563 l
- 2396 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 2396 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 2743 4563 m 2743 4352 l 3090 4352 l 3090 4563 l
- 2743 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 2743 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #7 
 % Polyline
 n 3471 4563 m 3471 4260 l 3818 4260 l 3818 4563 l
- 3471 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 3471 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 3818 4563 m 3818 4326 l 4165 4326 l 4165 4563 l
- 3818 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 3818 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #11 
 % Polyline
 n 4547 4563 m 4547 3781 l 4894 3781 l 4894 4563 l
- 4547 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 4547 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 4894 4563 m 4894 1490 l 5241 1490 l 5241 4563 l
- 4894 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 4894 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #15 
 % Polyline
 n 5622 4563 m 5622 3841 l 5969 3841 l 5969 4563 l
- 5622 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 5622 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 5969 4563 m 5969 2267 l 6316 2267 l 6316 4563 l
- 5969 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 5969 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #19 
 % Polyline
 n 6698 4563 m 6698 3855 l 7045 3855 l 7045 4563 l
- 6698 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 6698 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 7045 4563 m 7045 2452 l 7392 2452 l 7392 4563 l
- 7045 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 7045 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #23 
 % Polyline
 n 7773 4563 m 7773 3934 l 8120 3934 l 8120 4563 l
- 7773 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 7773 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 8120 4563 m 8120 2736 l 8467 2736 l 8467 4563 l
- 8120 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 8120 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #27 
 % Polyline
 n 8849 4563 m 8849 4023 l 9196 4023 l 9196 4563 l
- 8849 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 8849 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 9196 4563 m 9196 3687 l 9543 3687 l 9543 4563 l
- 9196 4563 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 9196 4563 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 % here ends figure;
 % 
 % here starts figure with depth 92
@@ -377,52 +716,52 @@ n 9196 4563 m 9196 3687 l 9543 3687 l 9543 4563 l
 0 slc
 7.500 slw
 n 2396 4563 m 2396 4478 l 2743 4478 l 2743 4563 l
- 2396 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 2396 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 2743 4563 m 2743 4419 l 3090 4419 l 3090 4563 l
- 2743 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 2743 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #8 
 % Polyline
 n 3471 4563 m 3471 4394 l 3818 4394 l 3818 4563 l
- 3471 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 3471 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 3818 4563 m 3818 4425 l 4165 4425 l 4165 4563 l
- 3818 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 3818 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #12 
 % Polyline
 n 4547 4563 m 4547 4005 l 4894 4005 l 4894 4563 l
- 4547 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 4547 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 4894 4563 m 4894 1490 l 5241 1490 l 5241 4563 l
- 4894 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 4894 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #16 
 % Polyline
 n 5622 4563 m 5622 4014 l 5969 4014 l 5969 4563 l
- 5622 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 5622 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 5969 4563 m 5969 2270 l 6316 2270 l 6316 4563 l
- 5969 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 5969 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #20 
 % Polyline
 n 6698 4563 m 6698 4055 l 7045 4055 l 7045 4563 l
- 6698 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 6698 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 7045 4563 m 7045 2503 l 7392 2503 l 7392 4563 l
- 7045 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 7045 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #24 
 % Polyline
 n 7773 4563 m 7773 4124 l 8120 4124 l 8120 4563 l
- 7773 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 7773 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 8120 4563 m 8120 2749 l 8467 2749 l 8467 4563 l
- 8120 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 8120 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 %  Begin plot #28 
 % Polyline
 n 8849 4563 m 8849 4139 l 9196 4139 l 9196 4563 l
- 8849 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 8849 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 9196 4563 m 9196 3739 l 9543 3739 l 9543 4563 l
- 9196 4563 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 9196 4563 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 % here ends figure;
 % 
 % here starts figure with depth 90
@@ -432,52 +771,66 @@ n 9196 4563 m 9196 3739 l 9543 3739 l 9543 4563 l
 0 slc
 7.500 slw
 n 2396 4563 m 2396 4483 l 2743 4483 l 2743 4563 l
- 2396 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 2396 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 159.73 298.87] PATmp PATsp ef gr PATusp gs col-1 s gr 
 % Polyline
 n 2743 4563 m 2743 4418 l 3090 4418 l 3090 4563 l
- 2743 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 2743 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 182.87 294.53] PATmp PATsp ef gr PATusp gs col-1 s gr 
 %  Begin plot #9 
 % Polyline
 n 3471 4563 m 3471 4445 l 3818 4445 l 3818 4563 l
- 3471 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 3471 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 231.40 296.33] PATmp PATsp ef gr PATusp gs col-1 s gr 
 % Polyline
 n 3818 4563 m 3818 4434 l 4165 4434 l 4165 4563 l
- 3818 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 3818 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 254.53 295.60] PATmp PATsp ef gr PATusp gs col-1 s gr 
 %  Begin plot #13 
 % Polyline
 n 4547 4563 m 4547 4154 l 4894 4154 l 4894 4563 l
- 4547 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 4547 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 303.13 276.93] PATmp PATsp ef gr PATusp gs col-1 s gr 
 % Polyline
 n 4894 4563 m 4894 2972 l 5241 2972 l 5241 4563 l
- 4894 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 4894 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 326.27 198.13] PATmp PATsp ef gr PATusp gs col-1 s gr 
 %  Begin plot #17 
 % Polyline
 n 5622 4563 m 5622 4162 l 5969 4162 l 5969 4563 l
- 5622 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 5622 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 374.80 277.47] PATmp PATsp ef gr PATusp gs col-1 s gr 
 % Polyline
 n 5969 4563 m 5969 3451 l 6316 3451 l 6316 4563 l
- 5969 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 5969 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 397.93 230.07] PATmp PATsp ef gr PATusp gs col-1 s gr 
 %  Begin plot #21 
 % Polyline
 n 6698 4563 m 6698 4190 l 7045 4190 l 7045 4563 l
- 6698 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 6698 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 446.53 279.33] PATmp PATsp ef gr PATusp gs col-1 s gr 
 % Polyline
 n 7045 4563 m 7045 3517 l 7392 3517 l 7392 4563 l
- 7045 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 7045 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 469.67 234.47] PATmp PATsp ef gr PATusp gs col-1 s gr 
 %  Begin plot #25 
 % Polyline
 n 7773 4563 m 7773 4213 l 8120 4213 l 8120 4563 l
- 7773 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 7773 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 518.20 280.87] PATmp PATsp ef gr PATusp gs col-1 s gr 
 % Polyline
 n 8120 4563 m 8120 3532 l 8467 3532 l 8467 4563 l
- 8120 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 8120 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 541.33 235.47] PATmp PATsp ef gr PATusp gs col-1 s gr 
 %  Begin plot #29 
 % Polyline
 n 8849 4563 m 8849 4266 l 9196 4266 l 9196 4563 l
- 8849 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 8849 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 589.93 284.40] PATmp PATsp ef gr PATusp gs col-1 s gr 
 % Polyline
 n 9196 4563 m 9196 4096 l 9543 4096 l 9543 4563 l
- 9196 4563 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 9196 4563 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 613.07 273.07] PATmp PATsp ef gr PATusp gs col-1 s gr 
 % here ends figure;
 % 
 % here starts figure with depth 1
@@ -490,16 +843,17 @@ n 2159 1740 m 4696 1740 l 4696 2890 l 2159 2890 l
 % Polyline
 7.500 slw
 n 2229 2010 m 2229 1810 l 2429 1810 l 2429 2010 l
- 2229 2010 l  cp gs col49 1.00 shd ef gr gs col-1 s gr 
+ 2229 2010 l  cp gs col50 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 2229 2280 m 2229 2080 l 2429 2080 l 2429 2280 l
- 2229 2280 l  cp gs col47 1.00 shd ef gr gs col-1 s gr 
+ 2229 2280 l  cp gs col48 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 2229 2550 m 2229 2350 l 2429 2350 l 2429 2550 l
- 2229 2550 l  cp gs col44 1.00 shd ef gr gs col-1 s gr 
+ 2229 2550 l  cp gs col46 1.00 shd ef gr gs col-1 s gr 
 % Polyline
 n 2229 2820 m 2229 2620 l 2429 2620 l 2429 2820 l
- 2229 2820 l  cp gs col32 1.00 shd ef gr gs col-1 s gr 
+ 2229 2820 l  cp gs /PC [[1.00 1.00 1.00] [0.00 0.00 0.00]] def
+15.00 15.00 sc P3 [16 0 0 -8 148.60 174.67] PATmp PATsp ef gr PATusp gs col-1 s gr 
 /Times-Roman-iso ff 240.00 scf sf
 1887 4625 m
 gs 1 -1 sc (  0) dup sw pop neg 0 rm  col-1 sh gr
@@ -609,4 +963,5 @@ gs 1 -1 sc ( DRK) col0 sh gr
 pagefooter
 showpage
 %%Trailer
+end
 %EOF
