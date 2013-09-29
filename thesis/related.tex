@@ -1,0 +1,85 @@
+In this chapter, we discuss research topics that are related to our work. We first focus on the different solutions of implementing software and hardware watchpoints. We later look into the existing applications that can be used to detect memory errors.
+
+
+\section{Watchpoints}
+Watchpoints are an important debugging facility that help users identify data corruption bugs. There have been several proposals in the past on how to implement hardware and software watchpoints.
+
+
+%We discuss several hardware and software watchpoints approaches below.
+%This importance has been given due recognition and there has also been several proposals in the past on how to implement hardware and software watchpoints.
+%in the form of hardware debug registers for watching memory locations implemented in almost all state-of-the-art processors. There has also been several proposals in the past on how to implement hardware and software watchpoints.
+
+Greathouse \emph{et al.}~\cite{UnlimitedWatchpoints} propose a hardware solution that efficiently supports an unlimited number of watchpoints. Watchpoints are stored in main memory and utilize two different on-chip cache: a bitmap and a range cache, to accelerate performance. The bitmap lookaside buffer stores fine-grained watchpoints while the range cache can efficiently hold large contiguous regions of watchpoints and is useful for setting watchpoints on ranges of memory. 
+%The design of low-overhead unlimited watchpoints helps support the varied needs of the wide range of dynamic analysis tools.
+%It introduces two different on-chip caches: a bitmap and a range cache to handle spatial meradata pattern which gives it the benefits in terms of performance. 
+Witchel and Asanovic~\cite{Mondrix} describe the implementation of the Mondriaan (also spelled Mondrian) memory protection domain system for the Linux kernel. Mondriaan was designed with fine-grained inter-process protection mechanism in mind, and is optimized for applications that do not perform frequent updates. The protection information is stored in main memory and is cached in a protection lookaside buffer (PLB). The implementation of protection domains using hardware enables fine- and coarse-grained memory protection, the mechanism which is similar to hardware watchpoints.
+
+Zhou \emph{et al.}~\cite{Zhou:2004:IEA:998680.1006720} introduce intelligent Watcher (also known as iWatcher), which provides architectural support for monitoring program execution with minimum overhead. iWatcher stores per-word watchpoints alongside the cache lines that contain the watched data. These bits are initially set by hardware and are temporarily stored into a victim table on cache evictions. The hardware falls back to virtual memory watchpoints if this table overflows. iWatcher can watch a small number of ranges, which must be pinned in physical memory. If this range hardware overflows, the system falls back to setting a large number of per-word watchpoints. In general, this system is inadequate for tools that require more than a small number of large ranges.
+
+Unlike behavioral watchpoints, these approaches depend on specialised hardware and require that applications using this hardware maintain context-specific information separately. 
+
+
+Suh \emph{et al.} \cite{SecureProgramExecFlowTracking} propose a method of secure program execution by tracking dynamic information flow. Their method uses a one-bit tag to indicate whether the corresponding data block is \emph{authentic} or \emph{spurious}. The scheme can be extended to use multiple-bit tags if there are many types or sources of data.
+Memory tagging at the hardware level allows their system to track tainted data as it propagates through a running program. Behavioral watchpoints are similar insofar as a watched address is tagged, and this tag propagates through a program.
+
+
+%makes the case for supporting an unlimited number of watchpoints. A hardware solution is proposed and multiple applications are described. Unlike our approach, the cited approach depends on specialised hardware and requires that applications using these watchpoints maintain their own context-specific information.
+
+%In , 
+
+%\paragraph{Software-based}
+Zhao \emph{et al.} \cite{DynamoRIOWatchpoints} describe a method for implementing an efficient and scalable DBT-based watchpoint system. It uses on-demand based dynamic instrumentation to accelerate the software debugger and supports more than a million watchpoints. It uses page protection and indirection through a hash table to track watched memory. This approach does not supports watching ranges of memory, or context-specific information. 
+
+
+Lueck \emph{et al.} \cite{PinADX} introduce semantic watchpoints as part of the PinADX system, an extension of the PIN DBT framework. 
+It enables interactive debugging by triggering debugger breakpoints when semantic conditions are met. While similar in spirit to behavioral watchpoints, semantic watchpoints do not maintain context-specific, per-watchpoint state. 
+
+Wahbe \emph{et al.}~\cite{Wahbe:1992} also proposes the implementation of software watchpoint using code patching and static analysis. %Copperman and Thomas extended the work Wahbe and use a post-loading technique to insert checks into an executable to solve the shared library issue.
+Another interesting approach, proposed by Keppel. \emph{et al.}~\cite{Keppel:93a} is to use checkpoints for memory updates. However all these approaches are valid for userspace programs only. The latest patches for MemCheck in Valgrind~\cite{Seward:2005} also introduce
+support of adding watchpoint. They use data structure to maintain the watchlist and track the usage of watchpoints. This puts a severe restriction on their performance.   
+
+
+\section{Memory Debugging}
+There are many software, hardware or hybrid approaches proposed for detecting memory bugs. Purify~\cite{Rs_purify:fast} and MemCheck~\cite{Nethercote:2007:SBM:1254810.1254820} are two widely used software tools for detecting memory usage problems. Purify was one of the first tool to combine detection of memory leaks with detection of use-after-free errors. Purify uses a technique called object code insertion (OCI) to insert checking code around every instruction in an application that references, allocates, and deallocates memory. It uses a memory-coloring scheme to keep track of the state of every byte of memory in the application. The link time instrumentation and reporting reads of uninitialized errors immediately result in false positives. MemCheck~\cite{Nethercote:2007:SBM:1254810.1254820} is build on the Valgrind dynamic instrumentation framework. Dr. Memory is another memory checking tool developed using the DynamoRio instrumentation system. Both Memcheck and Dr Memory use a similar approach for tracking memory usage and both of them use Purify’s basic leak detection approach to detect memory leak errors.
+
+The memory debugging tools developed using behavioral watchpoints also maintain the state of a memory block in its descriptor. The descriptor information gets encoded with the memory address and is directly available when the address is accessed.
+
+
+Parallel Inspector~\cite{reference/parallel/Petersen11a} is a commercial tool built on the Pin~\cite{PinOS} dynamic instrumentation platform that combines data race detection with memory checking. But the details about its implementation are not publicly available. Insure++~\cite{Parasoft00INSU} is another commercial memory checking tool. It supports inserting instrumentation at various points, including in the source code prior to compile time, at link time, and at runtime, but its more advanced features require source code instrumentation. Insure++ also uses DBT-system to insert instrumentation at runtime. Unlike Insure++, Behavioral watchpoints does not require source code support for detecting memory errors. It uses a technique called reifying instrumentation to provide the benefits of high-level static analysis information in specialising instruction level instrumentation.
+
+There have been several proposals to extend current hardware support for debugging memory related errors. DISE~\cite{Corliss:2005:LID:1042442.1043429} (Dynamic Instruction Steam Editing) is a general hardware mechanism for interactive debugging. It adds dynamic instructions for checking memory references into the instruction stream during execution. Other solutions such as SafeMem~\cite{Qin:2005:SEE:1042442.1043428}, iWatcher~\cite{Zhou:2004:IEA:998680.1006720}, and MemTracker~\cite{Venkataramani:2007:MEP:1317533.1318083} have also been proposed for detecting inappropriate usage of memory with low overhead. Unlike behavioral watchpoints, they require specialised hardware to implement their solutions. 
+
+%For example, SafeMem exploits the use of ECC (Error-Correcting Code) for detecting memory leaks and memory corruption with low-overhead. But this approach relies on a write-allocate cache policy, i.e., the block is loaded on a write miss. One important drawback of these hardware approaches is that it requires customized, fixed-functionality hardware.
+
+
+
+
+
+%Beside requiring customized hardware, it does not
+%scale well as the number of checks increases when more
+%watchpoints are set.
+
+
+%HeapMon~\cite{Shetty:2006:HHA:1143264.1143273} is hardware/software approach for detecting memory bugs with the helper thread. Hardware such as SafeMem~\cite{Qin:2005:SEE:1042442.1043428}, iWatcher~\cite{Zhou:2004:IEA:998680.1006720}, and MemTracker~\cite{Venkataramani:2007:MEP:1317533.1318083} have also been proposed for detecting in appropriate usage of memory with low overhead. For example, SafeMem exploits the use of ECC (Error-Correcting Code) for detecting memory leaks and memory corruption with low-overhead. But this approach relies on a write-allocate cache policy, i.e., the block is loaded on a write miss. One important drawback of these hardware approaches is that it requires customized, fixed-functionality hardware.
+
+%BoundsChecker~\cite{Jones97backwards-compatiblebounds} monitors Windows heap library calls and detects memory leaks and unaddressable accesses. It does
+%not detect uninitialized reads. Some leak detection tools, including LeakTracer~\cite{Hauswirth:2004:LML:1024393.1024412} and mprof [6], only report memory that has not been freed at the
+%end of execution. For these tools to be usable, the application
+%must free all of its memory prior to exiting, even though it
+%may have data whose lifetime is the process lifetime where it is
+%more efficient to let the operating system free those resources.
+%Reachability-based leak detection, in contrast, uses a memory
+%scan that is similar to a mark-and-sweep garbage collector [3]
+%to identify orphaned memory allocations that can no longer be
+%accessed. This type of leak detection is used by most modern
+%memory checking tools, including ours.
+
+%There have been several hardware proposals to extend
+%current hardware support for debugging. DISE~\cite{Corliss:2005:LID:1042442.1043429} (Dynamic
+%Instruction Steam Editing) is a general hardware mechanism
+%for interactive debugging. It adds dynamic instructions for
+%checking memory references into the instruction stream during
+%execution. Beside requiring customized hardware, it does not
+%scale well as the number of checks increases when more
+%watchpoints are set.
+

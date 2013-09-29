@@ -1,0 +1,411 @@
+%\section{Program Analysis}
+Program debugging is a tedious and time-consuming part of software development. Detecting software bugs such as data corruption, bad pointers, and data races requires developers to manually inspect millions of instructions that may modify the corrupt data. Such an instruction may be difficult or prohibitively costly to find. The advent of multicore systems and the ever-increasing size and complexity of software has made debugging even more challenging. This makes it important to develop tools that can handle large and more complex programs. At the same time there is a need for tools to provide interesting information about program execution that can be used to improve the quality of the programs. 
+
+Dynamic binary translation (DBT) systems provide a powerful infrastructure for building program debugging and analysis tools. A DBT system enables monitoring and potentially manipulating every instruction in an existing binary before it executes, helping detect programming errors, and thus improving program dependability.
+Instruction-grained inspection can help detect the most subtle program faults including low level issues such as memory bugs~\cite{Nethercote:2007:VFH:1250734.1250746} and security errors~\cite{NewsomeS05, Costa:2005:VEC:1095810.1095824}, as well as high level issues such as concurrency errors~\cite{Patil:2010:PFD:1772954.1772958, citeulike:7549409} and interface errors in multilingual programs~\cite{Lee:2010:JSD:1806596.1806601}. Several popular DBT frameworks, such as DynamoRIO~\cite{DynamoRIO}, Pin~\cite{PinOS} and Valgrind~\cite{Nethercote:2007:VFH:1250734.1250746} have been used develop such debugging tools. Existing tools such as Memcheck \cite{Seward:2005:UVD:1247360.1247362} and Helgrind \cite{Muehlenfeld:2007:FDM:1229428.1229457} are developed over Valgrind which uses binary translation to detect common memory errors (e.g., use-after-free, read-before-write, memory leaks) and threading bugs (e.g., data races) in user space programs. Other tools like Program shepherding~\cite{Kiriansky:2002:SEV:647253.720293} and vx32~\cite{Ford:2008:VLU:1404014.1404039} use DBT to improve program security and enforce modularity. The use of DBT system in developing these tools has three distinct advantages.
+
+
+ %, that can be used to improve the program reliability.% and security of the computing system.
+%Existing tools such as Valgrind's Memcheck \cite{Seward:2005:UVD:1247360.1247362} and Helgrind \cite{Muehlenfeld:2007:FDM:1229428.1229457} use binary translation to detect common memory errors (e.g., use-after-free, read-before-write, memory leaks) and threading bugs (e.g., data races) in user space programs.
+
+%Dynamic binary translation (DBT) entails monitoring and potentially manipulating every instruction in an existing binary before its execution for detecting errors and thus improve program dependability. Instruction grained inspection can detect the most subtle program faults including low level issues such as memory bugs~\cite{Nethercote:2007:VFH:1250734.1250746} and security errors~\cite{NewsomeS05, Costa:2005:VEC:1095810.1095824}, as well as high level ones such as concurrency errors and interface errors in multilingual programs. A dynamic binary translation (DBT) system has two distinct advantages. 
+
+%\vspace{-1em}
+\begin{enumerate}[i)]
+\item The DBT system operates at instruction granularity giving the tools complete control over program execution. It provides the tools the ability to observe and modify any executed instructions and gather any runtime information. 
+%to do more than periodic information gathering and introspection after executing every instruction.
+\item The DBT system operates on binaries and does not require the client program to be changed or compiled in any particular way, making it easy to use. %It generally performs the analysis in terms of machine entities, such as procedure, registers and machine locations.
+\item The DBT system naturally allows instrumenting all code. Instrumenting all client code statically can be difficult if code and data are mixed or different modules are used, and is impossible if the client uses dynamically generated code. The ability to instrument all code is crucial for correct and complete handling of third-party code such as pre-compiled libraries.  
+\end{enumerate}
+These advantages make dynamic binary instrumentation (DBI) a compelling technique for developing many dynamic analysis tools. However, using a DBT framework for developing these powerful and efficient debugging applications is challenging for three reasons.
+
+
+
+
+
+
+%A Dynamic binary instrumentation (DBI) based approaches either injects the instrumentation code into the application using software~\cite{bruening:phd-thesis:2004, Luk:2005:PBC:1065010.1065034, Nethercote:2007:VFH:1250734.1250746} or hardware~\cite{Corliss:2003:DPM:859618.859660}, while logging based approaches captures the instruction grained execution trace of the application using software and hardware for online or offline analysis. Dynamic binary analysis seems to be well suited for use on production drivers which are often distributed in binary form for both convenience and propriteory reasons. This thesis works explores the effectiveness of using dynamic binary analysis for online detection of production driver faults. 
+
+%because they allow instrumenting the entire program at an instruction granularity~\cite{DynamoRIOKernel}.
+
+
+%Dynamic binary analysis has been effectively used by dynamic correctness checkers for detecting errors in execution of unmodified application binaries and thus improving the reliability and security of the computing system. Instruction grained inspection can detect the most subtle program faults including low level issues such as memory~\cite{Nethercote:2007:VFH:1250734.1250746} and security errors~\cite{newsome05ndss, Costa:2005:VEC:1095810.1095824}, as well as high level ones such as concurrency errors and interface errors in multilingual programs. A Dynamic binary instrumentation (DBI) based approaches either injects the instrumentation code into the application using software~\cite{bruening:phd-thesis:2004, Luk:2005:PBC:1065010.1065034, Nethercote:2007:VFH:1250734.1250746} or hardware~\cite{Corliss:2003:DPM:859618.859660}, while logging based approaches captures the instruction grained execution trace of the application using software and hardware for online or offline analysis. Dynamic binary analysis seems to be well suited for use on production drivers which are often distributed in binary form for both convenience and propriteory reasons. This thesis works explores the effectiveness of using dynamic binary analysis for online detection of production driver faults. 
+
+
+
+
+%Existing tools such as Valgrind's Memcheck \cite{Seward:2005:UVD:1247360.1247362} and Helgrind \cite{Muehlenfeld:2007:FDM:1229428.1229457} use binary translation to detect common memory errors (e.g., use-after-free, read-before-write, memory leaks) and threading bugs (e.g., data races) in user space programs.
+
+%Unfortunately, these powerful debugging tools do not exist for the operating system kernels and modules.
+
+
+% The reason is that existing DBI techniques that target kernel code
+%(e.g., JIFL [15] and PinOS [6]) are not comprehensive,
+%i.e., they are limited with respect to the code that they
+%cover. JIFL provides an API for instrumenting system
+%calls. However, it does not cover interrupt handlers and
+%kernel threads. PinOS allows whole-system instrumentation, providing an API for instrumenting kernel code,
+%including interrupt handlers, and user-space code. However, because PinOS relies on virtualization, it is only capable of instrumenting drivers for devices that the virtual
+%machine monitor emulates. Since it is infeasible to emulate complex and proprietary hardware, PinOS’s approach
+%precludes comprehensive instrumentation. A similar issue
+%arises with other virtual machine monitors [1] and emulators [20] that use DBI
+
+%Purity~\cite{Rs_purify:fast}, Valgrind~\cite{}, \emph{Safe-C}, or \emph{CCured}~\cite{Necula:2005:CTR:1065887.1065892} use different methods of program analysis to detect the programming errors or bugs in the system. The existing program analysis techniques can be categorized into the following four groups:
+
+
+%Dynamic binary instrumentation (DBI) entails monitoring and potentially manipulating every instruction in an
+%existing binary before its execution. Several popular
+%frameworks, such as DynamoRIO [4], Pin [12], and Valgrind [14] make it easy to use DBI in user-level applications, helping improve application dependability greatly.
+%For example, DBI is used by Memcheck to detect memory errors [19], Program Shepherding to improve security [11], and vx32 to enforce modularity [9].
+%\begin{itemize} 
+%	\item \emph{Static Analysis}: Static analysis involves analyzing a program's source code or machine code without running it. Many tools perform static analysis, in particular compilers; example of static analysis used by compilers include analyses for correctness, such as type checking, and analysis for optimization, which identify valid performance-improving transformations. Also some stand-alone static analysis tools can identify bugs or help visualise code. Tools performing static analysis only need to read a program in order to analyse it.
+%\end{itemize} 
+
+
+
+ %and determine  interesting information that can be used to    
+
+
+%As modern applications become larger, more complex, and more dynamic, building tools to
+%manipulate these programs becomes increasingly difcult. At the same time the need for tools to
+%manage application complexity grows. We need information-gathering tools for program analysis,
+%introspection, instrumentation, and trace gathering, to aid in software development, testing, de-
+%bugging, and simulation. We also need tools that modify programs for optimization, translation,
+%compatibility, sandboxing, etc.
+% need for tools to
+%manage application complexity grows.
+
+
+%This makes it important to develop tools that can be used to improve the quality of programs, particularly correctness, and determine interesting information about the program executions. Existing tools such as Purity~\cite{Rs_purify:fast}, Valgrind~\cite{}, \emph{Safe-C}, or \emph{CCured}~\cite{Necula:2005:CTR:1065887.1065892} use different program analysis methods to detect the errors or bugs in the program. These tools are developed based on the type of code available and time of analysis. The four different program analysis techniques are as follows:
+%Based on the type of code and the time of analysis there are four different 
+%Based on the requirement and %These tools use different program analysis techniques 
+%This thesis discusses about the methods of program analysis and debugging using Dynamic Binary Translation(DBT) framework and presents a novel framework which helps developer in using DBT system.
+%Today many kind of program analysis technique exists based on the 
+%Program analysis and debugging tools that can be used to improve the quality of programs, particularly correctness, are therefore invaluable. Many tools exist which use different kind of \emph{program analysis} to determine interesting information about programs. A program analysis method can be divided into different groups based on the type of code being analyzed and when it is getting analyzed.
+%\vspace{-1em}
+%\paragraph{Static Analysis}
+%Static analysis involves analyzing a program's source code or machine code without running it. Many tools perform static analysis, in particular compilers; example of static analysis used by compilers include analyses for correctness, such as type checking, and analysis for optimization, which identify valid performance-improving transformations. Also some stand-alone static analysis tools can identify bugs or help visualise code. Tools performing static analysis only need to read a program in order to analyse it.
+%\vspace{-1.5em}
+%\paragraph{Dynamic Analysis}
+%Dynamic analysis involves analysing a client program as it executes. Many tools perform dynamic analysis, for example. profilers, checkers and execution visualizers. Tools performing dynamic analysis must instrument the client program with analysis code. The analysis code may be inserted entirely inline; it may also include external routines called from the inline analysis code. The analysis code runs as part of the program's normal execution, not disturbing the execution, but doing extra work "on the side", such as measuring performance. or identifying bugs. The analysis code must maintain some kind of analysis state, which is called \emph{metadata}. Meta-data is absolutely crucial, and at the very heart of dynamic analysis.
+%\vspace{-1.5em}
+%\paragraph{Source Analysis}
+%Source analysis involves analysing programs at the level of source code. Many tools perform source analysis; compilers are again a good example. The category includes analyses performance on program representation that are derived directly from source code, such as control flow graph. Source analysis are generally done in terms of programming language constructs, such as functions, statements, expressions, and variables.
+%\vspace{-1.5em}
+%\paragraph{Binary Analysis}
+%Binary analysis involves analysing programs at the level of machine code, stores either as object code (pre-linking) or executable code (post-linking). This category includes analyses performed at the level of executables intermediate representations, such as byte-codes, which run on virtual machine. Binary analyses are generally done in terms of machine entities, such as procedures, instructions, registers and machine locations.
+
+%This thesis discusses about the Dynamic Binary analysis, advantages and the challenges involved in developing tools.
+
+%\section{Dynamic Binary Translation}
+%Dynamic binary translation (DBT) systems provide a powerful facility for building debugging and analysis tools because they allow instrumenting the entire program at an instruction granularity~\cite{DynamoRIOKernel}. For example, Valgrind's Memcheck \cite{Seward:2005:UVD:1247360.1247362} and Helgrind \cite{Muehlenfeld:2007:FDM:1229428.1229457} use binary translation to detect common memory errors (e.g., use-after-free, read-before-write, memory leaks) and threading bugs (e.g., data races) in user space programs. Dynamic binary translation has two distinct advantages. 
+
+%First, it doesn't require the client program to be prepared in any way, which makes it very convenient for users. Second, it naturally covers all client code; instrumenting all client code statically can be difficult if code and data are mixed or different modules are used, and is impossible if the client uses dynamically generated code. The ability to instrument all code is crucial for correct and complete handling of libraries. These advantages of DBI makes it the best technique for many dynamic analysis tools. %However, DBI has two main disadvantages. The cost of instrumentation is incurred at run-time. Second, it is difficult to implement--rewriting executable code at runtime is not easy.
+
+%These tools are powerful but developing them is challenging for the following three reasons.
+%\subsection{Advantages}
+%\subsection{Challenges}
+%These tools are powerful but developing them is challenging for the following three reasons.
+
+First, a DBT system provides infrastructure for instrumenting program code, an approach we call code-centric instrumentation, whereas many interesting debugging applications would prefer to have data-centric instrumentation. Applications such as data race detection, memory usage bugs, or performance debuggers that find false sharing hotspots are all naturally data-centric. The code-centric approach makes it harder to implement these debugging tools. 
+
+%requires the DBT system to instrument much more program code providing a lot of redundant information while incurring high instrumentation cost. 
+
+Second, DBT abstractions are too low-level: individual instructions only reveal what memory addresses are being accessed. This is at odds with specialising instruction-level instrumentation with higher-level abstractions. For example, developing a tool to debug a data corruption problem in a specific field of a data structure (e.g., \texttt{i\_flags} field of an \texttt{inode} structure of Linux file system), or detecting an invariant violation in a data structure requires instrumentation to be specialised to individual data structures.
+
+Third, existing DBT systems instrument all code to provide comprehensive coverage, which introduces significant overheads for realistic instrumentation. For example, if a memory corruption bug affects only \texttt{inode} structures, then instrumenting every memory access in the kernel is excessive. In practice, we would like to instrument only the code that operates on \texttt{inode}s.
+
+
+
+
+%that detects corruption in a particular field of all data structures of a specific type. DBT systems don't provide information about what data structures are accessed, only what instructions are accessing what memory addresses
+%track meta-data for each in-memory data structure (e.g., to detect if a byte was written before it was read) because this meta-data must be queried on each memory access.
+%For example, the challenge is that we want to detect corruption in a particular field of all data structures of a specific type. However, DBT systems don't provide information about what data structures are accessed, only what instructions are accessing what memory addresses
+%Second, DBT systems are unable to specialise instruction-level instrumentation to individual data structures. For example, detecting corruption specialise in \texttt{i\_opflags} field of \texttt{inode} structure requires inspecting the permissions referenced by the related \texttt{i\_op} field. This is challenging to do in existing DBT-based debugging tools, which view data structures as opaque sequences of bytes. In practice, we would like our tool to be able to target only memory of specific kinds, and allow instrumentation to be specialised to the targeted memory.
+%Third, Existing instrumentation system runs on all code, introducing significant overheads for realistic instrumentation. 
+%, or worse, requires significant modification to the implementation to get reasonable performance for specific tools. For example, if a bug occurs because the \texttt{i\_flags} field of one of the kernel \texttt{struct inode} data structures is corrupted then instrumenting every memory access in the kernel is excessive. In practice, we would like to instrument only the code that operates on \texttt{inode}s to find \texttt{inode} corruption.
+%Third, Existing DBT systems are unable to instrument only the portion of code responsible for the bug. For example, if a bug occurs because the \texttt{i\_flags} field of one of the \texttt{inode} structure is corrupted then instrumenting every memory access in the kernel is excessive. In practice, we would like to instrument only the code that operates on \texttt{inode} structures.
+
+% to find \texttt{inode} corruption.
+%DBT systems are unable to specialise instrumentation to individual data structures. For example, detecting corruption in the \texttt{i\_opflags} field of kernel \texttt{inode}s requires inspecting the permissions referenced by the related \texttt{i\_op} field in each \texttt{inode}. This is challenging to do in existing DBT-based debugging tools, which view data structures as opaque sequences of bytes. In practice, we would like our tool to be able to target only memory of specific kinds, and allow instrumentation to be specialised to the targeted memory. 
+
+
+
+%First, instruction-level instrumentation provides limited contextual information, which makes it hard to develop powerful program analysis tools. For example, a programmer writing a tool to debug the data corruption problem in a specific data structure, log accesses to specific fields, or detect invarient violation in a data structure, need to manage these informations specifically. They are not directly available with DBT systems.
+%or detect invarient violation in data structure need to manage these information in ad-hoc manner 
+%For example, a programmer trying to debug the data corruption problem in a specific data structure, log accesses to specific fields, or detect invarient violation in a data structure, these information is not directly available in DBT systems. %(comment - give example or two about why it is hard to write instrumentation tools ...)For example, a programmer might want to debug a corruption problem in a specific data structure, or log accesses to specific fields in a data structure, detect invariant violations, etc.,.... this information is not easily available in DBT systems. 
+%Second, the DBT abstractions are too low level, requiring instrumentation tools to be written from scratch, and manage their data in an ad hoc manner. For example, developing a memory checking tool to detect read-before-write bugs needs to instrument all memory operations and maintain a shadow state for every byte.%Give example. 
+%Third, the instrumentation system runs on all code, introducing significant overheads for realistic instrumentation, or worse, requires significant modification to the implementation to get reasonable performance for specific tools. For example, shadow memory implementations have high overhead because all memory accesses need to be instrumented. Similarly, the program shepherding tool is tightly embedded with the DynamoRIO implementation to allow it perform most monitoring operation once, achieving good performance.
+
+% for performance  reasons.% (not sure about this).
+
+%Several tools exist, which helps developers identify bugs in their software system.  For example Valgrind's Memcheck \cite{Seward:2005:UVD:1247360.1247362} which is used to detect memory errors such as buffer overflow, uninitialized read, or memory leak, ThreadSanitizer~\cite{Serebryany:2009:TDR:1791194.1791203} which detects the data races in multi-threaded environment and Cachegrind~\cite{Nethercote:2007:VFH:1250734.1250746} which is used to profile the run-time behaviour of program execution. These tools are powerful in debugging complex applications, but developing such tools are challenging. This is because they have to deal with the huge population of dynamically allocated objects and which they need to measure, check, or track. These objects also doesn't hold any information about itself or the program context in which it is getting accessed, thus making it hard to understand their behaviour. 
+
+%One approach which is especially helpful in developing such tool is data breakpoints or \emph{Watchpoints}~\cite{UnlimitedWatchpoints,DynamoRIOWatchpoints,Roberts96implementationand, Wahbe93practicaldata}. These watchpoints correlate the watched memory locations with the program points accessing them, thus making it easy to selectivly track the memory. Many architecture today provides the support of hardware-based watchpoints. These watchpints are fast but they are limited in number and size. This limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints} but they are limited by their view of memory as an opaque sequence of bytes. This view is at odds with developing program analysis tools, which require contextual information about a program's execution. This severely put restrictions on its pratical and ubiquitous use in developing some of the application like detecting data corruption or invarient violation in data strcture, tracking the TCP protocol state changes in device driver or verifying the OS protocol for network drivers.
+
+
+%But the existing solution of watchpoints are limited by their view of memory as an opaque sequence of bytes. This view is at odds with developing program analysis tools, which require contextual information about a program's execution. For example, to develop a tool which detects the data corruption or invariant violation in a data structure, it needs to understand the type of data structure it is looking on. In a more complex example if one need to verify the OS protocol for network drivers, it needs to track the data I/O (e.g network data packets) and when it is send over to \texttt{hard\_start\_xmit} for transmission and if it is getting freed or not after sucessful transmission. Developing such application without any knoweldge of watchpoint objects or the program execution context is difficult.   
+
+
+
+%For example, a tool which detects the data corruption or invariant violation of data structure needs to understand the type of data it is currently watching ()
+
+
+%a tool which detects the violation of OS protocol in device drivers it needs to understand the data I/O and when 
+
+
+%to develop a tool which verifies the state transition of TCP protocol or   
+
+
+
+%a tool which detects the OS protocol violation in network drivers 
+
+%netdev::hard start xmit() is called in the networking stack with a buffer holding the packet data to be transmitted as
+%argument, and it returns either a success or failure status to the caller. A success return status means the driver has taken
+%responsibility for: (i) ensuring the packet is eventually transmitted by the device, and (ii) freeing the buffer, and so the
+%caller can return a success status up the stack to the application (possibly via send() system call). Conversely, a failure
+%return status means that the driver can take neither of those responsibilities (at the moment), in which case the caller
+%12
+%can retry later. There are a number of ways through which defects in the driver could cause netdev::hard start xmit()
+%to violate its protocol with and corrupt the networking stack. While the most obvious violations are incorrect return
+%status, more subtle ones include failing to free the buffer, leading to kernel memory leaks.  
+
+
+%This severely put restrictions on its pratical and ubiquitous use.
+
+
+
+
+
+
+%In our architecture, these constraints are
+%expressed as data structure invariants—properties that the
+%data structure must always satisfy. For example, an invariant
+%may state that a function pointer to the packet-send function
+%(e.g., the hard start xmit pointer in the net device data
+%structure in Linux) of a network driver must not change after
+%being initialized. Our approach infers such invariants during
+%training; these are checked during enforcement. 
+
+
+%A data breakpoints or \emph{Watchpoints} are especially helpful in developing such tools\cite{UnlimitedWatchpoints,DynamoRIOWatchpoints,Roberts96implementationand, Wahbe93practicaldata}. These watchpoints correlate the watched memory locations with the program points accessing them, thus making it easy to selectivly track the memory updates.
+
+%Most architecture today provides the support of Hardware-based watchpoints. These watchpints are fast and can accelerate the program analysis mechanism but they are limited in number and size.  This limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints, Roberts96implementationand,  Wahbe93practicaldata}. However they are slow and limited by their view of memory as an opaque sequence of bytes. This view is at odds with developing program analysis tools, which require contextual information about a program's execution. This severely put restrictions on its pratical and ubiquitous use.
+
+
+%There are two existing solution of watchpoints: hardware-based and software-based. Most architecture provides support for Hardware-based watchpoints. They are fast but limited in number and size. This limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints, Roberts96implementationand,  Wahbe93practicaldata}. However they are slow and limited by their view of memory as an opaque sequence of bytes. This view is at odds with developing program analysis tools, which require contextual information about a program's execution. This severely put restrictions on its pratical and ubiquitous use.
+
+
+
+
+%These objects also doesn't contain any information about itself or the context of program execution, thus making it hard to develop such tools. 
+
+
+
+%if you want to track the access patten of an object of certain type or a specific field of an object of that type at certain callsite, these informations are not present with the object. 
+
+
+
+
+
+%For example, structure sk\_buff represents the network packets in the Linux kernel which contains the pointer to packet data. These packet data should point to a valid memory where the network device driver should be able to read/write.
+
+
+%an sk buff
+%structure, represents network packet in the Linux kernel and it contains a pointer to packet data. 
+
+
+%representing a network packet in the Linux kernel, contains
+%a pointer to packet data. When the module passes an sk buff
+%structure to the core kernel on line 42, it is expected to provide
+%a legitimate data pointer inside of the sk buff, and that pointer
+%should point to memory that the kernel module has write access to
+%(in cases when the sk buff’s payload is going to be modified). If
+%this invariant is violated, the kernel code can be tricked into writing
+%to arbitrary memory.
+
+
+% a specific subset of the population. 
+
+
+%However, 
+
+
+
+%these dynamic tools are powerful in debugging complex application, developing such tools are challenging, because one need to deal with the huge population of allocated objects and need to track every memory access. 
+
+
+
+%These tools also has no knowledge of the context of program execution, thus not very helpful in debugging. For example,  
+
+%One of the solution to develop these debugging applications are watchpoints or data breakpoints. A watchpoint correlates the watched memory locations with the program points accessing those memory locations. There are two existing solution of watchpoints: hardware-based and software-based. Most architecture provides support for Hardware-based watchpoints. They are fast but limited in number and size. This limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints, Roberts96implementationand,  Wahbe93practicaldata}. However they are slow and limited by their view of memory as an opaque sequence of bytes. This view is at odds with developing program analysis tools, which require contextual information about a program's execution. This severely put restrictions on its pratical and ubiquitous use. % to develop watchpoint-based analysis tools.
+
+
+
+
+
+
+
+%have the understanding of the program it is debugging, thus not very helpful in debugging. TODO : (Add one example)
+
+
+
+
+%While such dynamic tools are powerful in debugging complex applications, they suffer from the limitations that they don't understand the nature of 
+
+%can detect memory error's like buffer overflow, memory leak, uninitialized memory read etc
+
+
+%Valgrind's MemCheck, for instance, checks
+%dynamic memory operations for errors such as memory leaks
+%[37]. While such dynamic tools are powerful, they suer from
+%large computational overheads that limit their adoption to
+%small groups of developers and dedicated testers. 
+
+
+%MemCheck [14] which can detect
+%uninitialized memory read, writes to unallocated memory,
+%and other memory use errors, can incur slowdowns between
+%10-30x, and are more suitable for regression testing than
+%interactive debugging.
+
+
+%Numerous tools exist to help developers make more ro-
+%bust software. 
+
+%This makes it essential to have a program analysis tool, which understands the nature of running programs and helps in detecting bugs.
+
+
+
+%running program and detect these bugs.
+
+
+%To detect a serious software bugs like, data corruption arising from bad pointers, buffer overflow, or data races, the developer need to go and manually inspect the million of instructions. The advent of multicore system, thus massive multi programming and ever increasing complexity and size of software has made the the program debugging even more challenging. 
+
+
+%A serious software bug like, data corruption 
+
+
+%errors that might arise from
+%bad pointers, buffer overflows, or data races. 
+
+
+%may be caused by a single instruction among millions of instructions in a computer program. 
+
+%The advent of multicore system, thus massive multi programming and ever increasing complexity and size of software has made the program debugging more challenging. 
+
+
+
+
+%With the advent of multicore architecture and ever increasing size and complexity of the software, developers are facing an ever increasing challenge in debugging.  
+
+
+%play an increasingly important role in software development.
+
+
+%Watchpoints are an integral feature of program analysis and debugging tools because they correlate watched memory locations with the program points accessing those memory locations. %It provides mean to discover program bugs that are tedious or impossible to detect.
+%There are two categories of watchpoints: hardware-based and software-based. Most architecture provides support for Hardware-based watchpoints. They are fast but limited in number and size. This limits their usefulness as a means of perfoming large-scale program analyses \cite{UnlimitedWatchpoints}. Software-based implementations can scale to support millions of watchpoints \cite{DynamoRIOWatchpoints, Roberts96implementationand,  Wahbe93practicaldata}. However they are slow and limited by their view of memory as an opaque sequence of bytes. This view is at odds with developing program analysis tools, which require contextual information about a program's memory. This severely put restrictions on its pratical and ubiquitous use. % to develop watchpoint-based analysis tools.
+%Integrating such information with existing watchpoint solution requires to maintain a seperate bookkeeping mechanism. This will have additional computational and lookup overhead which will make it further unusable. Most of these software watchpoints are also not available for the kernel.
+
+%This severely limits its practical and ubiquitous use.
+%As a result, watchpoint-based analysis tools are harder to design and implement because they must maintain separate bookkeeping mechanisms to recover contextual information about watched memory.
+
+%In this paper, we introduce \emph{Behavioral Watchpoints}: a new form of software-based watchpoints that simplify the implementation of program analysis and debugging tools. Behavioral watchpoints address the usability concerns of hardware-based watchpoints and overcome the incongruency between how software implements watchpoints and how program analysis tools use them. The main characteristic which defines behavioral watchpoints are: 
+%\begin{enumerate*}
+%  \item[i)] Context-specific information is embedded in each watchpoint. The information is directly available when a watched address is accessed. %This provides significant versatility in monitoring large number of memory. 
+%  \item[ii)] The action taken when a watched address is accessed is a component of the context-specific information. This implies that different watchpoints can \emph{behave} differently.
+%\end{enumerate*}
+
+%We implemented behavioral watchpoints using Granary: a dynamic binary translation (DBT) framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. Granary instruments arbitrary, binary Linux kernel modules efficiently and without imposing overhead when the core kernel is running. We also developed applications based on behavioral watchpoints, which can be used to debug kernel modules. The buffer-overflow and leak detection tool can be used to identify the memory errors in kernel modules. We are using selctive-shadowing technique to detect the access pattern of different kernel/module objects. This will be useful in prototying different module and detecting its malicious behaviour. Fine-grained access policies can be used to implement control-flow integrity and data integrity in the kernel modules.   
+
+%\section{The Goal}
+In this work, we introduce \emph{behavioral watchpoints}, a novel software-based watchpoint framework that simplifies the implementation of DBT-based program analysis and debugging tools. Similar to previous software-based watchpoints~\cite{DynamoRIOWatchpoints}, it supports millions of watchpoints, enabling large-scale program analysis. However, unlike previous approaches that are limited by their view of memory as an opaque sequence of bytes, behavioral watchpoints embed \emph{context-specific} information in each watchpoint, and this information is available when a watched address is accessed. Upon access, the watchpoint action taken depends on this context, implying that different watchpoints \emph{behave} differently. For example, if a programmer wishes to debug corruption to a specific field of a data structure such as a field in the TCP buffer header, then a behavioral watchpoint will be triggered only when the specific field is updated in \emph{any} TCP buffer header. This approach simplifies building powerful DBT tools because the context-specific information can be arbitrarily rich (e.g., derived from static analysis), and is available as needed at runtime. 
+%(comment - possibly add another example).
+
+The other key feature of behavioral watchpoints is that they enable adding instrumentation selectively, by enabling or disabling binary translation on demand, so that overhead is introduced only when instrumentation is needed. A watchpoint can be triggered by a hardware trap that starts binary translation and watchpoint interpretation. The translation may continue until the end of the basic block or current function. This approach benefits from the lower overhead of binary translation when several watchpoints are likely to be triggered, and the lower overhead of infrequent traps when watchpoints are unlikely to be triggered. For example, kernel modules may initialize structures (such as the \texttt{sk\_buff} used by network drivers) that are shared with the core kernel. The kernel expects such structures to contain legitimate data pointers when they are received from the module. However, a module can pass a bad pointer and cause the kernel to access illegal memory. Finding the source of this corruption requires complete visibility into all memory accesses to the structure, whether in the module or the kernel. Behavioral watchpoints enable this visibility with low overhead by allowing comprehensive instrumentation of module code and on-demand translation of kernel code. 
+
+We have implemented behavioral watchpoints using Granary, a DBT framework designed to instrument kernel modules \cite{GranaryAtOSDI, DynamoRIOKernel}. Granary instruments arbitrary, binary Linux kernel modules efficiently and without imposing overhead when the core kernel is running and provides a powerful infrastructure for debugging and analysis of kernel modules. We have prototyped several module debugging applications using behavioral watchpoints. These applications include a buffer-overflow detector, a memory leak detector, and a shadow-memory based tool for logging the access patterns of different classes of modules for detecting buggy or malicious behavior. %We describe these tools in more detail in Section~\ref{sec:applications}.
+
+
+
+
+%a programmer needs to find the corruption of packet data in \texttt{sk\_buff} structure. When module passes \texttt{sk\_buff} structure to the kernel, it expects it to provide a legitimate data pointer. Instead a module can pass bad pointer and trick kernel to access illegal memory. Finding this requires complete visibility on all memory accesses to the packet data even in uninstrumented kernel code. Behavioral watchpoints enable it by comprehensively instrumenting module code and on-demand translation of kernel code. 
+%Similarly a module allocates several independent data structure which gets accessed frequently by the module and occasionally by the kernel and on-demand translation provides specialised approach for them.% to debug the access of those objects.
+
+%Our module also allocates a lot of independent data structures from the one we care about, so we want to specialise our instrumentation to debug accesses to only one kind of object. This motivated the use of a watchpoints-based approach. However, existing implementations lacked generality in the mechanism used to "watch" an entire datastructure, as well as generality in how contextual information is associated with those data structures. Our approach solves these limitations by allowing a single watchpoint to watch an entire data structure.   
+
+
+
+%For finding this, it is required to instrument whole kernel/system code which is not efficient.  However, for comprehensiveness, the programmer need to ensure that he has visibility on all memory operations, even in uninstrumented code. 
+
+
+
+
+%we want to ensure that we have visibility on all memory writes, even in uninstrumented kernel code (data-driven instrumentation). Our module also allocates a lot of independent data structures from the one we care about, so we want to specialise our instrumentation to debug accesses to only one kind of object. This motivated the use of a watchpoints-based approach. However, existing implementations lacked generality in the mechanism used to "watch" an entire datastructure, as well as generality in how contextual information is associated with those data structures. Our approach solves these limitations by allowing a single watchpoint to watch an entire data structure.     
+
+
+%\texttt{sk\_buff} structure represents a network packet in the Linux kernel. It is when passed by the module expects to provide a legitimate data pointers that should points to memory that the kernel module has write access to. If this 
+
+%should point to memory that the kernel module has write access to
+%(in cases when the sk buff’s payload is going to be modified). If
+%this invariant is violated, the kernel code can be tricked into writing
+%to arbitrary memory.
+%Another kind of dat
+
+
+
+%an \texttt{sk\_buff} structure, representing a network packet in the Linux kernel, contains a pointer to packet data. When the module passes an \texttt{sk\_buff} tructure to the core kernel on line 42, it is expected to provide
+%a legitimate data pointer inside of the sk buff, and that pointer
+%should point to memory that the kernel module has write access to
+%(in cases when the sk buff’s payload is going to be modified). If
+%this invariant is violated, t
+
+
+%we have the problem of finding corruption in some fields of some data structures allocated by a module. 
+
+
+%For example, an sk buff
+%structure, representing a network packet in the Linux kernel, contains
+%a pointer to packet data. When the module passes an sk buff
+%structure to the core kernel on line 42, it is expected to provide
+%a legitimate data pointer inside of the sk buff, and that pointer
+%should point to memory that the kernel module has write access to
+%(in cases when the sk buff’s payload is going to be modified). If
+%this invariant is violated, t
+
+
+
+%We know our module allocates the bad objects, so for efficiency we don't want to instrument the whole kernel/system. However, for comprehensiveness, we want to ensure that we have visibility on all memory writes, even in uninstrumented kernel code (data-driven instrumentation). Our module also allocates a lot of independent data structures from the one we care about, so we want to specialise our instrumentation to debug accesses to only one kind of object. This motivated the use of a watchpoints-based approach. However, existing implementations lacked generality in the mechanism used to "watch" an entire datastructure, as well as generality in how contextual information is associated with those data structures. Our approach solves these limitations by allowing a single watchpoint to watch an entire data structure.
+
+
+%For example, we have problem of finding  
+
+%For example, a watchpoint can be triggered by a hardware trap that starts binary translation and watchpoint interpretation. The translation may continue until the end of the current function or basic block. This approach benefits from the lower overhead of binary translation when several watchpoints are likely to be triggered, and the lower overhead of traps when watchpoints are unlikely to be triggered.
+%For example, if a programmer wants to debug the data corruption in a field of TCP buffer header, behavioral watchpoint will only trigger the trap when TCP code is executing and will attach DBT. This will save the cost of using DBT system for entire program execution.  
+
+%For example, we have the problem of finding corruption in some fields of some data structures allocated by a module. We know our module allocates the bad objects, so for efficiency we don't want to instrument the whole kernel/system. However, for comprehensiveness, we want to ensure that we have visibility on all memory writes, even in uninstrumented kernel code (data-driven instrumentation). Our module also allocates a lot of independent data structures from the one we care about, so we want to specialise our instrumentation to debug accesses to only one kind of object. This motivated the use of a watchpoints-based approach. However, existing implementations lacked generality in the mechanism used to "watch" an entire datastructure, as well as generality in how contextual information is associated with those data structures. Our approach solves these limitations by allowing a single watchpoint to watch an entire data structure.
+
+
+%will only trigger the trap when TCP code is executing
+
+%. This will save the cost of 
+
+%  Give example of debugging TCP buffer header ... DBT would operate only when TCP code is executing.
+
+
+\section{Thesis contributions}
+This thesis makes the following contributions:
+\begin{enumerate}
+	\item We describe the design and implementation of the behavioral watchpoint framework. The framework is implemented using Granary, a DBT system for kernel modules, which provides access to the contextual-information on every memory access. We also describe code-centric and trap-based approaches for implementing %the two different approaches code-centric and trap-based to implement 
+	behavioral watchpoints.
+	\item We evaluate the two approaches by comparing the effort involved in developing tools and the performance overheads of the two approaches. We discuss the different use cases of both the approaches in debugging operating system kernels. 
+%and compares them for developing different analysis tool. We studied the performance of both the approaches in the view of high and low probability of triggering the watchpoints. 
+	\item We also describe the prototype applications that we developed using behavioral watchpoints and have used for debugging and analysis of some kernel modules. We developed three different applications, the buffer-overflow detector, selective shadowing and leak detector tool for debugging memory issues in kernel modules.
+\end{enumerate}
+
+
+The rest of the thesis is structured as follows. Chapter 2 describes Granary and its various features that are helpful in developing the behavioral watchpoint framework. Chapter 3 describes our design and approach for implementing behavioral watchpoints. Chapter 4 discusses the several prototype applications that we developed using watchpoints. Chapter 5 discusses the related work closely associated with the field. Finally, Chapter 6 concludes the thesis and highlights directions for future work
+
+%We also developed behavioral watchpoints based application which can be used to debug kernel modules. 
+
+
