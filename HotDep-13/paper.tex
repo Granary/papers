@@ -13,7 +13,7 @@
 %\usepackage{epstopdf}
 %\epstopdfsetup{update} % only regenerate pdf files when eps file is newer
 
-
+\iffalse
 \usepackage[]{hyperref}
 \hypersetup{
     pdftitle={Behave or Be Watched: Debugging With Behavioural Watchpoints},
@@ -28,6 +28,7 @@
     pdfpagemode=UseOutlines,    % this is the option you were lookin for
     pdfpagelayout=TwoPageRight
 }
+\fi
 
 % Used for code snippets
 \usepackage{listings,courier}
@@ -38,8 +39,9 @@
 
 % Make text in figure captions small
 \usepackage{caption3} % load caption package kernel first
-\DeclareCaptionOption{parskip}[]{} % disable "parskip" caption option
-\usepackage[small]{caption}
+%\DeclareCaptionOption{parskip}[]{} % disable "parskip" caption option
+\usepackage{caption}
+\DeclareCaptionType{copyrightbox}
 
 % Make sure that figure numbers are continuous through the document
 \counterwithout{figure}{section}
@@ -73,7 +75,7 @@
 %\renewcommand{\bibliography}[1]{{\footnotesize \ORIGbibliography{#1}}}
 
 % Add a horizontal rule above captions, and make captions closer to their figures
-\DeclareCaptionFormat{ruled_caption}{#1#2#3\vspace{-0.6em}\hrulefill\vspace{-1.6em}}
+\DeclareCaptionFormat{ruled_caption}{#1#2#3\hrulefill}
 \captionsetup[figure]{format=ruled_caption}
 %\let\ORIGcaption\caption
 %\renewcommand{\caption}[2][\compressedcaption]{%
@@ -107,6 +109,11 @@
 
 %don't want date printed
 \date{}
+
+\conferenceinfo{\\\\HotDep}{'13, November 03-06, 2013, Farmington, PA, USA}
+
+\CopyrightYear{2013} % Allows default copyright year (20XX) to be over-ridden - IF NEED BE.
+\crdata{Copyright is held by the owner/author(s). Publication rights licensed to ACM.  ACM 978-1-4503-2457-1/13/11 ...\$15.00. \\http://dx.doi.org/10.1145/2524224.2524234}  % Allows default copyright data (0-89791-88-6/97/05) to be over-ridden - IF NEED BE.
 
 %make title bold and 14 pt font (Latex default is non-bold, 16 pt)
 \title{\Large \bf Behave or Be Watched: Debugging with Behavioral Watchpoints}
@@ -567,7 +574,7 @@ We implement behavioral watchpoints by adding an extra level of indirection to m
 \begin{figure}[t]
 \begin{center}
 %\epsfig{file=watchpoints.eps, width=3.0in, height=1.4in}
-\includegraphics[width=3.0in, height=1.4in]{watchpoints.pdf}
+\includegraphics[width=\linewidth]{watchpoints.pdf}
 \end{center}
 %--------sigalternate---------- \vspace{-15pt}
 \caption{\label{fig:watchpoint_descriptor_table}A watched address (bottom left) and its corresponding unwatched address (top left) are compared. The process of resolving the watchpoint descriptor is shown.}
@@ -1261,9 +1268,10 @@ The overhead of watching all module-allocated objects is high ({$\approx$}70\%) 
 %\subfloat{
 %\epsfig{file=watchpoint.eps,width=2.9in, height=1.4in}
 %\epsfig{file=watchpoint.eps,width=.99\linewidth}
-\includegraphics[width=.99\linewidth]{watchpoint_overflow.pdf}
+\includegraphics[width=\linewidth]{watchpoint_overflow.pdf}
  %}
-%--------sigalternate----------\vspace{-6pt}
+%--------sigalternate----------
+\vspace{1pt}
 \caption{\label{fig:iozone-workload-overhead} Throughput (in Mb/sec) for common file system operations (write workloads (w), read workloads (r)).}
 \end{figure}
 
