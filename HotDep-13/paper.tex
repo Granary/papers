@@ -1,5 +1,9 @@
-\documentclass[letterpaper,twocolumn,10pt]{article}
-\usepackage{usenix,endnotes,multirow}
+%--------sigalternate----------
+\documentclass{sig-alternate}
+%--------/sigalternate----------
+
+%\documentclass[letterpaper,twocolumn,10pt]{article}
+\usepackage{endnotes,multirow}
 \usepackage{refstyle,amsmath,chngcntr}
 \usepackage{epsfig,subfigure,framed}
 %\usepackage{multicol,tabularx}
@@ -9,11 +13,28 @@
 %\usepackage{epstopdf}
 %\epstopdfsetup{update} % only regenerate pdf files when eps file is newer
 
+
+\usepackage[]{hyperref}
+\hypersetup{
+    pdftitle={Behave or Be Watched: Debugging With Behavioural Watchpoints},
+    pdfauthor={Akshay Kumar, Peter Goodman, Angela Demke Brown, Ashvin Goel},
+    pdfkeywords={watchpoints,debugging,binary translation,dbt,instrumentation},
+    bookmarksnumbered=true,     
+    bookmarksopen=true,         
+    bookmarksopenlevel=1,       
+    colorlinks=true,
+    allcolors=black,
+    pdfstartview=Fit,           
+    pdfpagemode=UseOutlines,    % this is the option you were lookin for
+    pdfpagelayout=TwoPageRight
+}
+
 % Used for code snippets
 \usepackage{listings,courier}
 
 % Used for changing the spacing after the title, sections, and subsections.
-\usepackage{titlesec,titling}
+%--------sigalternate----------\newcommand{\subparagraph}{}
+%--------sigalternate----------\usepackage{titlesec}
 
 % Make text in figure captions small
 \usepackage{caption3} % load caption package kernel first
@@ -33,12 +54,12 @@
         framesep=0pt}
 
 % Modify spacing before/after title, sections, and subsections.
-\setlength{\droptitle}{-3em} 
-\posttitle{\par\end{center}\vspace{-1.5em}}
+%\setlength{\droptitle}{-3em}  %--------sigalternate----------
+%\posttitle{\par\end{center}\vspace{-1.5em}} %--------sigalternate----------
 \newcommand{\Sref}[1]{Section~\ref{#1}} 
 
-\titlespacing\section{0pt}{5pt plus 4pt minus 2pt}{5pt plus 2pt minus 2pt}        
-\titlespacing\subsection{0pt}{5pt plus 4pt minus 2pt}{5pt plus 2pt minus 2pt}   
+%--------sigalternate----------\titlespacing\section{0pt}{5pt plus 4pt minus 2pt}{5pt plus 2pt minus 2pt}        
+%--------sigalternate----------\titlespacing\subsection{0pt}{5pt plus 4pt minus 2pt}{5pt plus 2pt minus 2pt}   
 
 % Compressed enumerations
 \newenvironment{enumerate*}%
@@ -62,10 +83,10 @@
 %    \vspace{-12pt}}
 
 % Decrease spacing before \paragraphs
-\titlespacing{\paragraph}{%
-  0pt}{%              left margin
-  0.25\baselineskip}{% space before (vertical)
-  1em}%               space after (horizontal)
+%--------sigalternate----------\titlespacing{\paragraph}{%
+%--------sigalternate----------  0pt}{%              left margin
+%--------sigalternate----------  0.25\baselineskip}{% space before (vertical)
+%--------sigalternate----------  1em}%               space after (horizontal)
 
 % Prevent footnotes from spanning multiple pages
 \interfootnotelinepenalty=10000
@@ -73,7 +94,16 @@
 % For leaving some comments in the draft.
 \newcommand{\comment}[1]{}
 
+%\begin{document}
+%--------sigalternate----------
 \begin{document}
+%
+% --- Author Metadata here ---
+\conferenceinfo{HotDep - Workshop on Hot Topics in Dependable Systems}{November 3, 2013, Nemacolin Woodlands Resort (PA), USA}
+\CopyrightYear{2013} % Allows default copyright year (20XX) to be over-ridden - IF NEED BE.
+\crdata{978-1-4503-2457-1}  % Allows default copyright data (0-89791-88-6/97/05) to be over-ridden - IF NEED BE.
+% --- End of Author Metadata ---
+%--------/sigalternate----------
 
 %don't want date printed
 \date{}
@@ -82,18 +112,54 @@
 \title{\Large \bf Behave or Be Watched: Debugging with Behavioral Watchpoints}
 
 %for single author (just remove % characters)
+%\author{
+%{\rm Akshay Kumar} \hspace{1.5em} {\rm Peter Goodman} \hspace{1.5em}  {\rm Angela Demke Brown} \hspace{1.5em} {\rm Ashvin Goel}\\
+%University of Toronto
+%} % end author
+
+
+\numberofauthors{4} %  in this sample file, there are a *total*
+% of EIGHT authors. SIX appear on the 'first-page' (for formatting
+% reasons) and the remaining two appear in the \additionalauthors section.
+%
 \author{
-{\rm Akshay Kumar} \hspace{1.5em} {\rm Peter Goodman} \hspace{1.5em}  {\rm Angela Demke Brown} \hspace{1.5em} {\rm Ashvin Goel}\\
-University of Toronto
-} % end author
+% You can go ahead and credit any number of authors here,
+% e.g. one 'row of three' or two rows (consisting of one row of three
+% and a second row of one, two or three).
+%
+% The command \alignauthor (no curly braces needed) should
+% precede each author name, affiliation/snail-mail address and
+% e-mail address. Additionally, tag each line of
+% affiliation/address with \affaddr, and tag the
+% e-mail address with \email.
+%
+% 1st. author
+\alignauthor
+Akshay Kumar\\
+       \email{akshay@eecg.toronto.edu}
+% 2nd. author
+\alignauthor
+Peter Goodman\\
+       \email{pag@cs.toronto.edu}
+\and
+% 3rd. author
+\alignauthor
+Ashvin Goel\\
+       \email{asvhin@eecg.toronto.edu}
+% 4th. author
+\alignauthor
+Angela Demke Brown\\
+       \email{demke@cs.toronto.edu}
+}
 
 
 \maketitle
-\subsection*{Abstract}
+%\subsection*{Abstract}
+\begin{abstract}
 Finding, understanding, and fixing bugs in an operating system is challenging. Dynamic binary translation (DBT) systems provide a powerful facility for building program analysis and debugging tools. However, DBT abstractions are too low-level and provide limited contextual information for instrumentation tools.
 
 We introduce \emph{behavioral watchpoints}, a new software-based watchpoint framework that simplifies the implementation of DBT-based program analysis and debugging tools. Behavioral watchpoints extend the traditional approach of using a DBT system by providing context-specific information at the instruction level and specialising instrumentation to individual data structures. We describe four applications developed using our watchpoint framework: detecting buffer overflows, detecting read-before-write and memory freeing bugs, detecting memory leaks and enforcing fine-grained memory access policies. We implemented behavioral watchpoints using Granary, a new DBT framework. We show that the overheads are reasonable for their intended use in analysing and debugging kernel modules.
-
+\end{abstract}
 
 \section{Introduction}
 
@@ -503,7 +569,7 @@ We implement behavioral watchpoints by adding an extra level of indirection to m
 %\epsfig{file=watchpoints.eps, width=3.0in, height=1.4in}
 \includegraphics[width=3.0in, height=1.4in]{watchpoints.pdf}
 \end{center}
-\vspace{-15pt}
+%--------sigalternate---------- \vspace{-15pt}
 \caption{\label{fig:watchpoint_descriptor_table}A watched address (bottom left) and its corresponding unwatched address (top left) are compared. The process of resolving the watchpoint descriptor is shown.}
 %for the watched address is shown.}
 \end{figure}
@@ -722,15 +788,14 @@ FUNC_WRAPPER(__kmalloc, (size, flags), {
   return addr;
 })
 \end{lstlisting}
-\vspace{-10pt}
+%--------sigalternate----------  \vspace{-10pt}
 \caption{\label{fig:kmalloc_wrapper}Definition of the \texttt{\_\_kmalloc} function wrapper in Granary. The above code expands into a function for wrapping the \texttt{\_\_kmalloc} allocator. Calls to \texttt{\_\_kmalloc} are transparently substituted with calls to the generated wrapper. The wrapper invokes the original \texttt{\_\_kmalloc} function and returns a watched version of the allocated address.}
 \end{figure}
 
 We employ two overflow detection policies: heap-based, and stack-based. % All three policies depend on the same extension to the meta-information of watchpoint descriptors: a \emph{limit address}. Together, the base address (stored in the descriptor) and the limit address delineate an object's boundaries in memory \cite{BccFatPointers}.
 
 
-\paragraph{Heap-based overflow detection\label{sec:heap_overflow}}
-The heap-based detection policy detects buffer overflow errors on all heap-allocated objects. We use Granary to wrap the kernel's memory allocators (e.g., \texttt{kmalloc}) and add watchpoints to the addresses returned by those allocators, as shown in \Figref{kmalloc_wrapper}. The lifetime of an added watchpoint is tied to the lifetime of the memory it watches. Each watchpoint's descriptor records bounds information about the allocated memory in the form of the object's base and limit address \cite{BccFatPointers}. A buffer overflow is detected when a dereference of a watched address occurs outside of the bounds recorded by the watchpoint's descriptor. %(\Figref{detect_overflow}). 
+\paragraph{Heap-based overflow detection\label{sec:heap_overflow}} The heap-based detection policy detects buffer overflow errors on all heap-allocated objects. We use Granary to wrap the kernel's memory allocators (e.g., \texttt{kmalloc}) and add watchpoints to the addresses returned by those allocators, as shown in \Figref{kmalloc_wrapper}. The lifetime of an added watchpoint is tied to the lifetime of the memory it watches. Each watchpoint's descriptor records bounds information about the allocated memory in the form of the object's base and limit address \cite{BccFatPointers}. A buffer overflow is detected when a dereference of a watched address occurs outside of the bounds recorded by the watchpoint's descriptor. %(\Figref{detect_overflow}). 
 The memory operand-size-specific vtable functions help catch corner cases where memory reads or writes access both an object and its adjacent memory cells.%, as shown in case $(3)$ of \Figref{detect_overflow}.
 
 %intersect an object's memory and the adjacent memory cells.
@@ -772,10 +837,10 @@ The memory operand-size-specific vtable functions help catch corner cases where 
 
 %Granary recursively follows argument and return value pointers based on object type specifications. These specifications tell Granary how to follow pointers and what--if any--pointers should be converted to watchpoints. To reduce programmer effort, Granary automatically generates type specifications and wrapper functions for any set of known types and functions. Some manual post-processing is required if the analysis/debugging application needs to understand semantic relationships between function arguments or structure fields. \comment{Automating this process was an important goal of Granary because of Granary wraps all (approx. 6,000) exported kernel functions.}
 
-\paragraph{Stack-based overflow detection}
+
 %We detect overflows on stack allocated objects when memory outside of the bounds of the activation/call frame in which the object is allocated is accessed. This policy is distinguished from the heap- and type-based policies in that the watchpoint descriptor is managed separately from the watched memory, and the lifetime of the descriptor extends beyond the lifetime of the watched memory.
 
-To detect stack overflows, we view the memory occupied by the activation frame of an invoked function as a dynamically-sized buffer. %Like our other buffer overflow policies, we use a watchpoint to detect accesses to memory outside of this buffer. %Unlike our other policies, %we only \emph{associate} a descriptor with this buffer, and rely on a different mechanism to \emph{add} the watchpoint to stack addresses.
+\paragraph{Stack-based overflow detection} To detect stack overflows, we view the memory occupied by the activation frame of an invoked function as a dynamically-sized buffer. %Like our other buffer overflow policies, we use a watchpoint to detect accesses to memory outside of this buffer. %Unlike our other policies, %we only \emph{associate} a descriptor with this buffer, and rely on a different mechanism to \emph{add} the watchpoint to stack addresses.
 %, and manage what addresses are watched with this descriptor using a separate mechanism.
 %We separate adding watchpoints from allocating descriptors for stack overflow detection. In particular, 
 We associate a descriptor with the buffer represented by the activation frame of a called function. This descriptor tracks the bounds of the frame over the lifetime of the function call.
@@ -807,8 +872,9 @@ We update the bounds of the frame (in the descriptor) when the frame grows or sh
 
 In this section, we show how to use behavioral watchpoints to shadow memory. Previous work has focused on full memory shadowing \cite{Memcheck}, while watchpoints enable \emph{selective} shadowing of watched objects. We describe how the initialisation state of each byte of watched memory is tracked using shadow memory, and how to detect bugs related to the usage of heap-allocated memory.
 
-We use Granary to wrap kernel memory allocators and deallocators (e.g., \texttt{kmalloc}, \texttt{kfree}). Wrapped allocators add watchpoints to allocated memory, and wrapped deallocators remove watchpoints before invoking the kernel's deallocators. Selective shadow memory is maintained as a watchpoint descriptor-specific, variable-sized bitset. %\footnote{As an optimisation, shadow memory for small objects is embedded in the watchpoint descriptor.}. 
-Each byte of allocated memory corresponds to one bit of descriptor-specific shadow memory. The bits in shadow memory are initialised to zero. Individual bits are flipped to one by write-specific vtable functions when there is a write to the bytes of memory shadowed by those bits. 
+We use Granary to wrap kernel memory allocators and deallocators (e.g., \texttt{kmalloc}, \texttt{kfree}). Wrapped allocators add watchpoints to allocated memory, and wrapped deallocators remove watchpoints before invoking the kernel's deallocators. Selective shadow memory is maintained as a watchpoint descriptor-specific, variable-sized bitset. Each byte of allocated memory corresponds to one bit of shadow memory. The bits in shadow memory are initialised to zero. Individual bits are flipped to one by injected instrumentation code  when a write occurs to the memory shadowed by those bits.
+
+%write-specific instru functions when there is a write to the bytes of memory shadowed by those bits. 
 
 %When a wrapped allocator is invoked, a watchpoint is added to the addresses returned by those allocators
  
@@ -827,11 +893,11 @@ Each byte of allocated memory corresponds to one bit of descriptor-specific shad
 
 
 
-\paragraph{Read-before-write bugs}
-Read-specific vtable functions detect read-before-write bugs by checking if the shadow bit corresponding to one of the read bytes is zero. However, this method of detection can report false positives: it is common for larger-than-needed reads to be performed and for compiler-added structure padding to be read (but never written). A relaxed read-before-write memory checking policy requires that at least one shadow bit is set for every read operation.
+\paragraph{Read-before-write bugs} Memory read instrumentation detects read-before-write bugs by checking if the shadow bit corresponding to one of the read bytes is zero. However, this method of detection can report false positives: it is common for larger-than-needed reads to be performed and for compiler-added structure padding to be read (but never written). A relaxed read-before-write memory checking policy requires that at least one shadow bit is set for every read operation.
 
-\paragraph{Memory freeing bugs}
-We detect freeing of non-heap memory when the argument to a kernel memory deallocator is not a watched address. We detect an invalid free, such as freeing an offset of an allocated object, when the unwatched address of a watched object being deallocated is different than the watchpoint descriptor's base address. We detect use-after-free bugs by marking the descriptor of a watched address being deallocated as dead. The lifetime of a dead descriptor extends beyond that of the object so that a later use of any watched address with that descriptor will report a use-after-free bug. We detect double-free bugs when the descriptor of a watched address being deallocated is already marked as dead.
+% We detect freeing of non-heap memory when the argument to a kernel memory deallocator is not a watched address. 
+
+\paragraph{Memory freeing bugs} We detect an invalid free, such as freeing an offset of an allocated object, when the unwatched address of a watched object being deallocated is different than the watchpoint descriptor's base address. We detect use-after-free bugs by marking the descriptor of a watched address being deallocated as dead. The lifetime of a dead descriptor extends beyond that of the object so that a later use of any watched address with that descriptor will report a use-after-free bug. We detect double-free bugs when the descriptor of a watched address being deallocated is already marked as dead.
 
 %We use Granary to wrap the kernel's deallocation functions (e.g., \texttt{kfree}). Because all allocators are wrapped and add watchpoints, freeing of non-heap memory is easily detected when  
 
@@ -1118,7 +1184,7 @@ WATCH_WRITE(struct file_operations, ioctl, {
   }
 })
 \end{lstlisting}
-\vspace{-8pt}
+%--------sigalternate----------\vspace{-8pt}
 \caption{\label{fig:field_invariant_check}This code example shows how to check invariant 1(h) from \cite{GibraltarKernelInvariants} using field-accessor API. The invariant checked prevents a (potential) kernel rootkit from installing its own \texttt{ioctl} handler into the Real-Time Clock and preventing virus-scans from being scheduled, thus allowing rootkit to go undetected.}
 %. Anti-virus programs depend on this built-in \texttt{ioctl} handler to periodically schedule scans. Replacing the handler can prevent such scans from being scheduled, thus allowing the rootkit to go undetected.}
 \end{figure}
@@ -1180,9 +1246,13 @@ The microbenchmark performed a tight-loop of memory operations and exhibits the 
 
 %\paragraph*{Netperf} We tested network throughput and latency using the \texttt{e1000e} network device driver module. CPU utilization increased by {\texttildelow}6\%, UDP throughput decreased by at most 50\%, TCP throughput was unaffected, and both the TCP and UDP request-response latency increased by no more than 50\%. 
 
-\paragraph*{IOzone} In our experimental setup, the \texttt{ext3} filesystem was mounted on a 1GB RAMDisk (mounting loads the \texttt{ext3} and \texttt{jbd} journaling kernel modules). IOzone creates two processes (reader, writer) performing common file operations on a file of size 480Mb with a record size of 1Kb. Watchpoints were added to addresses returned by the two most-used allocators in \texttt{ext3} and \texttt{jbd}: \texttt{\_\_kmalloc} and \texttt{kmem\_cache\_alloc}. \Figref{iozone-workload-overhead} shows the drop in throughput of filesystem operations when using the watchpoints instrumentation; \emph{watch\_none} represents the overhead of baseline watchpoints instrumentation with no added watchpoints, and \emph{watch\_all} shows the overhead where module-allocated objects are watched. 
+\paragraph{IOzone} In our experimental setup, the \texttt{ext3} filesystem was mounted on a 1GB RAMDisk (mounting loads the \texttt{ext3} and \texttt{jbd} journaling kernel modules). IOzone creates two processes (reader, writer) performing common file operations on a file of size 480Mb with a record size of 1Kb. Watchpoints were added to addresses returned by the two most-used allocators in \texttt{ext3} and \texttt{jbd}: \texttt{\_\_kmalloc} and \texttt{kmem\_cache\_alloc}. \Figref{iozone-workload-overhead} shows the drop in throughput of filesystem operations when using the watchpoints instrumentation; \emph{watch\_none} represents the overhead of baseline watchpoints instrumentation with no added watchpoints, and \emph{watch\_all} shows the overhead where module-allocated objects are watched. 
 
-The overhead of the watchpoint framework increases to {\texttildelow}70\% when all objects allocated by the module are watched. This is because of the leaked watched objects causing hardware traps in the kernel when dereferenced. We also studied the access pattern of these watched objects and it shows that file system \texttt{inode} objects gets accessed maximum by the kernel and watching them cause maximum number of hardware traps. The overhead of \emph{watch\_all} decreases by {\texttildelow}50\% and become close to the overhead of baseline instrumentation i.e, \emph{watch\_none} after removing watchpoints from \texttt{inode} objects. We also evaluated the selective instrumentation by watching \texttt{inode}, non-\texttt{inode} and only module accessed objects. It reduces the overhead of using the watchpoint framework to {\texttildelow}5\% when only module accessed objects are watched.  
+The overhead of watching all module-allocated objects is high ({\texttildelow}70\%) because many watched objects are accessed by uninstrumented kernel code, which results in many hardware exceptions. Our system recovers from these exceptions by instrumenting kernel code on-demand. We discovered that \texttt{inode}s are frequently accessed by the kernel, thus causing many exceptions, and that not watching \texttt{inode}s improves the performance of of \emph{watch\_all} to be near that of \emph{watch\_none}.
+
+%The overhead of the watchpoint framework increases to {\texttildelow}70\% when all objects allocated by the module are watched. This is because of the leaked watched objects causing hardware traps in the kernel when dereferenced. We also studied the access pattern of these watched objects and it shows that file system \texttt{inode} objects gets accessed maximum by the kernel and watching them cause maximum number of hardware traps. The overhead of \emph{watch\_all} decreases by {\texttildelow}50\% and become close to the overhead of baseline instrumentation i.e, \emph{watch\_none} after removing watchpoints from \texttt{inode} objects. 
+
+%We also evaluated the selective instrumentation by watching \texttt{inode}, non-\texttt{inode} and only module accessed objects. It reduces the overhead of using the watchpoint framework to {\texttildelow}5\% when only module accessed objects are watched.  
 %many of these watched objects are shared and leak to the kernel. When these objects are dereferenced in the kernel, they cause hardware traps because Granary detaches itself at the kernel interface and the watchpoint instrumentation is no longer added to the memory references. These hardware traps are costly and reattach the watchpoint framework which then instruments the kernel code transitively.
 \Figref{iozone-workload-overhead} also shows the overhead of the heap-allocated buffer overflow detector using behavioral watchpoints. %Our implementation of the buffer-overflow detector does not yet use various optimizations offered by Granary at the instrumentation and wrapper layer, and thus exhibits high overhead.
 
@@ -1191,9 +1261,9 @@ The overhead of the watchpoint framework increases to {\texttildelow}70\% when a
 %\subfloat{
 %\epsfig{file=watchpoint.eps,width=2.9in, height=1.4in}
 %\epsfig{file=watchpoint.eps,width=.99\linewidth}
-\includegraphics[width=.99\linewidth,height=1.7in]{watchpoint_overflow.pdf}
+\includegraphics[width=.99\linewidth]{watchpoint_overflow.pdf}
  %}
-\vspace{-6pt}
+%--------sigalternate----------\vspace{-6pt}
 \caption{\label{fig:iozone-workload-overhead} Throughput (in Mb/sec) for common file system operations (write workloads (w), read workloads (r)).}
 \end{figure}
 
@@ -1299,7 +1369,7 @@ As future work, we will investigate the applicability of behavioral watchpoints 
 %We have established that behavioral watchpoints are useful for implementing memory error detection and protection policies. In summary, we conclude.
 
 % The bibliography should be embedded for final submission.
-\bibliographystyle{acm}
+\bibliographystyle{abbrv}
 \bibliography{library}
 \end{document}
 
