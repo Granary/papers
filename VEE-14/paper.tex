@@ -155,9 +155,9 @@ An instrumentation system is transparent if, given the same inputs, the instrume
 \subsection{Reentrancy}
 
 \paragraph{Code cache}
-Granary's code cache and JIT translation mechanism is fully reentrant. Context-switches into Granary disable interrupts and switch execution onto a CPU-private stack. Context switches out of Granary and into the code cache or native code returns executuin to the native stack and re-enables interrupts. JIT translation, however, presents a problem: context-switches save or restore the entire register state, so as not to disturb the execution of the instrumented program. This raises the question: when resolving the target of a direct or indirect control-flow instruction, how should execution be directed to the correct location?
+Granary's code cache and JIT translation mechanism is fully reentrant. Context-switches into Granary disable interrupts and switch execution onto a CPU-private stack. Context switches out of Granary and into the code cache or native code returns execution to the native stack and re-enables interrupts. This approach presents a minor challenge: context-switches save or restore the entire register state, so as not to disturb the execution of the instrumented program. Therefore, if a context switch into Granary occurs because the next basic block must be found/translated, then the address of that next basic block must be stored \emph{somewhere} in order for execution to eventually reach that basic block when the context switches back to the code cache. But context switching is not allowed to perturb the register state of the instrumented program, and so the target address must be resolved by another means.
 
-Like btkernel, Granary solves this problem using  by generating ``edge'' code for each direct control-flow instruction (e.g. \texttt{call}, \texttt{jmp}, \texttt{jcc}). When a basic block is first translated, its direct control-flow instructions (CTIs) are converted into jumps to CTI-specific edge code. Edge code lives outside the code cache and is responsible for transferring control from a basic block ($B_{pred}$) to Granary so that the next basic block ($B_{succ}$) can be found/translated, and then connected ($B_{pred} \underset{\texttt{jz}}{\to} B_{succ}$) via hot code patching. Reentrancy of edge code is obtained by spilling registers onto the runtime call stack, and later restoring them before jumping back to the now-patched CTI (\Cref{fig:direct_edge_code}).
+Like btkernel, Granary solves this problem of figuring out how to get to where the code needs to go  by generating ``edge'' code for each direct control-flow instruction (e.g. \texttt{call}, \texttt{jmp}, \texttt{jcc}). When a basic block is first translated, its direct control-flow instructions (CTIs) are converted into jumps to CTI-specific edge code. Edge code lives outside the code cache and is responsible for transferring control from a basic block ($B_{pred}$) to Granary so that the next basic block ($B_{succ}$) can be found/translated, and then connected ($B_{pred} \underset{\texttt{jz}}{\to} B_{succ}$) via hot code patching. Reentrancy of edge code is obtained by spilling registers onto the runtime call stack, and later restoring them before jumping back to the now-patched CTI (\Cref{fig:direct_edge_code}).
 
 Granary also generates edge code for indirect control-flow instructions; however, this edge code is split into two separate components: entry and exit edge code. Entry edge code is generated on a per-indirect CTI instruction basis, and spills registers onto the runtim call stack. Entry edge is responsible for indirect branch lookup, and will indirectly jump to the exit edge code for a given basic block. Exit edge code is generated for each basic block that is targeted by an indirect CTI. Exit edge code restores the register state saved by the entry edge code, and then directly jumps to the beginning of the targeted basic block.
 
@@ -235,15 +235,15 @@ struct device_driver {
 \columnbreak
 \begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
 TYPE_WRAPPER(struct device_driver, {
-    PRE_OUT {
-        ABORT_IF_FUNCTION_IS_WRAPPED(arg.probe)
-        WRAP_FUNCTION(arg.probe);
-        WRAP_FUNCTION(arg.remove);
-        ...
-    }
-    POST_OUT {
-        POST_WRAP(arg.pm);
-    }
+  PRE_OUT {
+    ABORT_IF_FUNCTION_IS_WRAPPED(arg.probe)
+    WRAP_FUNCTION(arg.probe);
+    WRAP_FUNCTION(arg.remove);
+    ...
+  }
+  POST_OUT {
+    POST_WRAP(arg.pm);
+  }
 })
 \end{lstlisting}
 \end{multicols}
@@ -256,8 +256,7 @@ Granary allows tool developers to precisely specify what code should be instrume
 \subsection{Kernel}
 Like DRK and btkernel, Granary can instrument the whole kernel. Instrumenting the whole kernel requires interposing on the system call entrypoint (x86-64 \texttt{MSR\_LSTAR} model-specific register) and on the interrupt vector entrypoints (stored in the interrupt descriptor table). For whole-kernel instrumentation, Granary boostraps by duplicating the the early entrypoint instructions that are responsible for switching execution onto a kernel stack, and then injects a jump to translate/instrumented kernel code after the stack switch. The translation process continues when a system call or interrupt occurs and follows the jump from duplicated into translated code. Granary only translate code that is known to operate on a kernel stack so that instrumentation tools can safely save transient data in a reentrant way by spilling that data to the stack.
 
-\subsection{Modules}
-
+\subsection{Modules}\label{sec:module}
 
 Granary can target instrumentation only at specific kernel modules, while executing the rest of the kernel natively and without overhead. Instrumenting only specific kernel modules is particularly useful for debugging tools because modules represent the bulk of new kernel code under development, and contain the most bugs \cite{FaultsInLinux}.
 
@@ -283,6 +282,20 @@ Granary \emph{detaches} when control transfers from instrumented code to native 
 Granary's wrappers expose a wealth of static program information to instrumentation tools. Instrumentation tools can use information present in wrappers to alter how code is instrumented, or to simply inspect the runtime object graph in a type-safe way. For example, we are actively using type information present in wrappers to create a tool that generates models of typical module behavior. The wrapper information serves two roles in our tool. First, we use type wrappers to assign type-specific IDs to module-allocated memory that is shared across the module/kernel interface. Type ID assignment is critical because it allows us to match memory reads and writes to specific kernel data structure fields. Second, we use the kernel and module function wrappers to generate call graphs of a module's execution. This call graph models module behavior (according to the kernel) because we label module code nodes with kernel data structure and function pointer field names (derived from module wrappers). This labelling allows us to generalize across similar modules. For example, code reached by calling the \texttt{ext4\_mount} and \texttt{btrfs\_mount} functions from the \texttt{ext4} and \texttt{btrfs} file system modules, respectively, are both labelled as \texttt{file\_system\_type::mount}, because the function addresses are stored (and later replaced by module wrappers) in the \texttt{mount} field of a \texttt{file\_system\_type} data structure. The combined records from multiple ``trusted'' modules of the same class (e.g., mature, open-source file systems) models the behavior of typical kernel modules. We hope that these models will help us build tools that classify and identify spurious module behavior. 
 
 \subsection{Functions}
+
+Granary can instrument or not instrument functions in several different ways. For example, \emph{probe-based} instrumentation allows Granary to selectively instrument only a particular function, while \emph{wrapper-based} instrumentation allows Granary to isolate a particular function that is invoked by instrumented code, and choose to instrument that function or run it natively (all while having the flexibility to arbitrarily inspect that function's arguments and return values in a type-safe way).
+
+\paragraph{Probe-based instrumentation}
+
+Probe-based instrumentation allows an instrumentation tool to replace \emph{all} executions of a particular kernel function, regardless of whether or not the replaced function is executed by native or instrumented code \cite{KProbes, AnyWhereAnyTimeDBT, KernInst}. Probe-based instrumentation can be used to wrap a particular function without instrumenting its code, or to wrap and instrument the probed function's code.
+
+Probe-based instrumentation provides visibility into specific kernel events (e.g. memory allocations) to instrumentation tools that don't instrument the whole kernel (e.g. module-only). One example tool that combines module-only and probe-based instrumentation is Granary's kernel module memory leak detector. This leak detector finds leaks of module-owned memory. We say that the some memory is owned by a module iff that memory is deallocated by a module. Unfortunately, ownership of module-allocated memory (for an arbitrary, binary module) is not known \emph{a priori}. Therefore, our tool conservatively assumes that all module-allocated memory is module-owned, unless it is freed by the kernel (observed via probe-based instrumentation of a kernel memory deallocator). We also use probe-based instrumentation to assign module ownership to kernel-allocated \texttt{sk\_buff} data structures, which are allocated by the kernel but deallocated by network device driver modules.
+
+\paragraph{Wrapper-based instrumentation}
+
+Wrapper-based instrumentation makes use of the same wrapper capabilities used by module-only instrumentation (\Cref{sec:module}), but is available regardless of the instrumentation granularity. Wrapper-based instrumentation is similar to probe-based instrumentation, but permits more selectivity in terms of the context in which the function will be wrapped. That is, a function can be wrapped in one way when executed by instrumented kernel code, and in another way when executed by instrumented module code. Finer-grained selectivity can be achieved by having individual instrumentation policies manually decide how to wrap a given function.
+
+%Granary can instrument, or not instrument, particular function
 
 \subsection{On-demand}
 
