@@ -295,9 +295,9 @@ Probe-based instrumentation provides visibility into specific kernel events (e.g
 
 Wrapper-based instrumentation makes use of the same wrapper capabilities used by module-only instrumentation (\Cref{sec:module}), but is available regardless of the instrumentation granularity. Wrapper-based instrumentation is similar to probe-based instrumentation, but permits more selectivity in terms of the context in which the function will be wrapped. That is, a function can be wrapped in one way when executed by instrumented kernel code, and in another way when executed by instrumented module code. Finer-grained selectivity can be achieved by having individual instrumentation policies manually decide how to wrap a given function.
 
-%Granary can instrument, or not instrument, particular function
-
 \subsection{On-demand}
+
+Demand-based instrumenetation blah blah blah
 
 %\section{Mixed-Mode Execution}\label{sec:modes}
 %Granary supports two modes of execution: instrumented and native. Module code is instrumented and executes from Granary's code cache, which is under Granary's control. Non-module kernel code runs natively. A mode switch occurs when execution transfers between native and instrumented code. Some mode switches happen naturally (e.g., when instrumented code returns to native code) and other mode switches are mediated by Granary (e.g., when instrumented module code invokes a kernel function).
