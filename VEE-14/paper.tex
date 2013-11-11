@@ -168,20 +168,23 @@ Granary also generates edge code for indirect control-flow instructions; however
 \newsavebox\nativejcc
 \begin{lrbox}{\nativejcc}
 \begin{minipage}[b]{4cm}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
-cmp $0x0, %rax
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]cmp $0x0, %rax
+
 jz value_is_zero 
 ...
+
+
+
+
+
+
 ( fall through )
 \end{lstlisting}
 \end{minipage}
 \end{lrbox}
 
 \newsavebox\translatedjcc
-\begin{lrbox}{\translatedjcc}
-\begin{minipage}[b]{4cm}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
-  cmp $0x0, %rax
+\begin{lrbox}{\translatedjcc}\begin{minipage}[b]{4cm}\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]  cmp $0x0, %rax
 jz_to_patch:
   jmp edge_value_is_zero
   ...
