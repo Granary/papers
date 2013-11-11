@@ -168,20 +168,23 @@ Granary also generates edge code for indirect control-flow instructions; however
 \newsavebox\nativejcc
 \begin{lrbox}{\nativejcc}
 \begin{minipage}[b]{4cm}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
-cmp $0x0, %rax
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]cmp $0x0, %rax
+
 jz value_is_zero 
 ...
+
+
+
+
+
+
 ( fall through )
 \end{lstlisting}
 \end{minipage}
 \end{lrbox}
 
 \newsavebox\translatedjcc
-\begin{lrbox}{\translatedjcc}
-\begin{minipage}[b]{4cm}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
-  cmp $0x0, %rax
+\begin{lrbox}{\translatedjcc}\begin{minipage}[b]{4cm}\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]  cmp $0x0, %rax
 jz_to_patch:
   jmp edge_value_is_zero
   ...
@@ -221,15 +224,15 @@ Granary charts a middle ground between the two aforementioned approaches. Interr
 \begin{multicols}{2}
 \begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
 struct device_driver {
-	...
-	int (*probe)(struct device *);
-	int (*remove)(struct device *);
-	void (*shutdown)(struct device *);
-	int (*suspend)(struct device *, pm_message_t);
-	int (*resume)(struct device *);
-	...
-	const struct dev_pm_ops *pm;
-	...
+  ...
+  int (*probe)(struct device *);
+  int (*remove)(struct device *);
+  void (*shutdown)(struct device *);
+  int (*suspend)(struct device *, pm_message_t);
+  int (*resume)(struct device *);
+  ...
+  const struct dev_pm_ops *pm;
+  ...
 };
 \end{lstlisting}
 \columnbreak
@@ -295,9 +298,32 @@ Probe-based instrumentation provides visibility into specific kernel events (e.g
 
 Wrapper-based instrumentation makes use of the same wrapper capabilities used by module-only instrumentation (\Cref{sec:module}), but is available regardless of the instrumentation granularity. Wrapper-based instrumentation is similar to probe-based instrumentation, but permits more selectivity in terms of the context in which the function will be wrapped. That is, a function can be wrapped in one way when executed by instrumented kernel code, and in another way when executed by instrumented module code. Finer-grained selectivity can be achieved by having individual instrumentation policies manually decide how to wrap a given function.
 
+\begin{figure}[t!]
+\lstset{language=C, tabsize=2, stepnumber=1}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+MODULE_FUNCTION_WRAPPER(__kmalloc, (size, gfp), {
+  void *addr = __kmalloc(size, gfp);
+  if(is_valid_address(addr)) {
+    add_watchpoint(addr, addr, size);
+  }
+  return addr;
+})
+\end{lstlisting}
+\caption{Example module function wrapper for the \texttt{\_\_kmalloc} function. This wrapper adds an ``address watchpoint" to the address returned by the kernel's \texttt{\_\_kmalloc} memory allocator. Granary's module memory leak detector uses address watchpoints to track the liveness of module-allocated memory. Every access of a ``watched address" marks the associated memory as live within the current epoch. Memory that has not been live for several consecutive epochs is treated as a potential leak, and a is checked for reachability using a heap memory scanner.}
+\label{fig:malloc_wrapper}
+\end{figure}
+
+Granary's module memory leak detector is one example application that uses the selectivity of wrappers (with respect to their calling context) to distinguish between module-allocated and kernel-allocated memory. \Cref{fig:malloc_wrapper} shows a module function wrapper that adds ``address watchpoints"  \cite{BehaveOrBeWatched} to module-allocated memory.
+
+%Granary can instrument, or not instrument, particular function
+
 \subsection{On-demand}
 
-Demand-based instrumenetation blah blah blah
+On-demand instrumentation makes use of Granary's control over interrupt and exception handling. When a specific exception or interrupt occurs, a Granary tool can turn on instrumentation for the interrupted code. This ties in well with Granary's address watchpoints system, which taints memory addresses by changing their high-order 16 bits into a ``non-canonical" form. Watched addresses trap when accessed by native code, which introduces an opportunity for on-demand instrumentation to be enabled. Another application of on-demand instrumentation is data watchpoints based on hardware page protection and memory shadowing.
+
+Turning on instrumentation when specific data is accessed makes on-demand instrumentation inherently \emph{data-centric} as opposed to \emph{code-centric}. That is, instrumentation is targeted at instructions accessing specific data, instead of the typical ``dragnet" approach employed by most DBT systems, which instrument all memory loads/stores so as to capture the select few that access key data.
+
+% instrumentation turns on when specific data is accessed, and can be turned off at the granularity of an instruction, a basic block, the current executing function, or the current executing task/thread. 
 
 %\section{Mixed-Mode Execution}\label{sec:modes}
 %Granary supports two modes of execution: instrumented and native. Module code is instrumented and executes from Granary's code cache, which is under Granary's control. Non-module kernel code runs natively. A mode switch occurs when execution transfers between native and instrumented code. Some mode switches happen naturally (e.g., when instrumented code returns to native code) and other mode switches are mediated by Granary (e.g., when instrumented module code invokes a kernel function).
