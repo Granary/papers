@@ -64,7 +64,7 @@
 Granary is a framework for creating flexible and efficient tools that instrument the Linux kernel. Granary's key novelty is its \emph{runtime code specialization} feature, which enables tools to decide what code to instrument, and how to instrument that code. Flexible specialization allows tools to be picky about instrumentation. For example, a tool can choose to instrument every load and store operation, but only inside nested critical sections that are executing in module code. Granary's runtime code specialization feature addresses two limitations of existing kernel analysis systems: \begin{inparaenum}[i)]
 	\item they have focused on instrumenting all code \cite{DRK,btkernel,QEMU}; and
 	\item they can only instrument code using a single policy.
-\end{inparaenum}
+\end{inparaenum} 
 
 %Operating system (OS) kernels present an apparently insane environment for a transparent binary instrumentation framework.  For example, hardware interrupts can redirect control flow at any instruction, and interrupt delivery cannot be delayed past the execution of memory instructions that might alter the interrupt delivery state~\cite{DRK}. Preserving interrupt transparency, however, requires that interrupts be delayed until the end of any injected instrumentation instructions.  Together, these requirements make it very difficult to write instrumentation tools.  The insane environment of OS kernels also creates several opportunities for analysis tools. For example, interrupts can be ``tamed'' and put to new uses; privileged hardware features can be used; and the kernel ABI and source code can be relied upon to be a good predictor of module behavior at the kernel/module boundary. We also found that the kernel is largely insensitive to transparency issues, allowing us to relax transparency in exchange for both improved performance and greater visibility into the execution of instrumented code.  This increased visibility is particularly important for analysis and debugging tools.
 
@@ -79,7 +79,9 @@ Granary is a framework for creating flexible and efficient tools that instrument
 %	\item they do not provide static type information to the instrumented code.
 %\end{inparaenum} 
 
-Instrumenting all code (e.g., the whole kernel) imposes unnecessary performance overheads when only a subset of the code is being analyzed (e.g., modules, functions). In practice, we would like to target instrumentation at specific code for efficiency, while also allowing rich and detailed instrumentation of the targeted code. This requirement motivates the design of \emph{mixed-mode execution}, which allows Granary tools to instrument only specific code while the majority of code executes with zero overhead. 
+Instrumenting all code (e.g., the whole kernel) imposes unnecessary performance overheads when only a subset of the code is being analyzed (e.g., modules, functions). In practice, we would like to target instrumentation at specific code for efficiency, while also allowing rich and detailed instrumentation of the targeted code. Limiting the scope of what is instrumented is  important because the overhead introduced by using runtime code instrumentation is usually dominated by the instrumentation itself and not the runtime system supporting that instrumentation.
+
+%This requirement motivates the design of \emph{mixed-mode execution}, which allows Granary tools to instrument only specific code while the majority of code executes with zero overhead. 
 
 %This is challenging because Granary must be comprehensive: all code that is meant to be instrumented should be instrumented. In other words, relinquishing control to execute kernel code natively must not cause Granary to miss the execution of any module code.
 
@@ -377,6 +379,39 @@ Granary implements policy tracking and switching by encoding policy information 
 
 \section{Evaluation}\label{sec:eval}
 
+What has been evaluated:
+
+\paragraph{lmbench}
+\begin{itemize}
+	\item Btkernel
+	\item Granary, full-kernel, null
+	\item Granary, full-kernel, even/odd
+	\item Granary, full-kernel, even/odd, where even/odd is a runtime check and branch.
+\end{itemize}
+
+\paragraph{fileserver}
+Setup: 1GB RAM, 3GB partition, ext3+jbd, >1GB mounted file system.
+\begin{itemize}
+	\item full-kernel
+	\begin{itemize}
+		\item Btkernel
+		\item Granary,null
+		\item Granary, even/odd
+		\item Granary, even/odd, where even/odd is a runtime check and branch.
+	\end{itemize}
+	\item module-only, (ext3+jbd)
+	\begin{itemize}
+		\item Granary,null
+		\item Granary, even/odd
+		\item Granary, even/odd, where even/odd is a runtime check and branch.
+	\end{itemize}
+\end{itemize}
+
+\paragraph{kernel compile}
+Same as fileserver, but with 8GB RAM instead of 3GB.
+
+\paragraph{recursive copy of kernel source tree}
+Same as fileserver, but with 8GB RAM instead of 3GB.
 
 \section{Related Work}\label{sec:related}
 Prior work can be classified as either whole-kernel/system DBT, or probe-based kernel instrumentation. We discuss how Granary differs from these approaches.
