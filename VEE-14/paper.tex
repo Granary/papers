@@ -4,7 +4,8 @@
 \usepackage{paralist} % for in-paragraph lists
 \usepackage{url}
 \usepackage{graphicx}
-\usepackage{multicol}
+\usepackage{multicol,multirow}
+\usepackage{tabularx}
 
 % For drawing FSMs
 %\usepackage{tikz}
@@ -35,6 +36,7 @@
                   POPFQ,PUSHFQ,SCASQ,STOSQ,IRETQ,RDTSCP,SWAPGS, %
                   rax,rdx,rcx,rbx,rsi,rdi,rsp,rbp, %
                   r8,r8d,r8w,r8b,r9,r9d,r9w,r9b}} % etc.
+
 
 % For leaving some comments in the draft.
 \newcommand{\comment}[1]{}
@@ -87,9 +89,6 @@ Instrumenting all code (e.g., the whole kernel) imposes unnecessary performance 
 
 Another limitation of existing systems is that they are unable to perform efficient runtime code specialization, i.e. they are unable to change how code is instrumented based on the context in which that code will run. For example, Granary's Read-Copy-Update (RCU) debugging tool, \texttt{RCUdbg}, specializes instrumentation at different stages of use of the RCU synchronization API. Correct usage of the RCU API allows programmers to create scalable, shared data structures that permit concurrent access and modification. The ``trick" of RCU is that readers might not see the latest write to the data structure, and writers must synchronize to modify the data structure. \texttt{RCUdbg} distinguishes between code executing inside \emph{read-side} and \emph{write-side} critical sections, and instruments each code context differently. In read-side critical sections, \texttt{RCUdbg} detects bugs when readers access potentially non-existent data, do not the correct accessor API, or attempt to write to shared data. In write-side critical sections, \texttt{RCUdbg} detects when writers write to shared data without using the correct API. 
 
-%is a synchronization mechanism that permits readers to operate concurrently with writers, but does not guarantee that readers observe the most up-to-date changes (by writers) to shared state.  RCU readers 
-
-%When used correctly, RCU readers must declare that they will operate on shared state by entering into a read-side critical section, delimited by \texttt{rcu\_read\_lock} and \texttt{rcu\_read\_unlock}, respectively. When inside a read-side critical section, a pointer to shared state \emph{must} be obtained by invoking \texttt{rcu\_dereference}. Thereafter, a reader can freely access the shared state through this pointer, but only up until the 
 
 %In reader-side code
 
@@ -372,10 +371,83 @@ An alternative and sometimes more powerful model for policy switching is to prev
 
 Granary implements policy tracking and switching by encoding policy information into the meta-data and CTIs of basic blocks. \Cref{fig:direct_edge_code} shows an example of how policy information is directly recorded into control-transfer edge code. If a policy switch is not specified on an instrumented CTI then that CTI inherits the policy used to instrument the basic block containing the CTI. When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. Because Granary's translation mechanism depends only on CTI policy and target information, Granary is able to ensure that policy information is never lost or corrupted, even in the face of concurrent executions of the same module code, arbitrary pre-emption, and arbitrary resumption.
 
+\section{Application: RCUdbg}
 
-%\section{Reifying Instrumentation}\label{sec:reify}
+Read-Copy-Update (RCU) is a scalable, lock-free synchronization mechanism used in the Linux kernel \cite{RCU,RCUInLinux}. RCU is used to synchronize accesses (reads) and modifications (writes) of shared state. When correctly used, RCU permits concurrent reads and writes to shared data structures, but only if the following properties are satisfied: \begin{enumerate}
+	\item Readers must tolerate an inconsistent view of the shared data structure. That is, a reader operating concurrently with a writer might observe either the version of the data before or after the writer's changes have been published.
+	\item Readers must operate within \emph{read-side} critical sections, which are delimited by \texttt{rcu\_read\_lock} and \texttt{rcu\_read\_unlock}, respectively.
+	\item Within read-side critical sections, readers can only read a shared data structure after obtaining a pointer to that shared data structure using the \texttt{rcu\_dereference} API function. \texttt{rcu\_dereference} operates on a pointer to a shared data structure, and returns a pointer to that can be used to safely access the shared data structure within the remainder of the reader's read-side critical section. Notably, accessing the original data structure and not the dereferenced data structure pointer--even after an \texttt{rcu\_dereference}--is undefined behavior. That is, within a read-side critical section, RCU only guarantees the existence of data structures pointed to by RCU-dereferenced pointers.
+	\item Writers must synchronize among themselves, e.g. via mutual exclusion locks or spin locks, before any writes to a shared data structure are performed. We say writes to the shared data structure occur within \emph{write-side} critical sections.
+	\item RCU only defines how writers can update pointers within a shared data structure. Modification of non-pointer fields within an RCU-protected data structure is beyond the scope of RCU's correctness guarantees.
+	\item Writers wishing to update a pointer in a shared data structure must use the \texttt{rcu\_assign\_pointer} API function. \texttt{rcu\_assign\_pointer} assigns a new value to a pointer in a shared data structure.
+	\item Readers must access any data structure pointer field operated on by an \texttt{rcu\_\linebreak[0]assign\_pointer} using \texttt{rcu\_\linebreak[0]dereference}. For example, if the \texttt{next} pointer field in \emph{any} list element of an RCU-protected list has been assigned to by \texttt{rcu\_assign\_\linebreak[0]pointer}, then \emph{all} \texttt{next} pointer fields must be accessed by readers of that list by using \texttt{rcu\_dereference}.
+\end{enumerate}
+
+The above list of requirements is not exhaustive. For example, we have omitted a description of how elements within an RCU-protected collection can be garbage collected after their removal from the collection. \texttt{RCUdbg} is primarily concerned with finding bugs related to the interaction of the above list of requirements. \Cref{fig:rcu_bugs} shows some example usages of RCU, and some of the more subtle pointer-related bugs that can happen because of the interaction of rules (1), (2), (3), and (7).
+
+% NOTE!!!!
 %
-%Granary uses a technique we call \emph{reifying instrumentation} to provide the benefits of high-level static analysis information to dynamic instrumentation tools. Reifying instrumentation bootstraps on 
+% All of those spaces before /* BUG! */ and such are so that the lstlisting will be *close* to the columnwidth!! Somehow linewidth param of lstset didn't work for me :-(
+
+\lstset{
+	language=C,
+	tabsize=2,
+	stepnumber=1,
+	morekeywords={rcu_read_lock,rcu_dereference,rcu_read_unlock,rcu_assign_pointer,spin_lock,spin_unlock}}
+
+% Example code showing an existence bug.
+\newsavebox\rcuexistencebug
+\begin{lrbox}{\rcuexistencebug}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+rcu_read_lock();
+  elm = rcu_dereference(list_head);
+  data = elm->data;                  /* Valid */
+rcu_read_unlock();
+data = elm->data;                     /* BUG! */
+\end{lstlisting}
+\end{lrbox}
+
+% Example code showing another existence bug.
+\newsavebox\rcuderefbug
+\begin{lrbox}{\rcuderefbug}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+rcu_read_lock();
+  elm = rcu_dereference(list_head);
+  if(elm != NULL)
+    data = list_head->data;           /* BUG! */
+rcu_read_unlock();
+\end{lstlisting}
+\end{lrbox}
+
+% Example code showing another existence bug.
+\newsavebox\rcuassignderefbug
+\begin{lrbox}{\rcuassignderefbug}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+spin_lock();
+  elm = kmalloc(...);
+  elm->next = list_head->next;
+  rcu_assign_pointer(list_head->next, elm);
+spin_unlock();
+...
+rcu_read_lock();
+  elm = rcu_dereference(list_head);
+  while(elm != NULL) {
+    data += elm->data;
+    elm = elm->next;                  /* BUG! */
+  }
+rcu_read_unlock();
+\end{lstlisting}
+\end{lrbox}
+
+\begin{figure}[ht!] %
+\subfloat[Despite correctly obtaining a pointer to a shared data structure using \texttt{rcu\_dereference} within a read-side critical section, properties (2) and (3) tell us that the data pointed to by \texttt{elm} is not guaranteed to exist after the read-side critical section ends.]{\fbox{\usebox\rcuexistencebug}} %
+
+\subfloat[Despite the call to \texttt{rcu\_dereference}, properties (1) and (3) tell us that \texttt{list\_head} is not guaranteed to be equivalent to \texttt{elm} because a writer might have concurrently changed the value of the \texttt{list\_head} pointer. That is, if \texttt{elm} is non-\texttt{NULL}, then the data pointed to by \texttt{elm} is guaranteed to exist for the remainder of the read-side critical section. However, the value of \texttt{list\_head} is \emph{not} guaranteed to remain consistent--even within read-side critical sections--and so \texttt{list\_head} might point to a \texttt{NULL} pointer when \texttt{elm} does not.]{\fbox{\usebox\rcuderefbug}} %
+
+\subfloat[This example shows the code for a writer thread adding a new element into the second position of an RCU-protected list. The code for reader threads is also shown, where readers iterate over the list by traversing \texttt{next} pointers and sum up the \texttt{data} fields of each visited list element. The access of \texttt{elm->next} violates of properties (3) and (7). That is, the next element of the list is only guaranteed to exist within the read-side critical section if the reader executes \texttt{rcu\_dereference(elm->next)}. Directly reading \texttt{elm->next} might yield a \emph{temporarily} valid pointer to the next list element, or it might return an inconsistent value for the pointer that is a mix of the two versions of the pointer.]{\fbox{\usebox\rcuassignderefbug}} %
+\caption{\label{fig:rcu_bugs}Example RCU bugs related to misuses of pointers to shared data.}
+\end{figure}
+
 
 \section{Evaluation}\label{sec:eval}
 
@@ -395,13 +467,13 @@ Setup: 1GB RAM, 3GB partition, ext3+jbd, >1GB mounted file system.
 	\item full-kernel
 	\begin{itemize}
 		\item Btkernel
-		\item Granary,null
+		\item Granary, null
 		\item Granary, even/odd
 		\item Granary, even/odd, where even/odd is a runtime check and branch.
 	\end{itemize}
 	\item module-only, (ext3+jbd)
 	\begin{itemize}
-		\item Granary,null
+		\item Granary, null
 		\item Granary, even/odd
 		\item Granary, even/odd, where even/odd is a runtime check and branch.
 	\end{itemize}
