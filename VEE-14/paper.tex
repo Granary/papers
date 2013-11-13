@@ -60,7 +60,6 @@
 
 %We created Granary to address the challenges of module analysis. Granary is a framework for creating flexible and efficient tools that analyze or debug arbitrary, binary Linux kernel modules. Granary uses dynamic binary translation to dynamically rewrite and comprehensively instrument kernel modules. Granary makes it easy to create flexible tools by supporting context-aware runtime code specialization, and by integrating high-level static analysis information with low-level instruction manipulation. Module analysis tools built on Granary are efficient because of Granary's adoption of a relaxed transparency model, and because of Granary's ability to instrument module code without imposing overhead on non-module kernel code.
 
-
 \section{Introduction}\label{sec:intro}
 
 Granary is a framework for creating flexible and efficient tools that instrument the Linux kernel. Granary's key novelty is its \emph{runtime code specialization} feature, which enables tools to decide what code to instrument, and how to instrument that code. Flexible specialization allows tools to be picky about instrumentation. For example, a tool can choose to instrument every load and store operation, but only inside nested critical sections that are executing in module code. Granary's runtime code specialization feature addresses two limitations of existing kernel analysis systems: \begin{inparaenum}[i)]
@@ -373,7 +372,29 @@ Granary implements policy tracking and switching by encoding policy information 
 
 \section{Application: RCUdbg}
 
-Read-Copy-Update (RCU) is a scalable, lock-free synchronization mechanism used in the Linux kernel \cite{RCU,RCUInLinux}. RCU is used to synchronize accesses (reads) and modifications (writes) of shared state. When correctly used, RCU permits concurrent reads and writes to shared data structures, but only if the following properties are satisfied: \begin{enumerate}
+Read-Copy-Update (RCU) is a scalable, lock-free synchronization mechanism used in the Linux kernel \cite{RCU,RCUInLinux}. When correctly used, RCU permits concurrent reads and writes to shared data structures, but requires that writers synchronize among themselves. However, like other synchronization mechanisms, RCU has a deceptively simple API. Misuses of the RCU API often result in hard-to-find bugs that can be implementation-dependent (i.e. bugs that manifest in one version of RCU but not another) or architecture-specific (e.g. bugs that only exhibit on architectures with a relaxed memory model). For example, RCU bugs sometimes manifest as use-after-free bugs, which can result in silent data corruption (if the underlying memory remains used) or kernel panics. 
+
+Unfortunately, approaching RCU from the perspective of finding use-after-free errors is insufficient. A better characterization of this class of RCU bugs is proof-of-existence bugs: a data structure cannot be proven to exist at some potentially allocated memory. Existence in this case relates to semantic reachability. For example, if a list element $E_n$ from an RCU-protected list is reachable from the head of the list by traversing zero-or-more intermediate elements $E_0, ..., E_{n-1}$, then $E_n$ is said to exist. While related, memory leak detection (e.g. via conservate mark and sweep) is also insufficient for ladidadidaaaa TODO TODO TODO
+
+% (assuming that pointer reachability is sufficient to determine semantic reachability in this case).
+
+Granary's \texttt{RCUdbg} tool is designed to catch RCU bugs related to kernel code using pointers to RCU-protected data structures that haven't been proven to exist. 
+
+%the associated memory may or may not be free, but the data structure occupying that memory can't be proven to exist. This 
+
+%  However, this class of RCU bugs is not well-suited to being detected by a use-after-free memory checker tool
+%RCU is notoriously hard to use, despite its relatively simple API. RCU usage bugs, like bugs with other synchronization mechanisms, often stay hidden and only exhibit themselves for very specific thread interleavings/schedules.
+
+
+
+% go silently unnoticed because the memory 
+
+
+%While bugs related to mutual exlusion locks might result in easily observable deadlocks, bugs related to RCU typically result in use-after-free errors, which sometimes go silently unnoticed, sometimes result in kernel panics, and most of the time work as expected because the associated data is .
+
+
+
+but only if the following properties are satisfied: \begin{enumerate}
 	\item Readers must tolerate an inconsistent view of the shared data structure. That is, a reader operating concurrently with a writer might observe either the version of the data before or after the writer's changes have been published.
 	\item Readers must operate within \emph{read-side} critical sections, which are delimited by \texttt{rcu\_read\_lock} and \texttt{rcu\_read\_unlock}, respectively.
 	\item Within read-side critical sections, readers can only read a shared data structure after obtaining a pointer to that shared data structure using the \texttt{rcu\_dereference} API function. \texttt{rcu\_dereference} operates on a pointer to a shared data structure, and returns a pointer to that can be used to safely access the shared data structure within the remainder of the reader's read-side critical section. Notably, accessing the original data structure and not the dereferenced data structure pointer--even after an \texttt{rcu\_dereference}--is undefined behavior. That is, within a read-side critical section, RCU only guarantees the existence of data structures pointed to by RCU-dereferenced pointers.
@@ -440,14 +461,24 @@ rcu_read_unlock();
 \end{lrbox}
 
 \begin{figure}[ht!] %
-\subfloat[Despite correctly obtaining a pointer to a shared data structure using \texttt{rcu\_dereference} within a read-side critical section, properties (2) and (3) tell us that the data pointed to by \texttt{elm} is not guaranteed to exist after the read-side critical section ends.]{\fbox{\usebox\rcuexistencebug}} %
+\subfloat[\label{fig:rcu_existence_bug}Despite correctly obtaining a pointer to a shared data structure using \texttt{rcu\_dereference} within a read-side critical section, properties (2) and (3) tell us that the data pointed to by \texttt{elm} is not guaranteed to exist after the read-side critical section ends.]{\fbox{\usebox\rcuexistencebug}} %
 
-\subfloat[Despite the call to \texttt{rcu\_dereference}, properties (1) and (3) tell us that \texttt{list\_head} is not guaranteed to be equivalent to \texttt{elm} because a writer might have concurrently changed the value of the \texttt{list\_head} pointer. That is, if \texttt{elm} is non-\texttt{NULL}, then the data pointed to by \texttt{elm} is guaranteed to exist for the remainder of the read-side critical section. However, the value of \texttt{list\_head} is \emph{not} guaranteed to remain consistent--even within read-side critical sections--and so \texttt{list\_head} might point to a \texttt{NULL} pointer when \texttt{elm} does not.]{\fbox{\usebox\rcuderefbug}} %
+\subfloat[\label{fig:rcu_deref_bug}Despite the call to \texttt{rcu\_dereference}, properties (1) and (3) tell us that \texttt{list\_head} is not guaranteed to be equivalent to \texttt{elm} because a writer might have concurrently changed the value of the \texttt{list\_head} pointer. That is, if \texttt{elm} is non-\texttt{NULL}, then the data pointed to by \texttt{elm} is guaranteed to exist for the remainder of the read-side critical section. However, the value of \texttt{list\_head} is \emph{not} guaranteed to remain consistent--even within read-side critical sections--and so \texttt{list\_head} might point to a \texttt{NULL} pointer when \texttt{elm} does not.]{\fbox{\usebox\rcuderefbug}} %
 
-\subfloat[This example shows the code for a writer thread adding a new element into the second position of an RCU-protected list. The code for reader threads is also shown, where readers iterate over the list by traversing \texttt{next} pointers and sum up the \texttt{data} fields of each visited list element. The access of \texttt{elm->next} violates of properties (3) and (7). That is, the next element of the list is only guaranteed to exist within the read-side critical section if the reader executes \texttt{rcu\_dereference(elm->next)}. Directly reading \texttt{elm->next} might yield a \emph{temporarily} valid pointer to the next list element, or it might return an inconsistent value for the pointer that is a mix of the two versions of the pointer.]{\fbox{\usebox\rcuassignderefbug}} %
+\subfloat[\label{fig:rcu_assign_bug}This example shows the code for a writer thread adding a new element into the second position of an RCU-protected list. The code for reader threads is also shown, where readers iterate over the list by traversing \texttt{next} pointers and sum up the \texttt{data} fields of each visited list element. The access of \texttt{elm->next} violates of properties (3) and (7). That is, the next element of the list is only guaranteed to exist within the read-side critical section if the reader executes \texttt{rcu\_dereference(elm->next)}. Directly reading \texttt{elm->next} might yield a \emph{temporarily} valid pointer to the next list element, or it might return an inconsistent value for the pointer that is a mix of the two versions of the pointer.]{\fbox{\usebox\rcuassignderefbug}} %
 \caption{\label{fig:rcu_bugs}Example RCU bugs related to misuses of pointers to shared data.}
 \end{figure}
 
+The \texttt{RCUdbg} tool detects the the following bugs: \begin{enumerate}
+	\item Reads through an RCU-dereferenced pointer outside of a read-side critical section (\Cref{fig:rcu_existence_bug}).
+	\item Reads through an RCU-assigned pointer that don't first use \texttt{rcu\_dereference} (\Cref{fig:rcu_deref_bug}).
+	\item Reads through fields of RCU-protected data structures that should be accessed via \texttt{rcu\_dereference} (\Cref{fig:rcu_assign_bug}).
+	\item Reads through an RCU-dereferenced pointer in the wrong read-side critical section.
+	\item Writes through an RCU-dereferenced pointer.
+	\item Writes through an RCU-assigned pointer.
+\end{enumerate}
+
+\texttt{RCUdbg} uses Granary's address watchpoints feature \cite{BehaveOrBeWatched} to ``taint" addresses participating in RCU-protected data structures.
 
 \section{Evaluation}\label{sec:eval}
 
@@ -496,7 +527,11 @@ DRK \cite{DRK} is a kernel space port of the DynamoRIO \cite{DynamoRIO} DBT fram
 
 Btkernel is a fast and scalable system for the kernel \cite{btkernel}. Like Granary, but unlike DRK, btkernel applies a relaxed transparency model when instrumenting the kernel. For exmaple, code cache addresses are exposed to the instrumented kernel in the form of function call return addresses and interrupt return addresses. Unlike Granary, btkernel operates using an instruction translation ``rulebook", which limits instrumentation to being defined ahead-of-time, on a per-instruction basis. Btkernel does not support any form of runtime code specialization. That is, like DRK, btkernel instruments all code, but cannot change the granularity of instrumentation or the instrumentation policy applied to code.
 
+TODO: JIFL
+
 \paragraph{Probe-based Instrumentation} Several systems support injecting code at specific locations within kernel code.
+
+TODO: SystemTap
 
 KernInst \cite{KernInst} can inject code at almost any location in an unmodified commodity OS. By default, KernInst uses debugging information normally present in kernel binaries to specify probe-points; however, absolute memory addresses can also be provided.
 
@@ -507,6 +542,8 @@ Other examples with similar or more restricted functionality include LTTng \cite
 %We created Granary to address the challenges of instrumenting binary kernel modules.  Granary provides mixed-mode execution to remove the overheads of DBT for uninstrumented kernel code.  A relaxed transparency model further improves performance and allows greater visibility into the interactions between module and kernel code.  Granary also supports policy-driven instrumentation, which allows tools to specialize their instrumentation based on the context in which code executes.  Finally, Granary exposes high-level static analysis information to dynamic instrumentation tools, making it easy to match low-level memory reads with specific fields in data structures at the source code level. 
 
 %Together, Granary's features simplify the development of powerful kernel module analysis tools, while delivering lower overheads than previous kernel dynamic binary instrumentation solutions.
+
+
 
 \bibliographystyle{acm}
 \bibliography{library}
