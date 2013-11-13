@@ -370,15 +370,18 @@ An alternative and sometimes more powerful model for policy switching is to prev
 
 Granary implements policy tracking and switching by encoding policy information into the meta-data and CTIs of basic blocks. \Cref{fig:direct_edge_code} shows an example of how policy information is directly recorded into control-transfer edge code. If a policy switch is not specified on an instrumented CTI then that CTI inherits the policy used to instrument the basic block containing the CTI. When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. Because Granary's translation mechanism depends only on CTI policy and target information, Granary is able to ensure that policy information is never lost or corrupted, even in the face of concurrent executions of the same module code, arbitrary pre-emption, and arbitrary resumption.
 
+
+
+
 \section{Application: RCUdbg}
 
-Read-Copy-Update (RCU) is a scalable, lock-free synchronization mechanism used in the Linux kernel \cite{RCU,RCUInLinux}. When correctly used, RCU permits concurrent reads and writes to shared data structures, but requires that writers synchronize among themselves. However, like other synchronization mechanisms, RCU has a deceptively simple API. Misuses of the RCU API often result in hard-to-find bugs that can be implementation-specific (i.e. bugs that manifest in one version of RCU but not another) or architecture-specific (e.g. bugs that only exhibit on architectures with a relaxed memory model). For example, RCU bugs sometimes manifest as use-after-free bugs, which can result in silent data corruption (if the underlying memory remains used) or kernel panics. 
+Read-Copy-Update (RCU) is a scalable, lock-free synchronization mechanism used in the Linux kernel \cite{RCU,RCUInLinux}. When correctly used, RCU permits concurrent reads and writes to shared data structures, but requires that writers synchronize among themselves. Like other synchronization mechanisms, RCU has a deceptively simple API. Misuses of the API can result in hard-to-find bugs that can be implementation-specific (i.e. bugs that manifest in one version of RCU but not another) or architecture-specific (e.g. bugs that only exhibit on architectures with a relaxed memory model). For example, RCU bugs sometimes manifest as use-after-free bugs, which can result in silent data corruption (if the underlying memory remains used) or kernel panics. 
 
 
 
 % (assuming that pointer reachability is sufficient to determine semantic reachability in this case).
 
-Granary's \texttt{RCUdbg} tool is designed to catch RCU bugs related to kernel code misusing pointers to RCU-protected data structures. The following is a non-exhaustive list of requirements that must be met by reader and writer threads operating on an RCU-protected data structure. The list omits a description of how RCU-protected data structures are garbage collected. Details concerning garbage collection are beyond the scope of the bugs caught by \texttt{RCUdbg}.
+Granary's \texttt{RCUdbg} tool is designed to catch RCU bugs related to kernel code misusing pointers to RCU-protected data structures. The following is a non-exhaustive list of requirements that must be met by reader and writer threads operating on an RCU-protected data structure. The list omits a description of how RCU-protected data structures are garbage collected, which is beyond the scope of the bugs caught by \texttt{RCUdbg}.
 
 %the associated memory may or may not be free, but the data structure occupying that memory can't be proven to exist. This 
 
@@ -469,16 +472,17 @@ rcu_read_unlock();
 \subfloat[\label{fig:rcu_deref_bug}Despite the call to \texttt{rcu\_dereference}, properties (1) and (3) tell us that \texttt{list\_head} is not guaranteed to be equivalent to \texttt{elm} because a writer might have concurrently changed the value of the \texttt{list\_head} pointer. That is, if \texttt{elm} is non-\texttt{NULL}, then the data pointed to by \texttt{elm} is guaranteed to exist for the remainder of the read-side critical section. However, the value of \texttt{list\_head} is \emph{not} guaranteed to remain consistent--even within read-side critical sections--and so \texttt{list\_head} might point to a \texttt{NULL} pointer when \texttt{elm} does not.]{\fbox{\usebox\rcuderefbug}} %
 
 \subfloat[\label{fig:rcu_assign_bug}This example shows the code for a writer thread adding a new element into the second position of an RCU-protected list. The code for reader threads is also shown, where readers iterate over the list by traversing \texttt{next} pointers and sum up the \texttt{data} fields of each visited list element. The access of \texttt{elm->next} violates of properties (3) and (7). That is, the next element of the list is only guaranteed to be fully constructed within the read-side critical section if the reader executes \texttt{rcu\_dereference(elm->next)}. Therefore, the first read of \texttt{elm->next} might yield a pointer to partially constructed data.  Because that data is not guaranteed to be fully constructed, the next read of \texttt{elm->next} (i.e. \texttt{elm->next->next}) might read an invalid pointer from uninitialized memory. Treating the value of uninitialized memory as a valid pointer could trigger a kernel panic or silent data corruption.]{\fbox{\usebox\rcuassignderefbug}} %
-\caption{\label{fig:rcu_bugs}Example RCU bugs related to misuses of pointers to shared data.}
+\caption{\label{fig:rcu_bugs}Example RCU bugs related to misuses of RCU-protected pointers.}
 \end{figure}
 
-\texttt{RCUdbg} is primarily concerned with finding bugs related to RCU-rpotected pointer misuses by reader threads (both inside and outside of read-side critical sections). As mentioned above, RCU bugs sometimes manifest as use-after-free bugs. However, a pure use-after-free-based checking approach is insufficient (\Cref{fig:rcu_assign_bug} is one such example). \Cref{fig:rcu_existence_bug} is an example of a \emph{potential} use-after-free. That is, the example code might be interrupted after \texttt{rcu\_read\_unlock}, but before the access to \texttt{elm->data}. If \texttt{elm} is garbage collected and freed before the reader is re-scheduled then this code can result in a use-after-free bug. However, being unlucky enough to observe this thread schedule is unlikely. Fortunately, \texttt{RCUdbg} catches the bug in \Cref{fig:rcu_existence_bug} right when \texttt{elm->data} is accessed.
+\texttt{RCUdbg} is primarily concerned with finding bugs related to RCU-rpotected pointer misuses by reader threads (both inside and outside of read-side critical sections). As mentioned above, RCU bugs sometimes manifest as use-after-free bugs. Unfortunately, a pure use-after-free-based checking approach is insufficient (\Cref{fig:rcu_assign_bug} is one such example). \Cref{fig:rcu_existence_bug} is an example of an RCU usage bug that can manifest as a use-after-free bug if one is unlucky enough to observe a very specific thread schedule. Suppose that execution is interrupted after \texttt{rcu\_read\_unlock}, but before the access to \texttt{elm->data}. If \texttt{elm} is garbage collected and freed before the code resumes its execution, then the access to \texttt{elm->data} is a use-after-free bug. This kind of bug is a time bomb waiting to go off. Fortunately, \texttt{RCUdbg} catches the bug in \Cref{fig:rcu_existence_bug} right when \texttt{elm->data} is accessed.
 
 
 %\Cref{fig:rcu_bugs} shows some example usages of RCU, and some of the more subtle pointer-related bugs that can happen because of the interaction of rules (1), (2), (3), and (7).
 
 
-The \texttt{RCUdbg} tool detects the the following class of RCU bugs: \begin{itemize}
+\texttt{RCUdbg} detects the the following RCU bugs related to misuses of RCU-protected pointers.
+\begin{itemize}[leftmargin=3.2em]
 	\item[B1)] Reads through an RCU-dereferenced pointer outside of a read-side critical section (\Cref{fig:rcu_existence_bug}).
 	\item[B2)] Reads through an RCU-dereferenced pointer in the wrong read-side critical section.
 
