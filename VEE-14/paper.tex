@@ -284,7 +284,7 @@ Granary \emph{detaches} when control transfers from instrumented code to native 
 
 Granary's wrappers expose a wealth of static program information to instrumentation tools. Instrumentation tools can use information present in wrappers to alter how code is instrumented, or to simply inspect the runtime object graph in a type-safe way. For example, we are actively using type information present in wrappers to create a tool that generates models of typical module behavior. The wrapper information serves two roles in our tool. First, we use type wrappers to assign type-specific IDs to module-allocated memory that is shared across the module/kernel interface. Type ID assignment is critical because it allows us to match memory reads and writes to specific kernel data structure fields. Second, we use the kernel and module function wrappers to generate call graphs of a module's execution. This call graph models module behavior (according to the kernel) because we label module code nodes with kernel data structure and function pointer field names (derived from module wrappers). This labelling allows us to generalize across similar modules. For example, code reached by calling the \texttt{ext4\_mount} and \texttt{btrfs\_mount} functions from the \texttt{ext4} and \texttt{btrfs} file system modules, respectively, are both labelled as \texttt{file\_system\_type::mount}, because the function addresses are stored (and later replaced by module wrappers) in the \texttt{mount} field of a \texttt{file\_system\_type} data structure. The combined records from multiple ``trusted'' modules of the same class (e.g., mature, open-source file systems) models the behavior of typical kernel modules. We hope that these models will help us build tools that classify and identify spurious module behavior. 
 
-\subsection{Functions}
+\subsection{Functions}\label{sec:function_wrapper}
 
 Granary can instrument or not instrument functions in several different ways. For example, \emph{probe-based} instrumentation allows Granary to selectively instrument only a particular function, while \emph{wrapper-based} instrumentation allows Granary to isolate a particular function that is invoked by instrumented code, and choose to instrument that function or run it natively (all while having the flexibility to arbitrarily inspect that function's arguments and return values in a type-safe way).
 
@@ -499,8 +499,63 @@ Bugs B1 and B2 relate to whether or not we can prove that a given RCU protected 
 
 % of this class of RCU bugs is proof-of-existence or proof-of-constructedness bugs. That is, an RCU-protected data structue exists if it is \emph{reachable} (i.e. by at least one reader thread), and if it is \emph{fully constructed} (i.e. all fields or components of the data structure have been initialized). 
 
-\texttt{RCUdbg} uses Granary's address watchpoints feature \cite{BehaveOrBeWatched} to ``taint" addresses participating in RCU-protected data structures.
+\texttt{RCUdbg} gains visibility on RCU operations in two ways: \begin{enumerate}
+	\item The Linux kernel RCU implementation is annotated to provide more information to \texttt{RCUdbg}. This information includes source code file and line information for bug reporting, and additional memory references that \texttt{RCUdbg} uses to get better visibility on bugs. These annotations are strictly internal to the RCU API, and thus require no changes to code using this API.
+	\item The annotated RCU API functions are specialized using Granary's function wrapping feature (\Cref{sec:function_wrapper}). Specifically, 
+\end{enumerate}
 
+%\texttt{RCUdbg} interposes on an annotations are added into the Linux kernel's RCU implementation. These annotations 
+
+
+%uses Granary's address watchpoints feature \cite{BehaveOrBeWatched} to ``taint" addresses participating in RCU-protected data structures. 
+
+%Function wrappers are used to specialize the execution of \texttt{rcu\_\linebreak[0]dereference} and \texttt{rcu\_assign\_\linebreak[0]pointer}:
+
+\begin{figure}[t!]
+\lstset{language=C, tabsize=2, stepnumber=1}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+// As used in the code:
+//   p = rcu_dereference(q);
+// Internally annotated to become:
+//   p = __rcudbg_deref(&q, q);
+// Wrapper:
+FUNCTION_WRAPPER(__rcudbg_deref, (q_addr, q), {
+  if(is_watched_address(q_addr)) {
+    // Make sure q_addr
+  } else {
+
+  }
+  return add_watchoint(q, DEREF);
+})
+\end{lstlisting}
+\caption{}
+\label{fig:rcu_dereference_wrapper}
+\end{figure}
+
+%\begin{center}
+%\begin{minipage}{0.6\columnwidth}
+%\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+%elm = rcu_dereference(list_head);
+%\end{lstlisting}
+%\end{minipage}
+%\end{center}
+%
+%Becomes:
+%
+%\begin{center}
+%\begin{minipage}{0.8\columnwidth}
+%\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+%elm = deref_taint(rcu_dereference(list_head));
+%\end{lstlisting}
+%\end{minipage}
+%\end{center}
+%
+%Tainted addresses are introduced in two ways:
+%\begin{description}
+%	\item[\texttt{rcu\_assign\_pointer}] operates on two pointers: 
+%	\item[\texttt{rcu\_dereference}] operates on a potentially tainted pointer (as introduced by \texttt{rcu\_assign\_\linebreak[0]pointer}, and returns a deref-tainted pointer.
+%\end{description}
+%
 
 %Unfortunately, approaching RCU bug detection from the perspective of finding use-after-free errors is insufficient. Use-after-free detection attacks a symptom of the problem that is highly dependent on thread interleavings and scheduling. That is, RCU can be misused in a way that results in very unlikely, but potential use-after-free bugs. An example of this case is when a writer thread, operating on a RCU-protected linked list, unlinks an element and queues its memory for later freeing. RCU provides a mechanism whereby readers can safely access this element for a brief period of time (called a read-side critical section). When the memory is eventually freed depends is implementation-defined, but depends on other reader activity.
 
