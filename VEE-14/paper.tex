@@ -267,9 +267,11 @@ One approach to change an instruction's alignment is to pad the basic block with
 \paragraph{Trace Allocation}
 Arranging for commonly executed sequences of basic blocks to appear adjacent in memory, also called tracing, typically improves the runtime performance of instrumented programs \cite{DynamoRIO}. Typical approaches to tracing require a runtime profiling infrastructure (e.g. recording basic block execution counts). Granary attempts to reap the benefits of tracing without the runtime profiling overhead by opportunistically forming traces using ahead-of-time translation (\Cref{sec:aot}), and by arranging for related basic blocks to be allocated sequentially in memory.
 
-Two basic blocks $B_1$ and $B_2$ are ``related" ($B_1 \to B_2$) if there is a control flow instruction from $B_1$ to $B_2$. Grnary arranges for $B_2$ to be allocated nearby or adjacent to $B_1$ by allocating $B_2$'s instructions from the same pool of memory used to allocate $B_1$'s instructions. The base case of this induction are kernel entrypoints. For example, each system call is an entrypoint into the kernel, and is associated with a private memory pool. When a system call is executed for the first time, the basic blocks needed to fulfill the system call's computation are allocated from that system call's memory pool.
+Two basic blocks $B_1$ and $B_2$ are ``related" ($B_1 \to B_2$) if there is a control flow instruction from $B_1$ to $B_2$. Granary arranges for $B_2$ to be allocated nearby or adjacent to $B_1$ by allocating $B_2$'s instructions from the same pool of memory used to allocate $B_1$'s instructions. The base case of this induction are kernel entrypoints. For example, each system call is an entrypoint into the kernel, and is associated with a private memory pool. When a system call is executed for the first time, the basic blocks needed to fulfill the system call's computation are allocated from that system call's memory pool.
 
 To avoid translation conflicts (e.g. on utility functions being simultaneously executed by distinct system calls), and to improve the predictability and reproducability of a given code cache layout, Granary can delay the takeover of kernel entrypoints. That is, Granary can take over one entrypoint at a time, and wait for a specified period of time before taking over the next entrypoint. The effect of delaying the takeover process is that it increases the chances that a given entrypoint (e.g. a blocking system call) will execute to completion, and thus have all of its basic blocks  arranged sequentially in memory.
+
+Trace allocation is implemented by recording the memory pool used to allocate a given basic block in that basic block's metadata. When Granary needs to translate a new basic block, it inspects the predecessor basic block's metadata and uses the predecessor basic block's memory pool to service allocation requests for the basic block in translation.
 
 %, and is associated with a private memory pool from which to allocate memory for basic blocks. The net result is that most of the basic blocks eecuted in service of a single system call are allocated from that system call's memory pool.
 
@@ -360,13 +362,35 @@ Granary's wrappers expose a wealth of static program information to instrumentat
 
 \subsection{Functions}\label{sec:function_wrapper}
 
+\begin{figure}
+\captionsetup[subfloat]{width=0.45\columnwidth}
+\begin{tabularx}{\columnwidth}{XX}%
+\subfloat[Full kernel instrumentation.]{\hspace{2.5em}\epsfig{file=diagrams/kernel.eps,width=0.125\textwidth}} & %
+\subfloat[Module-only instrumentation]{\hspace{2.5em}\epsfig{file=diagrams/module.eps,width=0.125\textwidth}} \\
+\subfloat[Module-only instrumentation, with a function specialized to run natively by using a module function wrapper.]{\hspace{2.5em}\epsfig{file=diagrams/module_wrapper.eps,width=0.125\textwidth}} & %
+\subfloat[\label{fig:module_probe}Module-only instrumentation, with a kernel function specialized to also be instrumented by using a probe-based wrapper.]{\hspace{2.5em}\epsfig{file=diagrams/module_probe.eps,width=0.125\textwidth}}
+\end{tabularx}
+%
+%\begin{multicols}{2}
+%\subfloat[Full kernel instrumentation.]{\epsfig{file=diagrams/kernel.eps,width=0.125\textwidth}}
+%\columnbreak
+%\subfloat[Module-only instrumentation]{\epsfig{file=diagrams/module.eps,width=0.125\textwidth}}
+%\end{multicols}
+%\begin{multicols}{2}
+%\subfloat[Module-only instrumentation, with a function specialized to run natively by using a module function wrapper.]{\epsfig{file=diagrams/module_wrapper.eps,width=0.125\textwidth}}
+%\columnbreak
+%\subfloat[Module-only instrumentation, with a kernel function specialized to also be instrumented by using a probe-based wrapper.]{\epsfig{file=diagrams/module_probe.eps,width=0.125\textwidth}}
+%\end{multicols}
+\caption{Example of using different granularities of instrumentation to selectively instrument or not instrument specific code.}
+\end{figure}
+
 Granary can instrument or not instrument functions in several different ways. For example, \emph{probe-based} instrumentation allows Granary to selectively instrument only a particular function, while \emph{wrapper-based} instrumentation allows Granary to isolate a particular function that is invoked by instrumented code, and choose to instrument that function or run it natively (all while having the flexibility to arbitrarily inspect that function's arguments and return values in a type-safe way).
 
 \paragraph{Probe-based instrumentation}
 
 Probe-based instrumentation allows an instrumentation tool to replace \emph{all} executions of a particular kernel function, regardless of whether or not the replaced function is executed by native or instrumented code \cite{KProbes, AnyWhereAnyTimeDBT, KernInst}. Probe-based instrumentation can be used to wrap a particular function without instrumenting its code, or to wrap and instrument the probed function's code.
 
-Probe-based instrumentation provides visibility into specific kernel events (e.g. memory allocations) to instrumentation tools that don't instrument the whole kernel (e.g. module-only). One example tool that combines module-only and probe-based instrumentation is Granary's kernel module memory leak detector. This leak detector finds leaks of module-owned memory. We say that the some memory is owned by a module iff that memory is deallocated by a module. Unfortunately, ownership of module-allocated memory (for an arbitrary, binary module) is not known \emph{a priori}. Therefore, our tool conservatively assumes that all module-allocated memory is module-owned, unless it is freed by the kernel (observed via probe-based instrumentation of a kernel memory deallocator). We also use probe-based instrumentation to assign module ownership to kernel-allocated \texttt{sk\_buff} data structures, which are allocated by the kernel but deallocated by network device driver modules.
+Probe-based instrumentation provides visibility into specific kernel events (e.g. memory allocations) to instrumentation tools that don't instrument the whole kernel (e.g. module-only, \Cref{fig:module_probe}). One example tool that combines module-only and probe-based instrumentation is Granary's kernel module memory leak detector. This leak detector finds leaks of module-owned memory. We say that the some memory is owned by a module iff that memory is deallocated by a module. Unfortunately, ownership of module-allocated memory (for an arbitrary, binary module) is not known \emph{a priori}. Therefore, our tool conservatively assumes that all module-allocated memory is module-owned, unless it is freed by the kernel (observed via probe-based instrumentation of a kernel memory deallocator). We also use probe-based instrumentation to assign module ownership to kernel-allocated \texttt{sk\_buff} data structures, which are allocated by the kernel but deallocated by network device driver modules.
 
 \paragraph{Wrapper-based instrumentation}
 
