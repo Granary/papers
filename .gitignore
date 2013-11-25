@@ -24,6 +24,7 @@
 *.mtc1
 *.out
 *.synctex.gz
+*.pdf
 paper.pdf
 to.pdf
 .svn

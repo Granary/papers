@@ -4,7 +4,8 @@
 \usepackage{paralist} % for in-paragraph lists
 \usepackage{url}
 \usepackage{graphicx}
-\usepackage{multicol}
+\usepackage{multicol,multirow}
+\usepackage{tabularx}
 
 % For drawing FSMs
 %\usepackage{tikz}
@@ -36,6 +37,7 @@
                   rax,rdx,rcx,rbx,rsi,rdi,rsp,rbp, %
                   r8,r8d,r8w,r8b,r9,r9d,r9w,r9b}} % etc.
 
+
 % For leaving some comments in the draft.
 \newcommand{\comment}[1]{}
 
@@ -58,13 +60,12 @@
 
 %We created Granary to address the challenges of module analysis. Granary is a framework for creating flexible and efficient tools that analyze or debug arbitrary, binary Linux kernel modules. Granary uses dynamic binary translation to dynamically rewrite and comprehensively instrument kernel modules. Granary makes it easy to create flexible tools by supporting context-aware runtime code specialization, and by integrating high-level static analysis information with low-level instruction manipulation. Module analysis tools built on Granary are efficient because of Granary's adoption of a relaxed transparency model, and because of Granary's ability to instrument module code without imposing overhead on non-module kernel code.
 
-
 \section{Introduction}\label{sec:intro}
 
 Granary is a framework for creating flexible and efficient tools that instrument the Linux kernel. Granary's key novelty is its \emph{runtime code specialization} feature, which enables tools to decide what code to instrument, and how to instrument that code. Flexible specialization allows tools to be picky about instrumentation. For example, a tool can choose to instrument every load and store operation, but only inside nested critical sections that are executing in module code. Granary's runtime code specialization feature addresses two limitations of existing kernel analysis systems: \begin{inparaenum}[i)]
 	\item they have focused on instrumenting all code \cite{DRK,btkernel,QEMU}; and
 	\item they can only instrument code using a single policy.
-\end{inparaenum}
+\end{inparaenum} 
 
 %Operating system (OS) kernels present an apparently insane environment for a transparent binary instrumentation framework.  For example, hardware interrupts can redirect control flow at any instruction, and interrupt delivery cannot be delayed past the execution of memory instructions that might alter the interrupt delivery state~\cite{DRK}. Preserving interrupt transparency, however, requires that interrupts be delayed until the end of any injected instrumentation instructions.  Together, these requirements make it very difficult to write instrumentation tools.  The insane environment of OS kernels also creates several opportunities for analysis tools. For example, interrupts can be ``tamed'' and put to new uses; privileged hardware features can be used; and the kernel ABI and source code can be relied upon to be a good predictor of module behavior at the kernel/module boundary. We also found that the kernel is largely insensitive to transparency issues, allowing us to relax transparency in exchange for both improved performance and greater visibility into the execution of instrumented code.  This increased visibility is particularly important for analysis and debugging tools.
 
@@ -79,19 +80,18 @@ Granary is a framework for creating flexible and efficient tools that instrument
 %	\item they do not provide static type information to the instrumented code.
 %\end{inparaenum} 
 
-Instrumenting all code (e.g., the whole kernel) imposes unnecessary performance overheads when only a subset of the code is being analyzed (e.g., modules, functions). In practice, we would like to target instrumentation at specific code for efficiency, while also allowing rich and detailed instrumentation of the targeted code. This requirement motivates the design of \emph{mixed-mode execution}, which allows Granary tools to instrument only specific code while the majority of code executes with zero overhead. 
+Instrumenting all code (e.g., the whole kernel) imposes unnecessary performance overheads when only a subset of the code is being analyzed (e.g., modules, functions). In practice, we would like to target instrumentation at specific code for efficiency, while also allowing rich and detailed instrumentation of the targeted code. Limiting the scope of what is instrumented is  important because the overhead introduced by using runtime code instrumentation is usually dominated by the instrumentation itself and not the runtime system supporting that instrumentation.
+
+%This requirement motivates the design of \emph{mixed-mode execution}, which allows Granary tools to instrument only specific code while the majority of code executes with zero overhead. 
 
 %This is challenging because Granary must be comprehensive: all code that is meant to be instrumented should be instrumented. In other words, relinquishing control to execute kernel code natively must not cause Granary to miss the execution of any module code.
 
 Another limitation of existing systems is that they are unable to perform efficient runtime code specialization, i.e. they are unable to change how code is instrumented based on the context in which that code will run. For example, Granary's Read-Copy-Update (RCU) debugging tool, \texttt{RCUdbg}, specializes instrumentation at different stages of use of the RCU synchronization API. Correct usage of the RCU API allows programmers to create scalable, shared data structures that permit concurrent access and modification. The ``trick" of RCU is that readers might not see the latest write to the data structure, and writers must synchronize to modify the data structure. \texttt{RCUdbg} distinguishes between code executing inside \emph{read-side} and \emph{write-side} critical sections, and instruments each code context differently. In read-side critical sections, \texttt{RCUdbg} detects bugs when readers access potentially non-existent data, do not the correct accessor API, or attempt to write to shared data. In write-side critical sections, \texttt{RCUdbg} detects when writers write to shared data without using the correct API. 
 
-%is a synchronization mechanism that permits readers to operate concurrently with writers, but does not guarantee that readers observe the most up-to-date changes (by writers) to shared state.  RCU readers 
-
-%When used correctly, RCU readers must declare that they will operate on shared state by entering into a read-side critical section, delimited by \texttt{rcu\_read\_lock} and \texttt{rcu\_read\_unlock}, respectively. When inside a read-side critical section, a pointer to shared state \emph{must} be obtained by invoking \texttt{rcu\_dereference}. Thereafter, a reader can freely access the shared state through this pointer, but only up until the 
 
 %In reader-side code
 
-%For example, Granary has a tool that  dynamically constructs inter- and intra-procedural control flow graphs (CFGs). The outputs of this tool enable Granary to do better runtime register allocation, which improves tool efficiency. Part of building CFGs requires tracking whether or not a given basic block is the entrypoint to a function. This is challenging with existing DBT systems because some optimised functions will re-execute their first basic block, which might incorrectly appear as new function calls in the CFGs. Granary solves this problem using demand-based runtime code specialization: every entrypoint basic block is instrumented in one way, and later re-executions of any entrypoint basic blocks are specialized and instrumented in another way.
+%For example, Granary has a tool that  dynamically constructs inter- and intra-procedural control flow graphs (CFGs). The outputs of this tool enable Granary to do better runtime register allocation, which improves tool efficiency. Part of building CFGs requires tracking whether or not a given basic block is the entrypoint to a function. This is challenging with existing DBT systems because some optimized functions will re-execute their first basic block, which might incorrectly appear as new function calls in the CFGs. Granary solves this problem using demand-based runtime code specialization: every entrypoint basic block is instrumented in one way, and later re-executions of any entrypoint basic blocks are specialized and instrumented in another way.
 
 The \texttt{RCUdbg} tool is an example of \emph{context-driven code specialization}: code executing inside of a read-side critical section is instrumented differently from code executing inside of a write-side critical section, and code execution outside of both contexts executes with minimal instrumentation. In a Granary tool, each tracked execution context is associated with its own instrumentation policy. An instrumentation policy decides how to instrument code that will execute within the associated context. Granary is able to track execution contexts because it explicitly maintains policy information in translated basic blocks. This avoids typical poblems with tracking context in just-in-time DBT systems (e.g., maintaining runtime context-tracking state, reentrancy, and the inability to predict later execution contexts at translation time).
 
@@ -107,7 +107,7 @@ The rest of the paper describes Granary in more detail. \Cref{sec:dbt} describes
 
 \section{Dynamic Binary Translation}\label{sec:dbt}
 
-Granary uses dynamic binary translation (DBT) to instrument the Linux kernel. DBT is used for emulation \cite{QEMU}, runtime optimization \cite{DynamoRIOOptimisation}, and runtime instrumentation (analysis \cite{DynamoRIO, DRK, btkernel, ProfilingSimics}, security \cite{Vx32,NaCl,ProgramShepherding}, and debugging \cite{Valgrind}). We chose DBT because \begin{inparaenum}[i)]
+Granary uses dynamic binary translation (DBT) to instrument the Linux kernel. DBT is used for emulation \cite{QEMU}, runtime optimization \cite{DynamoRIOOptimization}, and runtime instrumentation (analysis \cite{DynamoRIO, DRK, btkernel, ProfilingSimics}, security \cite{Vx32,NaCl,ProgramShepherding}, and debugging \cite{Valgrind}). We chose DBT because \begin{inparaenum}[i)]
 	\item static binary analysis tools are unable to cope with \texttt{x86}'s mix of variably-sized instructions and data; 
 	\item some kernel code is only distributed in a binary format (e.g. proprietary device drivers); and
 	\item virtualization-based approaches are unable to analyze non-virtualizable device drivers \cite{DRK}.
@@ -269,7 +269,7 @@ The method used to pad basic blocks so as to align specific instructions must be
 %\subsection{Reproducability}
 %Hello
 
-\section{Choosing What to Instrument}
+\section{Specializing on What to Instrument}
 
 \begin{figure*}[ht!]
 \lstset{language=C, tabsize=2, stepnumber=1}
@@ -336,7 +336,7 @@ Granary \emph{detaches} when control transfers from instrumented code to native 
 
 Granary's wrappers expose a wealth of static program information to instrumentation tools. Instrumentation tools can use information present in wrappers to alter how code is instrumented, or to simply inspect the runtime object graph in a type-safe way. For example, we are actively using type information present in wrappers to create a tool that generates models of typical module behavior. The wrapper information serves two roles in our tool. First, we use type wrappers to assign type-specific IDs to module-allocated memory that is shared across the module/kernel interface. Type ID assignment is critical because it allows us to match memory reads and writes to specific kernel data structure fields. Second, we use the kernel and module function wrappers to generate call graphs of a module's execution. This call graph models module behavior (according to the kernel) because we label module code nodes with kernel data structure and function pointer field names (derived from module wrappers). This labelling allows us to generalize across similar modules. For example, code reached by calling the \texttt{ext4\_mount} and \texttt{btrfs\_mount} functions from the \texttt{ext4} and \texttt{btrfs} file system modules, respectively, are both labelled as \texttt{file\_system\_type::mount}, because the function addresses are stored (and later replaced by module wrappers) in the \texttt{mount} field of a \texttt{file\_system\_type} data structure. The combined records from multiple ``trusted'' modules of the same class (e.g., mature, open-source file systems) models the behavior of typical kernel modules. We hope that these models will help us build tools that classify and identify spurious module behavior. 
 
-\subsection{Functions}
+\subsection{Functions}\label{sec:function_wrapper}
 
 Granary can instrument or not instrument functions in several different ways. For example, \emph{probe-based} instrumentation allows Granary to selectively instrument only a particular function, while \emph{wrapper-based} instrumentation allows Granary to isolate a particular function that is invoked by instrumented code, and choose to instrument that function or run it natively (all while having the flexibility to arbitrarily inspect that function's arguments and return values in a type-safe way).
 
@@ -388,44 +388,302 @@ Turning on instrumentation when specific data is accessed makes on-demand instru
 %\end{inparaenum}
 
 
+\section{Specializing on How to Instrument}\label{sec:how}
+
+Granary gives tools the ability to be selective about what is instrumented. A natural extension of this selectivity is to allow tools to specialize how code is instrumented by dynamically switching the policy used to instrument code. Specialization is desirable in several cases. For example, some instrumentation is high-overhead, but does not need to be applied to all code. One example of this is Granary's \texttt{RCUdbg} tool, which instruments read-side and write-side critical sections more heavily than the rest of code. Unfortunately, existing DBT systems fall short in their support for runtime code specialization \cite{DRK,btkernel,Pin,DynamoRIO}. 
+
+To implement the equivalent of \texttt{RCUdbg}'s runtime code specialization using an existing DBT system requires that a tool developer maintain, update, and check runtime state to know whether or not code is executing inside or outside of a read-side critical section. If a basic block is executing in a read-side critical section, then instrumentation should be enabled, and if it's not in a read-side critical section then it should be disabled. Enabling/disabling instrumentation might be done at the instruction granularity, which introduces at least one branch instruction per native instruction, or at the granularity of basic blocks, which requires generating two copies of each native basic block, where a single branch at the beginning of a basic block chooses between the instrumented or uninstrumented version. Up until now, it has been assumed that there is a mechanism for maintaing state that consistently tracks the current execution context of kernel code (inside vs. outside of a read-side critical section). However, maintaining state in a way that is reentrant and resilient again arbitrary pre-emption and resumption is onerous.
+
+%Existing systems move the burden of code specialization to instrumentation tool developers. 
+
+Fortunately for tool developers, Granary has built-in support for runtime code specialization that does not require manual state management or cause code cache bloat. Granary approach to runtime code specialization uses a technique called \emph{context-driven instrumentation}.
+
+%For example, instrumenting only module code allows Granary to specialize the execution of native code. In the same way, policy switching allows Granary's \texttt{RCUdbg} tool to specialize the execution of instrumented code executing inside of read-side and write-side critical sections. In fact, optimizing the performance of an early Granary tool was the original motivation for policy switching.
+
+\subsection{Context-Driven Instrumentation}\label{sec:policies}
+
+%We developed a Granary tool that detects several Read-Copy-Update (RCU) API misuses in module code. Our tool focused on read-side critical sections (delimited by calls to \texttt{rcu\_read\_lock} and \texttt{rcu\_read\_unlock} in the code), however, most code executes outside of read-side critical sections. As an optimization, we wanted our heavyweight API-checking instrumentation to apply only when the code was executing within a read-side critical section. Implementing this optimization was challenging because each basic block was only translated once, and we had no way to know whether or not the heavyweight instrumentation should be applied to it. Knowing the state (within or outside a read-side critical section) at translation time was not sufficient, since the same translated block could later be executed in the opposite context. That is, code executing \emph{within} a read-side critical section may have originally been translated while executing \emph{outside} of a read-side critical section, and would thus omit the heavyweight API-checking instrumentation. This omission could cause our tool to miss bugs (i.e., it would not be comprehensive) when the basic block executes within a read-side critical section.
+
+%To implement this optimization, 
+
+Granary enables specializing instrumentation to the context in which the instrumented code will execute. Specialization is achieved by allowing multiple, differently instrumented versions of the same code to co-exist within Granary's code cache. That is, if the next basic block to execute has not yet been translated/instrumented for the current execution context, then a new version of that basic block will be created  specifically for the the current execution context.
 
 
 
-\section{Context-Driven Instrumentation}\label{sec:policies}
+%In the case of our \texttt{RCUdbg}, there were three execution contexts: within and outside of a read-side critical section. If the same module basic block is  executed in the two contexts, then Granary's code cache would contain two different instrumented versions of that basic block. The way that Granary distinguishes between different execution contexts is with \emph{instrumentation policies}. 
 
-A natural extension of mixed-mode execution is to give Granary tools the ability to dynamically switch the policy used to instrument code. Instrumenting only module code allows Granary to specialize the execution of native code. In the same way, policy switching allows tools to specialize the execution of instrumented code. In fact, optimising the performance of an early Granary tool was the original motivation for policy switching.
+Granary tools identify execution contexts by creating instrumentation policies. An instrumentation policy is both a name for an execution context, as well as a function that decides how to instrument basic blocks that will execute within that context. All tools define an initial policy that Granary uses to instrument module code. Tools are not limited to one policy though: any policy can declare a policy switch that will take effect when a selected control-transferring instruction (CTI) is executed. The effect of a tool specifying a policy switch on a CTI is that the basic block(s) targeted by that CTI will be instrumented according to the specified policy. CTIs with unspecified policies inherit their policies from their containing basic blocks.
 
-We developed a Granary tool that detects several Read-Copy-Update (RCU) API misuses in module code. Our tool focused on read-side critical sections (delimited by calls to \texttt{rcu\_read\_lock} and \texttt{rcu\_read\_unlock} in the code), however, most code executes outside of read-side critical sections. As an optimisation, we wanted our heavyweight API-checking instrumentation to apply only when the code was executing within a read-side critical section. Implementing this optimisation was challenging because each basic block was only translated once, and we had no way to know whether or not the heavyweight instrumentation should be applied to it. Knowing the state (within or outside a read-side critical section) at translation time was not sufficient, since the same translated block could later be executed in the opposite context. That is, code executing \emph{within} a read-side critical section may have originally been translated while executing \emph{outside} of a read-side critical section, and would thus omit the heavyweight API-checking instrumentation. This omission could cause our tool to miss bugs (i.e., it would not be comprehensive) when the basic block executes within a read-side critical section.
+For example, our \texttt{RCUdbg} invokes a policy switch from policy $P_{\mathit{null}}$ to policy $P_{\mathit{read\_critical}}$ when $P_{\mathit{null}}$'s instrumentation function observes a \texttt{call} instruction to the \texttt{rcu\_read\_lock} Linux kernel function. A similar switch occurs from $P_{\mathit{read\_critical}}$ back to $P_{\mathit{null}}$ at a \texttt{rcu\_read\_unlock}. Specialization that distinguishes between the inside and outside of read-side critical sections allows \texttt{RCUdbg} to do heavy-weight checks on functions like \texttt{memset}, but only when \texttt{memset} is invoked from within a read-side critical section.
 
-To implement this optimisation, Granary enables tailoring instrumentation to the context in which the instrumented code will execute. To do so, Granary allows different versions of the same module code to co-exist within Granary's code cache. That is, a different version of each of a module's basic blocks exists in Granary's code cache  for each encountered execution context. In the case of our RCU checker tool, there were two execution contexts: within and outside of a read-side critical section. If the same module basic block is  executed in the two contexts, then Granary's code cache would contain two different instrumented versions of that basic block. The way that Granary distinguishes between different execution contexts is with \emph{instrumentation policies}. 
+Because policies name an execution context, they also represent states in a finite state machine. That is, code cache execution is in the state named by a policy if the  executing code was instrumented by that policy. A state transition occurs when control transfers from code instrumented by one policy to code instrumented by another policy. A limitation with this approach is that a single state does not encode the sequence of previous states that led to execution being in the current state. For example, RCU permits nested read-side critical sections. If two read-side critical sections are nested then switching from $P_{\mathit{read\_critical}}$ to $P_{\mathit{null}}$ on the first \texttt{call} to \texttt{rcu\_read\_unlock} meant that our tool would lose track of being in the context of the outer read-side critical section.  \texttt{RCUdbg} solves this problem by tracking the nesting depth of RCU read-side critical sections using policies, e.g. $P_{\mathit{read\_critical}_1}$, $P_{\mathit{read\_critical}_2}$, etc.
 
-An instrumentation policy is both a name for an execution context, as well as a function that decides how to instrument basic blocks that will execute within that context. All tools define an initial policy that Granary uses to instrument module code. Tools are not limited to one policy though: any policy can declare a policy switch that will take effect when a selected control-transferring instruction (CTI) is executed. For example, our RCU tool invokes a policy switch from policy $P_{\mathit{null}}$ to policy $P_{\mathit{read\_critical}}$ when $P_{\mathit{null}}$'s instrumentation function observes a \texttt{call} instruction to the \texttt{rcu\_read\_lock} Linux kernel function.
+An alternative and sometimes more powerful model for policy switching is to prevent policy switching on function return instructions (e.g. either through manually specifying a policy switch, or by inheriting the policy from the basic block containing the \texttt{ret} instruction). In most cases, function returns are natural policy reverting points. This is because the current instruction pointer (program counter) encodes the current execution context (by being in a basic block instrumented by some policy), and the code cache return addresses stored on the runtime call stack encode all previous execution contexts. This asymmetry between \texttt{call}s and \texttt{ret}s yields a more powerful context-tracking state machine: \texttt{call}s place contextual breadcrumbs (in the form of return addresses) on the runtime call stack, and \texttt{ret}s read these breadcrumbs to return to a previous context. Policy switches under this lens behave similarly to state transitions in a pushdown automaton; \texttt{call} instructions push a new state onto the stack for each function, \texttt{ret} instructions pop the current function's state from the stack, and other CTIs induce state transitions within the current function by altering control flow.
 
-Because policies name an execution context, they also represent states in a finite state machine. That is, a module's execution is in the state named by a policy if the code executing was instrumented by that policy. A state transition occurs when control transfers from code instrumented by one policy to code instrumented by another policy. A limitation with this approach is that a single state does not encode the sequence of previous states that led to execution being in the current state. For example, RCU permits nested read-side critical sections. If two read-side critical sections are nested then switching from $P_{\mathit{read\_critical}}$ to $P_{\mathit{null}}$ on the first \texttt{call} to \texttt{rcu\_read\_unlock} meant that our tool would lose track of being in the context of the outer read-side critical section. We solved this limitation by observing that, in most cases, function returns are natural policy reverting points. This is because the runtime call stack encodes both the context in which the current code is executing, as well as the continuation of the current executing code.
-
-The effect of a tool specifying a policy switch on a CTI is that the basic block(s) targeted by that CTI will be instrumented according to the specified policy. CTIs with unspecified policies inherit their policies from their containing basic blocks. As hinted at above, \texttt{ret} instructions cannot explicitly switch policies, which allows a function instrumented by a different policy than its caller to return to the caller's context (i.e., policy). The asymmetry between \texttt{call}s and \texttt{ret}s is intentional: \texttt{call}s place contextual breadcrumbs (in the form of return addresses) on the runtime call stack, and \texttt{ret}s read these breadcrumbs to return to a previous context. Under this lens, the instruction pointer tracks our current policy, and return addresses form a stack of previous policies. Policy switches behave similarly to state transitions in a pushdown automaton; \texttt{call} instructions push a new state onto the stack for each function, \texttt{ret} instructions pop the current function's state from the stack, and other CTIs induce state transitions within the current function by altering control flow.
-
-Granary implements policy tracking and switching by encoding policy information into the meta-data and CTIs of basic blocks. If a policy switch is not specified on an instrumented CTI then that CTI inherits the policy used to instrument the basic block containing the CTI. When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. Because every non-\texttt{ret} CTI encodes policy information, and because Granary's translation mechanism depends only on CTI policy and target information, Granary is able to ensure that policy information is never lost or corrupted, even in the face of concurrent executions of the same module code, arbitrary pre-emption, and arbitrary resumption.
+Granary implements policy tracking and switching by encoding policy information into the meta-data and CTIs of basic blocks. \Cref{fig:direct_edge_code} shows an example of how policy information is directly recorded into control-transfer edge code. If a policy switch is not specified on an instrumented CTI then that CTI inherits the policy used to instrument the basic block containing the CTI. When an instrumented CTI executes for the first time, it yields control to Granary with the CTI target and policy information as inputs. Granary decodes and instruments the targeted instructions according to the input policy information. Because Granary's translation mechanism depends only on CTI policy and target information, Granary is able to ensure that policy information is never lost or corrupted, even in the face of concurrent executions of the same module code, arbitrary pre-emption, and arbitrary resumption.
 
 
-%\section{Reifying Instrumentation}\label{sec:reify}
+
+
+\section{Application: RCUdbg}
+
+Read-Copy-Update (RCU) is a scalable, lock-free synchronization mechanism used in the Linux kernel \cite{RCU,RCUInLinux}. When correctly used, RCU permits concurrent reads and writes to shared data structures, but requires that writers synchronize among themselves. Like other synchronization mechanisms, RCU has a deceptively simple API. Misuses of the API can result in hard-to-find bugs that can be implementation-specific (i.e. bugs that manifest in one version of RCU but not another) or architecture-specific (e.g. bugs that only exhibit on architectures with a relaxed memory model). For example, RCU bugs sometimes manifest as use-after-free bugs, which can result in silent data corruption (if the underlying memory remains used) or kernel panics. 
+
+
+
+% (assuming that pointer reachability is sufficient to determine semantic reachability in this case).
+
+Granary's \texttt{RCUdbg} tool is designed to catch RCU bugs related to kernel code misusing pointers to RCU-protected data structures. The following is a non-exhaustive list of requirements that must be met by reader and writer threads operating on an RCU-protected data structure. The list omits a description of how RCU-protected data structures are garbage collected, which is beyond the scope of the bugs caught by \texttt{RCUdbg}.
+
+%the associated memory may or may not be free, but the data structure occupying that memory can't be proven to exist. This 
+
+%  However, this class of RCU bugs is not well-suited to being detected by a use-after-free memory checker tool
+%RCU is notoriously hard to use, despite its relatively simple API. RCU usage bugs, like bugs with other synchronization mechanisms, often stay hidden and only exhibit themselves for very specific thread interleavings/schedules.
+
+
+
+% go silently unnoticed because the memory 
+
+
+%While bugs related to mutual exlusion locks might result in easily observable deadlocks, bugs related to RCU typically result in use-after-free errors, which sometimes go silently unnoticed, sometimes result in kernel panics, and most of the time work as expected because the associated data is .
+
+\begin{enumerate}
+	\item Readers must tolerate an inconsistent view of the shared data structure. That is, a reader operating concurrently with a writer might observe either the version of the data before or after the writer's changes have been published. This can be complicated when writers perform multiple, discrete updates to a data structure. One example of this is a doubly linked list: a writer that is adding a new entry into a doubly linked list must update at least two RCU-protected pointers.
+	
+	\item Readers must operate within \emph{read-side} critical sections, which are delimited by \texttt{rcu\_read\_lock} and \texttt{rcu\_read\_unlock}, respectively.
+	
+	\item Within read-side critical sections, readers can only read a shared data structure after obtaining a pointer to that shared data structure using the \texttt{rcu\_dereference} API function. An RCU-protected pointer is like a normal pointer, but points to a potentially incomplete or partially-constructed data structure. \texttt{rcu\_dereference} operates on an RCU-protected pointer and returns an ``unprotected" version of the pointer. The reader can use the unprotected pointer to safely access the shared data structure within the remainder of the its read-side critical section. If \texttt{rcu\_dereference} is not used, then the reader might observe a partially-constructed (i.e. incomplete) version of the shared data structure. Notably, accessing the original data structure and not the dereferenced data structure pointer--even after an \texttt{rcu\_dereference}--is undefined behavior. That is, within a read-side critical section, RCU only guarantees the ``completeness" of data structures pointed to by RCU-dereferenced pointers. Data accessed within a read-side critical section is \emph{not} guaranteed to exist outside the read-side critical section.
+
+	\item Writers must synchronize among themselves before any writes to a shared data structure are performed. Synchronization is typically achieved via mutual exclusion locks, spin locks, or by having a single, designated writer thread. We say writes to the shared data structure occur within \emph{write-side} critical sections.
+
+	\item RCU only defines how writers can update RCU-protected pointer within a shared data structure. Modification of non-RCU-protected pointer fields within an RCU-protected data structure is beyond the scope of RCU's correctness guarantees.
+
+	\item Writers wishing to update an RCU-protected pointer in a shared data structure must use the \texttt{rcu\_assign\_pointer} API function. \texttt{rcu\_assign\_pointer} assigns a new value to an RCU-protected pointer in a shared data structure.
+
+	\item Readers must access any pointer field operated on by an \texttt{rcu\_\linebreak[0]assign\_pointer} using \texttt{rcu\_\linebreak[0]dereference}. For example, if the \texttt{next} pointer field in \emph{any} list element of an RCU-protected list has been assigned to by \texttt{rcu\_assign\_\linebreak[0]pointer}, then \emph{all} \texttt{next} pointer fields must be accessed by readers of that list by using \texttt{rcu\_\linebreak[0]dereference}. In this sense, using \texttt{rcu\_\linebreak[0]dereference} and \texttt{rcu\_assign\_\linebreak[0]pointer} marks specific variables and data type fields as containing RCU-protected pointers.
+
+\end{enumerate}
+
+% NOTE!!!!
 %
-%Granary uses a technique we call \emph{reifying instrumentation} to provide the benefits of high-level static analysis information to dynamic instrumentation tools. Reifying instrumentation bootstraps on 
+% All of those spaces before /* BUG! */ and such are so that the lstlisting will be *close* to the columnwidth!! Somehow linewidth param of lstset didn't work for me :-(
+
+\lstset{
+	language=C,
+	tabsize=2,
+	stepnumber=1,
+	morekeywords={rcu_read_lock,rcu_dereference,rcu_read_unlock,rcu_assign_pointer,spin_lock,spin_unlock}}
+
+% Example code showing an existence bug.
+\newsavebox\rcuexistencebug
+\begin{lrbox}{\rcuexistencebug}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+rcu_read_lock();
+  elm = rcu_dereference(list_head);
+  data = elm->data;                  /* Valid */
+rcu_read_unlock();
+data = elm->data;                     /* BUG! */
+\end{lstlisting}
+\end{lrbox}
+
+% Example code showing another existence bug.
+\newsavebox\rcuderefbug
+\begin{lrbox}{\rcuderefbug}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+rcu_read_lock();
+  elm = rcu_dereference(list_head);
+  if(elm != NULL)
+    data = list_head->data;           /* BUG! */
+rcu_read_unlock();
+\end{lstlisting}
+\end{lrbox}
+
+% Example code showing another existence bug.
+\newsavebox\rcuassignderefbug
+\begin{lrbox}{\rcuassignderefbug}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+spin_lock();
+  elm = kmalloc(...);
+  elm->next = list_head->next;
+  rcu_assign_pointer(list_head->next, elm);
+spin_unlock();
+...
+rcu_read_lock();
+  elm = rcu_dereference(list_head);
+  while(elm != NULL) {
+    data += elm->data;
+    elm = elm->next;                  /* BUG! */
+  }
+rcu_read_unlock();
+\end{lstlisting}
+\end{lrbox}
+
+\begin{figure}[ht!] %
+\subfloat[\label{fig:rcu_existence_bug}Despite correctly obtaining a pointer to a shared data structure using \texttt{rcu\_dereference} within a read-side critical section, properties (2) and (3) tell us that the data pointed to by \texttt{elm} is not guaranteed to exist after the read-side critical section ends.]{\fbox{\usebox\rcuexistencebug}} %
+
+\subfloat[\label{fig:rcu_deref_bug}Despite the call to \texttt{rcu\_dereference}, properties (1) and (3) tell us that \texttt{list\_head} is not guaranteed to be equivalent to \texttt{elm} because a writer might have concurrently changed the value of the \texttt{list\_head} pointer. That is, if \texttt{elm} is non-\texttt{NULL}, then the data pointed to by \texttt{elm} is guaranteed to exist for the remainder of the read-side critical section. However, the value of \texttt{list\_head} is \emph{not} guaranteed to remain consistent--even within read-side critical sections--and so \texttt{list\_head} might point to a \texttt{NULL} pointer when \texttt{elm} does not.]{\fbox{\usebox\rcuderefbug}} %
+
+\subfloat[\label{fig:rcu_assign_bug}This example shows the code for a writer thread adding a new element into the second position of an RCU-protected list. The code for reader threads is also shown, where readers iterate over the list by traversing \texttt{next} pointers and sum up the \texttt{data} fields of each visited list element. The access of \texttt{elm->next} violates of properties (3) and (7). That is, the next element of the list is only guaranteed to be fully constructed within the read-side critical section if the reader executes \texttt{rcu\_dereference(elm->next)}. Therefore, the first read of \texttt{elm->next} might yield a pointer to partially constructed data.  Because that data is not guaranteed to be fully constructed, the next read of \texttt{elm->next} (i.e. \texttt{elm->next->next}) might read an invalid pointer from uninitialized memory. Treating the value of uninitialized memory as a valid pointer could trigger a kernel panic or silent data corruption.]{\fbox{\usebox\rcuassignderefbug}} %
+\caption{\label{fig:rcu_bugs}Example RCU bugs related to misuses of RCU-protected pointers.}
+\end{figure}
+
+\texttt{RCUdbg} is primarily concerned with finding bugs related to RCU-rpotected pointer misuses by reader threads (both inside and outside of read-side critical sections). As mentioned above, RCU bugs sometimes manifest as use-after-free bugs. Unfortunately, a pure use-after-free-based checking approach is insufficient (\Cref{fig:rcu_assign_bug} is one such example). \Cref{fig:rcu_existence_bug} is an example of an RCU usage bug that can manifest as a use-after-free bug if one is unlucky enough to observe a very specific thread schedule. Suppose that execution is interrupted after \texttt{rcu\_read\_unlock}, but before the access to \texttt{elm->data}. If \texttt{elm} is garbage collected and freed before the code resumes its execution, then the access to \texttt{elm->data} is a use-after-free bug. This kind of bug is a time bomb waiting to go off. Fortunately, \texttt{RCUdbg} catches the bug in \Cref{fig:rcu_existence_bug} right when \texttt{elm->data} is accessed.
+
+
+%\Cref{fig:rcu_bugs} shows some example usages of RCU, and some of the more subtle pointer-related bugs that can happen because of the interaction of rules (1), (2), (3), and (7).
+
+
+\texttt{RCUdbg} detects the the following RCU bugs related to misuses of RCU-protected pointers.
+\begin{itemize}[leftmargin=3.2em]
+	\item[B1)] Reads through an RCU-dereferenced pointer outside of a read-side critical section (\Cref{fig:rcu_existence_bug}).
+	\item[B2)] Reads through an RCU-dereferenced pointer in the wrong read-side critical section.
+
+	\item[B2)] Reads through an RCU-assigned pointer that don't first use \texttt{rcu\_dereference} (\Cref{fig:rcu_deref_bug}).
+	\item[B3)] Reads through fields of RCU-protected data structures that should be accessed via \texttt{rcu\_dereference} (\Cref{fig:rcu_assign_bug}).
+	
+	\item[B5)] Writes through an RCU-dereferenced pointer.
+	\item[B6)] Writes through an RCU-assigned pointer by a non-write thread.
+\end{itemize}
+
+Bugs B1 and B2 relate to whether or not we can prove that a given RCU protected data structure exists. Bugs B2 and B3 relate to whether or not a given RCU protected data structure has been fully constructed. Finally, bugs B5 and B6 relate to invalid uses RCU-protected and RCU-unprotected pointers, where correct synchronization among writers is not maintained.
+
+% or is constructed at a given program point. Bugs B2 through B
+
+% of this class of RCU bugs is proof-of-existence or proof-of-constructedness bugs. That is, an RCU-protected data structue exists if it is \emph{reachable} (i.e. by at least one reader thread), and if it is \emph{fully constructed} (i.e. all fields or components of the data structure have been initialized). 
+
+\texttt{RCUdbg} gains visibility on RCU operations in two ways: \begin{enumerate}
+	\item The Linux kernel RCU implementation is annotated to provide more information to \texttt{RCUdbg}. This information includes source code file and line information for bug reporting, and additional memory references that \texttt{RCUdbg} uses to get better visibility on bugs. These annotations are strictly internal to the RCU API, and thus require no changes to code using this API.
+	\item The annotated RCU API functions are specialized using Granary's function wrapping feature (\Cref{sec:function_wrapper}). Specifically, 
+\end{enumerate}
+
+%\texttt{RCUdbg} interposes on an annotations are added into the Linux kernel's RCU implementation. These annotations 
+
+
+%uses Granary's address watchpoints feature \cite{BehaveOrBeWatched} to ``taint" addresses participating in RCU-protected data structures. 
+
+%Function wrappers are used to specialize the execution of \texttt{rcu\_\linebreak[0]dereference} and \texttt{rcu\_assign\_\linebreak[0]pointer}:
+
+\begin{figure}[t!]
+\lstset{language=C, tabsize=2, stepnumber=1}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+// As used in the code:
+//   p = rcu_dereference(q);
+// Internally annotated to become:
+//   p = __rcudbg_deref(&q, q);
+// Wrapper:
+FUNCTION_WRAPPER(__rcudbg_deref, (q_addr, q), {
+  if(is_watched_address(q_addr)) {
+    // Make sure q_addr
+  } else {
+
+  }
+  return add_watchoint(q, DEREF);
+})
+\end{lstlisting}
+\caption{}
+\label{fig:rcu_dereference_wrapper}
+\end{figure}
+
+%\begin{center}
+%\begin{minipage}{0.6\columnwidth}
+%\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+%elm = rcu_dereference(list_head);
+%\end{lstlisting}
+%\end{minipage}
+%\end{center}
+%
+%Becomes:
+%
+%\begin{center}
+%\begin{minipage}{0.8\columnwidth}
+%\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+%elm = deref_taint(rcu_dereference(list_head));
+%\end{lstlisting}
+%\end{minipage}
+%\end{center}
+%
+%Tainted addresses are introduced in two ways:
+%\begin{description}
+%	\item[\texttt{rcu\_assign\_pointer}] operates on two pointers: 
+%	\item[\texttt{rcu\_dereference}] operates on a potentially tainted pointer (as introduced by \texttt{rcu\_assign\_\linebreak[0]pointer}, and returns a deref-tainted pointer.
+%\end{description}
+%
+
+%Unfortunately, approaching RCU bug detection from the perspective of finding use-after-free errors is insufficient. Use-after-free detection attacks a symptom of the problem that is highly dependent on thread interleavings and scheduling. That is, RCU can be misused in a way that results in very unlikely, but potential use-after-free bugs. An example of this case is when a writer thread, operating on a RCU-protected linked list, unlinks an element and queues its memory for later freeing. RCU provides a mechanism whereby readers can safely access this element for a brief period of time (called a read-side critical section). When the memory is eventually freed depends is implementation-defined, but depends on other reader activity.
+
+%How soon after a read-side critical section ends 
+
+% There are many cases readers can access an RCU-protected data structure because they have not been freed \emph{yet}
+
+
+%
+
+% a data structure cannot be proven to exist at some potentially allocated memory. Existence in this case relates to semantic reachability. For example, if a list element $E_n$ from an RCU-protected list is reachable from the head of the list by traversing zero-or-more intermediate elements $E_0, ..., E_{n-1}$, then $E_n$ is said to exist. While related, memory leak detection (e.g. via conservate mark and sweep) is also insufficient for ladidadidaaaa TODO TODO TODO
 
 \section{Evaluation}\label{sec:eval}
 
+What has been evaluated:
+
+\paragraph{lmbench}
+\begin{itemize}
+	\item Btkernel
+	\item Granary, full-kernel, null
+	\item Granary, full-kernel, even/odd
+	\item Granary, full-kernel, even/odd, where even/odd is a runtime check and branch.
+\end{itemize}
+
+\paragraph{fileserver}
+Setup: 1GB RAM, 3GB partition, ext3+jbd, >1GB mounted file system.
+\begin{itemize}
+	\item full-kernel
+	\begin{itemize}
+		\item Btkernel
+		\item Granary, null
+		\item Granary, even/odd
+		\item Granary, even/odd, where even/odd is a runtime check and branch.
+	\end{itemize}
+	\item module-only, (ext3+jbd)
+	\begin{itemize}
+		\item Granary, null
+		\item Granary, even/odd
+		\item Granary, even/odd, where even/odd is a runtime check and branch.
+	\end{itemize}
+\end{itemize}
+
+\paragraph{kernel compile}
+Same as fileserver, but with 8GB RAM instead of 3GB.
+
+\paragraph{recursive copy of kernel source tree}
+Same as fileserver, but with 8GB RAM instead of 3GB.
 
 \section{Related Work}\label{sec:related}
 Prior work can be classified as either whole-kernel/system DBT, or probe-based kernel instrumentation. We discuss how Granary differs from these approaches.
-\vspace{-3pt}\paragraph{Whole-kernel/system DBT} DRK \cite{DRK} is a kernel space port of the DynamoRIO \cite{DynamoRIO} DBT framework. DRK instruments the entire kernel, including modules, and follows a strict transparency model, which limits the flexibility of instrumentation and increases overheads.  PinOS \cite{PinOS} is a port of the Pin \cite{Pin} DBT framework that performs whole-system instrumentation. It has high overheads and depends on hardware virtualization, which prevents it from instrumenting non-virtualizable kernel modules. 
+\paragraph{Whole-kernel/system DBT}
+PinOS \cite{PinOS} is a port of the Pin \cite{Pin} DBT framework that performs whole-system instrumentation. It has high overheads and depends on hardware virtualization, which prevents it from instrumenting non-virtualizable kernel modules. 
 
-\vspace{-3pt}\paragraph{Probe-based Instrumentation} Several systems support injecting code at specific locations within kernel code. For example, KernInst \cite{KernInst} can inject code at almost any location in an unmodified commodity OS. Other examples with similar or more restricted functionality include LTTng \cite{LTTng}, KProbes \cite{KProbes}, DProbes \cite{DProbes}, and ftrace \cite{ftrace}. These systems are unable to perform fine-grained instrumentation of instructions or memory.
+QMEU is a flexible, whole-system emulator with kernel-level paravirtualization support (using KVM) \cite{QEMU}. Like PinOS, QEMU cannot instrument non-virtualizable device drivers.
+
+DRK \cite{DRK} is a kernel space port of the DynamoRIO \cite{DynamoRIO} DBT framework. DRK instruments the entire kernel and all device drivers/modules. DRK follows a strict transparency model, which limits the flexibility of instrumentation and increases overheads. 
+
+Btkernel is a fast and scalable system for the kernel \cite{btkernel}. Like Granary, but unlike DRK, btkernel applies a relaxed transparency model when instrumenting the kernel. For exmaple, code cache addresses are exposed to the instrumented kernel in the form of function call return addresses and interrupt return addresses. Unlike Granary, btkernel operates using an instruction translation ``rulebook", which limits instrumentation to being defined ahead-of-time, on a per-instruction basis. Btkernel does not support any form of runtime code specialization. That is, like DRK, btkernel instruments all code, but cannot change the granularity of instrumentation or the instrumentation policy applied to code.
+
+TODO: JIFL
+
+\paragraph{Probe-based Instrumentation} Several systems support injecting code at specific locations within kernel code.
+
+TODO: SystemTap
+
+KernInst \cite{KernInst} can inject code at almost any location in an unmodified commodity OS. By default, KernInst uses debugging information normally present in kernel binaries to specify probe-points; however, absolute memory addresses can also be provided.
+
+Other examples with similar or more restricted functionality include LTTng \cite{LTTng}, KProbes \cite{KProbes}, DProbes \cite{DProbes}, and ftrace \cite{ftrace}. These systems are unable to perform fine-grained instrumentation of instructions or memory.
 
 
 \section{Conclusion}\label{sec:conclusion}
 %We created Granary to address the challenges of instrumenting binary kernel modules.  Granary provides mixed-mode execution to remove the overheads of DBT for uninstrumented kernel code.  A relaxed transparency model further improves performance and allows greater visibility into the interactions between module and kernel code.  Granary also supports policy-driven instrumentation, which allows tools to specialize their instrumentation based on the context in which code executes.  Finally, Granary exposes high-level static analysis information to dynamic instrumentation tools, making it easy to match low-level memory reads with specific fields in data structures at the source code level. 
 
 %Together, Granary's features simplify the development of powerful kernel module analysis tools, while delivering lower overheads than previous kernel dynamic binary instrumentation solutions.
+
+
 
 \bibliographystyle{acm}
 \bibliography{library}
