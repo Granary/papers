@@ -45,10 +45,10 @@
 \begin{document}
 
 %make title bold and 14 pt font (Latex default is non-bold, 16 pt)
-\title{Flexible Binary Instrumentation for the Kernel}
+\title{Fast and Flexible Binary Instrumentation for the Kernel}
 
 %for single author (just remove % characters)
-\authorinfo{Peter Goodman \and Akshay Kumar \and Angela Demke Brown \and Ashvin Goel}
+\authorinfo{Peter Goodman \and Angela Demke Brown \and Ashvin Goel}
 {University of Toronto}{}
 % end authorinfo
 
@@ -159,7 +159,7 @@ Granary's code cache and JIT translation mechanism is fully reentrant. Context-s
 
 Like btkernel, Granary solves this problem of figuring out how to get to where the code needs to go  by generating ``edge'' code for each direct control-flow instruction (e.g. \texttt{call}, \texttt{jmp}, \texttt{jcc}). When a basic block is first translated, its direct control-flow instructions (CTIs) are converted into jumps to CTI-specific edge code. Edge code lives outside the code cache and is responsible for transferring control from a basic block ($B_{pred}$) to Granary so that the next basic block ($B_{succ}$) can be found/translated, and then connected ($B_{pred} \underset{\texttt{jz}}{\to} B_{succ}$) via hot code patching. Reentrancy of edge code is obtained by spilling registers onto the runtime call stack, and later restoring them before jumping back to the now-patched CTI (\Cref{fig:direct_edge_code}).
 
-Granary also generates edge code for indirect control-flow instructions; however, this edge code is split into two separate components: entry and exit edge code. Entry edge code is generated on a per-indirect CTI instruction basis, and spills registers onto the runtim call stack. Entry edge is responsible for indirect branch lookup, and will indirectly jump to the exit edge code for a given basic block. Exit edge code is generated for each basic block that is targeted by an indirect CTI. Exit edge code restores the register state saved by the entry edge code, and then directly jumps to the beginning of the targeted basic block.
+Granary also generates edge code for indirect control-flow instructions; however, this edge code is split into two separate components: entry and exit edge code. Entry edge code is generated on a per-indirect CTI instruction basis, and spills registers onto the runtime call stack. Entry edge is responsible for indirect branch lookup, and will indirectly jump to the exit edge code for a given basic block. Exit edge code is generated for each basic block that is targeted by an indirect CTI. Exit edge code restores the register state saved by the entry edge code, and then directly jumps to the beginning of the targeted basic block.
 
 \paragraph{Instrumentation}
 
@@ -168,33 +168,23 @@ Granary also generates edge code for indirect control-flow instructions; however
 \newsavebox\nativejcc
 \begin{lrbox}{\nativejcc}
 \begin{minipage}[b]{4cm}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]cmp $0x0, %rax
-
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+cmp $0x0, %rax
 jz value_is_zero 
 ...
-
-
-
-
-
-
 ( fall through )
 \end{lstlisting}
 \end{minipage}
 \end{lrbox}
 
 \newsavebox\translatedjcc
-\begin{lrbox}{\translatedjcc}\begin{minipage}[b]{4cm}\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]  cmp $0x0, %rax
-jz_to_patch:
-  jmp edge_value_is_zero
+\begin{lrbox}{\translatedjcc}\begin{minipage}[b]{4cm}\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+cmp $0x0, %rax
+edge_jz:
+  jz edge_value_is_zero
   ...
 edge_value_is_zero:
-  ( spill 2 registers )
-  ( save value_is_zero )
-  ( save target policy )
-  call patcher_for_jz
-  ( restore 2 registers )
-  jmp .jz_to_patch
+  call (patch_edge_jz)
 \end{lstlisting}
 \end{minipage}
 \end{lrbox}
@@ -203,7 +193,7 @@ edge_value_is_zero:
 \subfloat[Native Code]{\usebox\nativejcc}
 \hfill
  \subfloat[Translated Code]{\usebox\translatedjcc}
-\caption{\label{fig:direct_edge_code}Example translation of a conditional control flow instruction (\texttt{jz}) and its edge code. The edge code saves the intended target of the jump (\texttt{value\_is\_zero}) and the instrumentation policy to apply when translating the targeted code, and then context-switches into Granary by invoking \texttt{patcher\_for\_jz}. The \texttt{patcher\_for\_jz} function atomically replaces the {\bf\texttt{ jmp}}\texttt{ edge\_value\_is\_zero} instruction with a fully resolved \texttt{jz} instruction, and upon return, executes the newly resolved \texttt{jz} instruction.}
+\caption{\label{fig:direct_edge_code}Example translation of a conditional control flow instruction (\texttt{jz}) and its edge code. The original \texttt{jz} is translated into a \texttt{jz} that uses a 32-bit relative displacement to transfer control to an edge code function call (\texttt{edge\_jz}). When executed, the function call reads its target from a data structure (\texttt{patch\_edge\_jz}), which contains all information necessary to resolve the \texttt{jz}'s target and patch the original \texttt{jz}. Patching is performed with a four byte atomic write to the relative displacement operand of the \texttt{jz} instruction. Finally, the return address of the \texttt{call} instruction is altered to transfer control to the newly resolved target.}
 \end{figure}
 
 One challenge with any DBT system is how it copes with non-reentrant instrumentation. For example, instrumentation that modifies CPU-private data structures cannot be safely executed by pre-emptive kernel running on a multi-core system. If the task being instrumented is interrupted, then the kernel might decide to re-schedule the task to resume its execution on a different CPU. Any modifications to CPU-private state would lead to undefined behavior.
@@ -215,7 +205,69 @@ Btkernel provides no solution to the problem of handling non-reentrant instrumen
 Granary charts a middle ground between the two aforementioned approaches. Interrupt delaying has value because it enables non-reentrant instrumentation to be injected without costly disabling/enabling of interrupts, while not supporting delaying has value because not all instrumentation is non-reentrant. By default, Granary does not delay interrupts. However, instrumentation tools can declare \emph{interrupt delay ranges}: sequences of instructions (which can contain internal control flow) inside of a basic block that must be executed atomically. Granary encodes bounds information about interrupt delay ranges inside of each basic block's meta-data. When a basic block is interrupted, Granary inspects the meta-data and determines if the interrupt must be delayed. If a delay is required, then the instructions belonging to the delay range are copied into a CPU-private buffer, followed by code that re-constructs the interrupt stack frame and re-issues the interrupt to Granary. Granary then emulates a return from the current interrupt handler (without issuing an \texttt{iret} instruction), but leaves interrupts disabled and redirects execution into the copied code. When the copied code finishes, Granary regains control and observes the reconstructed interrupt stack frame. At this point, Granary or the tool can choose to handle the interrupt or defer the handling of the interrupt to the kernel.
 
 %, but introduces implementation complexities and high overheads for interrupt-heavy workloads. Precise interrupt delivery is one of the ways which DRK maintains transparency: interrupt handlers only 
-%The interaction between DRK's interrupt delaying mechanism and how also makes designing instrumentation subtlely harder. For example, Granary's \texttt{RCUdbg} tool injects instrumentation inside of read-side critical sections that looks for loads/stores from tainted addresses. When necessary, \texttt{RCUdbg} spills and restores registers around each checked load/store operation, so that the registers can be safely used by the checking code. This is an example of pre and post instruction instrumentation: some instructions are injected before a native instruction, and some instructions are injected after. DRK is oblivious to the relationship between pre/post instrumentation, and so an interrupt that occurs within the pre-instrumentation will only be delayed until the native instruction.
+%The interaction between DRK's interrupt delaying mechanism and how also makes designing instrumentation subtlely harder. For example, Granary's \texttt{RCUdbg} tool injects instrumentation inside of read-side critical sections that looks for loads/stores from tainted addresses. When necessary, \texttt{RCUdbg} spills and restores registers around each checked load/store operation, so that the registers can be safely used by the checking code. This is an examuple of pre and post instruction instrumentation: some instructions are injected before a native instruction, and some instructions are injected after. DRK is oblivious to the relationship between pre/post instrumentation, and so an interrupt that occurs within the pre-instrumentation will only be delayed until the native instruction.
+
+\subsection{Optimizations}
+\paragraph{Ahead-of-time Translation} 
+Granary ends basic blocks at conditional branches (\texttt{jCC}), direct and indirect \texttt{jmp}s, and \texttt{ret}s and \texttt{iret}s. Basic blocks ending in conditional branches are extended to contain two trailing CTIs: a copy of the native \texttt{jCC}, and a synthesized direct \texttt{jmp} to the code executed when the condition code is not set (i.e. when the conditional jump is not taken).
+
+If a basic block ends in either a copy of a native direct \texttt{jmp} or synthesized direct \texttt{jmp}, then Granary will perform ahead-of-time translation and instrumentation of the targeted basic block. The repeated application of translating \texttt{jmp} targets forms traces in Granary's code cache. Granary optimizes traces by directly connecting basic blocks together when there is internal control flow within the blocks of the trace, and by eliding synthesized \texttt{jmp}s between adjacent basic blocks.
+
+Granary's tracing strategy is based on the observation that the most commonly executed path through code follows a straight line. That is, execution is more likely to fall through a conditional CTI than it is to take the conditional CTI. We experimentally verified Granary's tracing strategy by disabling tracing and relying on Granary's performance counters to count how many conditional branches were patched (by their edge code), versus how many synthesized fall-through \texttt{jmp}s were patched.
+
+%using internal performance counters within Granary
+
+%Static branch prediction hints (\texttt{likely}, \texttt{unlikely} macros) are heavily used in the Linux kernel source code. Although static branch prediction hints can be specified on individual conditional branch instructions, recent x86-based architectures ignore these hints \cite{AgnerMicroarchitecture}. Therefore, static branch prediction hints at the source code level mainly affect compiler optimizations, including intraprocedural basic block scheduling. Our tracing strategy is based on 
+
+%Tr
+
+%We expect and have experimentally verified that the most common execution path through code is straight-line and does not following conditional branches.
+
+%Due to instruction prefetching, we expect that the likely or
+
+%On recent x86-based architectures, these hints only affect the schedule of basic blocks in the intraprocedural control-flow graph \cite{AgnerMicroarchitecture}.
+
+\paragraph{Patching and Alignment}
+
+For efficiency, basic blocks in Granary's code cache are directly connected through direct control flow instructions (\texttt{call}, \texttt{jmp}, \texttt{jCC}). That is, if there is a direct branch from one native instruction to another, then there will be a corresponding direct branch between two translated instructions in Granary's code cache.
+
+Granary opportunistically connects two basic blocks together using a direct branch if \begin{inparaenum}[i)]
+	\item the branch transfers control to another basic block within the current trace; or
+	\item the branch transfers control to an already translated basic block.
+\end{inparaenum} However, not all basic blocks can be connected at translation time, therefore Granary employs edge code and hot-code patching (\Cref{fig:direct_edge_code}) to connect basic blocks at runtime.
+
+Granary atomically patches direct CTIs that target edge code to instead point to their (now resolved) target basic block. Due to limitations of the x86 architecture, atomic operations cannot straddle cache lines. Therefore, patchable instructions (or parts thereof) must be aligned so as to not straddle two cache lines.
+
+The method used to pad basic blocks so as to align specific instructions must be transparent (i.e. not change the execution behavior). The typical approach to alignment is to introduce \texttt{nop} instructions, or \texttt{jmp} instructions which jump over the padding. Adding extra instructions, however, introduces added latency to the fetch/decode/execute cycle. Therefore, when possible, Granary pads instructions using otherwise ignored instruction prefixes. For example, Granary aligned patchable conditional jumps using static branch prediction hint prefixes, which are ignored by recent x86 processors \cite{AgnerMicroarchitecture}).
+
+%To reduce the overhead of alignment 
+
+%In some cases, basic blocks can be directly connected during basic block translation time. For example, intra-trace CTIs, or CTIs targeting already translated basic blocks. However, not all basic blocks can be connected this way, therefore some runtime 
+
+%Granary connects some basic blocks at translation time (e.g. intra-trace control-flow instructions). This is common when tracing is enabled, but also occurs when a branch targets an already translated basic block. However, 
+
+%Some basic blocks are directly connected at basic block translation time. One example is branches that target other basic blocks within a trace. Another example is a branch to an already translated basic block.
+
+%Other basic blocks are only connected at runtime. For example, if the function \texttt{memset} has never been executed, then a \texttt{call} to \texttt{memset} will be translated to target edge code (\Cref{fig:direct_edge_code}) that, when executed, will translate \texttt{memset}'s first basic block and patch the \texttt{call} to target the translated basic block.
+
+%For example, the targets of function call instruction (\texttt{call}) are resolved just-in-time (unless the target is already known). For each translated \texttt{call} instruction, Granary generates edge code (\Cref{fig:direct_edge_code}) that will find or translate the first basic block of the function being called, and patch the translated \texttt{call} instruction to point to the function's first basic block.
+
+%For example, if a direct branch in one basic block targets another block within the trace under construction, then that 
+
+%Basic blocks are directly connected at block translation time when branches in traces re-enter a trace, or when branches target previously translated basic blocks. If a branch does not target another basic block within its trace, or does not target a previously translated basic block, then the branch will target edge code that will resolve that branches target at runtime.
+
+% However, when a given basic block is translated, not all of its targets are known (e.g. \texttt{call} and \texttt{jCC} targets). Therefore, edge code (\Cref{fig:direct_edge_code}) is generated that translates/resolves a branch target when that branch is first executed, and patches the translated branch to avoi
+
+% The targets of some of these direct CTIs are only resolved at runtime, by executing edge code. As an optimization, jumps to edge code are dynamically patched to transfer control to their intended targeted basic blocks.
+
+%edge code use hot code patching to update a translated CTI to redirect execution 
+
+\paragraph{Trace Allocation}
+
+\paragraph{Indirect Control Flow}
+
+%\subsection{Reproducability}
+%Hello
 
 \section{Choosing What to Instrument}
 
