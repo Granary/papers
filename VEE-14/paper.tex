@@ -274,21 +274,21 @@ To avoid translation conflicts (e.g. on utility functions being simultaneously e
 Trace allocation is implemented by recording the memory pool used to allocate a given basic block in that basic block's metadata. When Granary needs to translate a new basic block, it inspects the predecessor basic block's metadata and uses the predecessor basic block's memory pool to service allocation requests for the basic block in translation.
 
 %, and is associated with a private memory pool from which to allocate memory for basic blocks. The net result is that most of the basic blocks eecuted in service of a single system call are allocated from that system call's memory pool.
-
 %The intuition for this approach is that kernel code is not very ``loopy", and so 
-
 %Granary services memory allocation requests for basic block instructions from memory pools. By default, Granary has as many memory pools as there are CPUs. However, when trace allocation is enabled
-
 %Tracing is also beneficial for 
-
 %However, tracing of this sort requires mechnisms for evicting stale basic blocks, 
-
 %Constructing traces of ``hot'' 
 %JIT generally results in better performance .
-
 %By default, Granary allocates the memory needed to hold the instructions of a basic block from CPU-private memory pools. Each memory pool serves basic block allocation requests out of fixed-size memory blocks, ranging from 4K to 24K in size.
 
 \paragraph{Indirect Control Flow}
+
+Granary translates indirect control flow instructions (\texttt{call}, \texttt{jmp}) to first search for their targets in a global, fixed-size hash table, and failing that, context-switch into Granary to perform a full lookup and potential translation.
+
+
+
+%using a fixed-size hash table, where the native target of the indirect 
 
 %\subsection{Reproducability}
 %Hello
