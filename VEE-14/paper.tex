@@ -195,12 +195,14 @@ jz value_is_zero
 
 \newsavebox\translatedjcc
 \begin{lrbox}{\translatedjcc}\begin{minipage}[b]{4cm}\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
-cmp $0x0, %rax
-edge_jz:
+  cmp $0x0, %rax
   jz edge_value_is_zero
-  ...
+  jmp edge_fall_through
+
 edge_value_is_zero:
-  call (patch_edge_jz)
+  call *(jz_patch_data)
+edge_fall_through:
+  call *(jmp_patch_data)
 \end{lstlisting}
 \end{minipage}
 \end{lrbox}
@@ -208,8 +210,8 @@ edge_value_is_zero:
 \begin{figure}[t!]
 \subfloat[Native Code]{\usebox\nativejcc}
 \hfill
- \subfloat[Translated Code]{\usebox\translatedjcc}
-\caption{\label{fig:direct_edge_code}Example translation of a conditional control flow instruction (\texttt{jz}) and its edge code. The original \texttt{jz} is translated into a \texttt{jz} that uses a 32-bit relative displacement to transfer control to an edge code function call (\texttt{edge\_jz}). When executed, the function call reads its target from a data structure (\texttt{patch\_edge\_jz}), which contains all information necessary to resolve the \texttt{jz}'s target and patch the original \texttt{jz}. Patching is performed with a four byte atomic write to the relative displacement operand of the \texttt{jz} instruction. Finally, the return address of the \texttt{call} instruction is altered to transfer control to the newly resolved target.}
+\subfloat[Translated Code]{\usebox\translatedjcc}
+\caption{\label{fig:direct_edge_code}Example translation of a conditional control flow instruction (\texttt{jz}) and its edge code. The original \texttt{jz} is translated into a \texttt{jz} that uses a 32-bit relative displacement to transfer control to an edge code function call (\texttt{edge\_value\_is\_zero}). When executed, the function call reads its target from an edge data structure (\texttt{jz\_patch\_data}), which contains all information necessary to resolve the \texttt{jz}'s target and patch the original \texttt{jz}. Patching is performed with a four byte atomic write to the relative displacement operand of the \texttt{jz} instruction. Finally, the return address of the \texttt{call} instruction is altered to transfer control to the newly resolved target.}
 \end{figure}
 Like btkernel, Granary translates direct control-flow instructions (CTIs) into equivalent jumps into CTI-specific ``edge code" (\Cref{fig:direct_edge_code}). Edge code lives outside the code cache, so as to not pollute the icache \cite{btkernel}.
 
@@ -217,7 +219,7 @@ When control flows through a basic block $B_{pred}$ for the first time, any jump
 
 % and is responsible for transferring control from a basic block ($B_{pred}$) to Granary so that the next basic block ($B_{succ}$) can be found/translated, and then connected ($B_{pred} \underset{\texttt{jz}}{\to} B_{succ}$) via hot code patching.
 
-\subsubsection{Indirect Control Flow}
+\subsubsection{Indirect Control Flow}\label{sec:ibl}
 
 
 %Indirect branch lookup through a global, fixed-size hash table. A basic block making an indirect control flow transfer jumps to an in-edge that knows where to find the indirect CTI target (e.g. in a specific register or memory location). The in-edge then uses the target as an index into the hash table, and jumps to the target address stored in the indexed hash table entry. That entry will either be the address of an out-edge, or of Granary's indirect branch resolver. Each out-edge is specific to a target basic block, and first checks if the intended jump target matches the out-edge's target. If so, then control is transfered to the target basic block, otherwise control is transfered either to Granary or to the next out-edge. Granary chains together out-edges through conditional jumps just as 
@@ -232,7 +234,7 @@ Granary translates indirect control flow instructions (\texttt{call}, \texttt{jm
 \caption{\label{fig:ibl}Process of resolving an indirect branch. Control transfers from a source basic block, to the in-edge code specific to where the indirect target is stored (e.g. register, memory address), through the global hash table and on to either one or more out-edge code stubs, or to Granary.}
 \end{figure}
 
-Out-edge code is specific to a target basic block, and performs the function of separate chaining in the indirect branch lookup hash table. When control transfers to out-edge code, the out-edge checks to see if the indirect target matches the out-edge code's target basic block. If they match, then the out-edge code restores scratch and flags registers and jumps directly to the target basic block. Otherwise, the out-edge code jumps to another out-edge code or to Granary. If one out-edge code block jumps to another one, then the targets of the two out-edge code blocks collide in the global hash table. In this respect, out-edge code is chained together through control flow, just as colliding entries in a data hash table can be chained together through a linked list.
+Out-edge code is specific to a target basic block, and performs the function of separate chaining in the indirect branch lookup hash table. When control transfers to out-edge code, the out-edge checks to see if the indirect target matches the out-edge code's target basic block. If they match, then the out-edge code restores scratch and flags registers and jumps directly to the target basic block. Otherwise, the out-edge code jumps to another out-edge code or to Granary. If one out-edge code block jumps to another one, then the targets of the two out-edge code blocks collide in the global hash table. In this respect, out-edge code is chained together through control flow, just as colliding entries in a typical hash table can be chained together through a linked list.
 
 
 %If an entry points to Granary, then no as-of-yet resolved indirect jump target hashes to that entry.
@@ -320,6 +322,15 @@ Trace allocation is implemented by recording the memory pool used to allocate a 
 
 \subsubsection{System Calls}
 
+Granary treats indirect \texttt{jmp}s or \texttt{call}s through the Linux kernel system call table specially. The Linux kernel (as of Linux 3.12) has approximately 300 distinct system call targets, some of which are executed often. To avoid polluting the indirect branch lookup hash table with these targets (\Cref{sec:ibl}), and to avoid the indirect branch lookup overhead, Granary creates a separate, \emph{shadow} system call table.
+
+%re-direct jumps through the system call table 
+
+Granary's translation post-processing mechanism identifies indirect control flow through the system call table and alters those CTIs to direct control flow through the shadow system call table instead. The entries of the shadow system call table are ``lazy" entrypoint translator functions. Upon their first execution, these entrypoint translators find or translate the first basic block of the system call handler, and update the shadow system call table accordingly. 
+
+%Directing control through the shadow system call table avoids the overhead of going through the indirect branch lookup (IBL) table (\Cref{sec:ibl}), and reduces the number of potential conflicts in the IBL table.
+
+% whose entries are code cache basic block addresses translated according to the starting instrumentation policy.
 
 
 %\subsection{Reproducability}
@@ -369,7 +380,7 @@ Like DRK and btkernel, Granary can instrument the whole kernel. Instrumenting th
 
 \subsection{Modules}\label{sec:module}
 
-Granary can target instrumentation only at specific kernel modules, while executing the rest of the kernel natively and without overhead. Instrumenting only specific kernel modules is particularly useful for debugging tools because modules represent the bulk of new kernel code under development, and contain the most bugs \cite{FaultsInLinux}.
+Unlike DRK and btkernel, Granary can target instrumentation only at specific kernel modules, while executing the rest of the kernel natively and without overhead. Instrumenting only specific kernel modules is particularly useful for debugging tools because modules represent the bulk of new kernel code under development, and contain the most bugs \cite{FaultsInLinux}.
 
 Granary interposes on an existing module by using hardware page protection to mark an existing module as non-executable and trap attempts to execute that module's code. Granary transparently recovers from these traps by returning execution to instrumented code. Granary takes control of dynamically loaded modules by interposing on the Linux kernel's module loading process. When a kernel module is loaded, Granary bootstraps by translating the first basic block of the module's initialization function.  It then replaces the pointer to that function with a pointer to the translated basic block. The translation process continues when the kernel initializes the module by invoking the translated module code. As with existing modules, the native code segments of dynamically loaded modules are page protected to prevent and recover from accidental execution. 
 
