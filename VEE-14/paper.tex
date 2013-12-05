@@ -150,7 +150,7 @@ The key insight of Granary's approach to runtime code specialization is that cod
 %Finally, an important missing feature of existing low-level instrumentation systems is the ``big picture'' view that one gets from static analysis information. Similarly, static analysis tools lack access to instructions, memory, and processor-specific behaviors that are only available to low-level runtime instrumentation tools. Existing mixed static/dynamic analysis tools \cite{NaCl,AddressSanitizer,ThreadSanitizer} appear to get the best of both worlds, but sacrifice on runtime flexibility by committing to a single instrumentation policy at a program's compile time. The benefits of high-level static analysis motivated its inclusion into Granary using a technique we call \emph{reifying instrumentation}. Granary statically analyzes the Linux kernel source code to bootstrap learning about  the interfaces that enable modules and the kernel to interact. Granary exposes this information to instrumentation tools in the form of type and function \emph{wrappers}. Tools can use wrappers to apply context-specific policies when instrumenting module code as well as to inspect and manipulate parts of kernel/module memory in a type-safe way.
 %For example, we are actively developing a tool that uses static type information to learn about all the fields of all kernel data structures that are read from or written to by modules. This information allows us to model things like how a typical file system operates on kernel data structures in the process of opening a file. From these models, we can construct behavioral patterns about how modules use kernel data structures and functions. These patterns can be used to classify modules \cite{DeviceDriverClassification} and identify spurious behavior \cite{LXFI}.
 
-The rest of the paper describes Granary in more detail. \Cref{sec:dbt} describes how Granary is implemented, \Cref{sec:what} describes how Granary can specialize instrumentation 
+The rest of the paper describes Granary in more detail. \Cref{sec:dbt} describes how Granary is implemented, \Cref{sec:what} describes how a Granary tool can choose to instrument only specific code, \Cref{sec:how} describes how Granary change the policy used to instrument code, etc.
 
 % \Cref{sec:modes} describes how to efficiently implement mixed-mode execution. \Cref{sec:policies} describes a new method for dynamically changing how code is instrumented. \Cref{sec:reify} describes how to integrate static analysis information into a DBT system. Finally, \Cref{sec:eval} evaluates Granary's performance.
 
@@ -181,33 +181,64 @@ Granary uses dynamic binary translation (DBT) to instrument the Linux kernel. DB
 %	\item {\bf Instrumented Wrapping/Substituting:} Granary can optionally instrument wrapped or substituted code. This is useful when tools want to observe function arguments/return values using high-level C/C++ code, but where that function must be instrumented for visibility.
 %\end{enumerate}
 
-Granary translates and instruments kernel binaries one basic block at a time. In Granary, a basic block is a sequence of instructions ending in a conditional branch, \texttt{ret}, or \texttt{jmp}, but not a \texttt{call} instruction. Entrypoint basic blocks (e.g. interrupt vectors, system call entrypoints, module initializers) are translated ahead-of-time, and all other basic blocks are translated just-in-time (JIT) as execution ``discovers'' them. Translated basic blocks are linked together and stored in a globally accessible \emph{code cache}.
+Granary translates and instruments kernel binaries one basic block at a time. In Granary, a basic block is a sequence of x86-64 instructions ending in a conditional branch, \texttt{ret}, or a \texttt{jmp} instruction. Unlike DRK and DynamoRIO, Granary does not terminate basic blocks at \texttt{call} instructions. This enables longer basic blocks and native-like proceccor return address prediction, but makes Granary non-transparent (\Cref{sec:transparency}). Entrypoint basic blocks (e.g. interrupt vectors, system call entrypoints, module initializers) are translated ahead-of-time, and all other basic blocks are translated just-in-time (JIT) as execution ``discovers'' them.
 
-Granary's just-in-time translation approach means that code executing from the code cache may yield control to Granary to request the address of the next basic block to execute. When instrumented code yields to Granary, a ``context switch'' occurs that transfers execution to a CPU-private stack where Granary operates. Granary context-switches back to the code cache when the next basic block has been found or translated so that instrumented execution may continue. Similar to other DBT systems, Granary uses caching and hot code patching to reduce the number of context switches. In our experience, kernel code stabilizes very quickly: context switches stop happening after the first few seconds of translation.
+Translated basic blocks are linked together and stored in a \emph{code cache}. Basic blocks are indexed by $(pc, policy)$ pairs, where $pc$ is the native program counter associated with the beginning of the basic block's instructions, and $policy$ is the instrumentation policy used to instrument the native instructions starting at $pc$. The index is maintained by a globally accessible hash table.
 
-\subsection{Basic Blocks}
+Granary's just-in-time translation approach means that code executing from the code cache may yield control to Granary to request the address of the next basic block to execute. When instrumented code yields to Granary, a ``context switch'' occurs that transfers execution to a CPU-private stack where Granary operates. Granary operates on a CPU-private stack for two reasons. First, if Granary did not switch stacks, then context switches into Granary risk overflowing the runtime call stack. This can happen because kernel stacks are typically small (4K to 8K in size), and because a context switch could happen when the native stack is nearly exhausted. Second, on an SMP, multiple processors can simultaneously execute Granary code (e.g. to translate code that will later execute). In such cases, Granary depends on CPU-private data structures to avoid contention, and the stack is one such data structure. A context-switch back to the code cache occurs when the next basic block has been found or translated. At this point, instrumented execution continues. Similar to other DBT systems, Granary uses caching and hot code patching to reduce the number of context switches. In our experience, kernel code stabilizes very quickly: context switches stop happening after the first few seconds of translation.
 
-Basic blocks in Granary's code cache contain x86-64 binary instructions. Associated with each basic block is meta-data describing the instructions of the basic block, and the instrumentation policy used to instrument those instructions. Basic block meta-data includes: \begin{inparaenum}[i)]
-	\item the length in bytes of the original and translated basic blocks;
-	\item the address of the first instruction in the original basic block; and
-	\item the instrumentation policy.
-\end{inparaenum} Basic block meta-data is queried and extended by Granary instrumentation tools. For example, Granary's control-flow graph build tool, \texttt{cfg}, extends the basic block meta-data to track per-block execution counts. Block meta-data is also queried by interrupt handlers when deciding how to handle interrupts and exceptions in instrumented code, and by debuggers (e.g., \texttt{gdb}) to give contextual information about a translated basic block. 
+%Granary code executes with interrupts disabled and depends on CPU-private data to avo
+%Granary's translation mechanism depends on CPU-private data to avoid contention when two or more processors simultaneously execute Granary code.
+%because kernel stacks are typically small (4K to 8K in size), and because context-switches into Granary can occur at arbitrary program points, Granary cannot risk 
+%and a context switch into Granary might occur at any point. If most of the stack is already used by current thread before it yields control to Granary then 
+
+\subsection{Basic Block Meta-Data}
+
+Associated with each basic block is meta-data that describes the basic block. Basic block meta-data includes: \begin{itemize}
+	\item The length in bytes of the original and translated basic blocks, and the address of the first instruction in the original basic block and the instrumented basic block. This information helps provide a rich debugging interface for instrumentation tool authors. Granary is unique among DBT tools in that the debugging experience is actually pleasant. For example, Granary has a built-in debugging mechanism for stepping back in time through previously executed basic blocks, as well as querying past register state.
+	\item Linux kernel-specific exception table meta-data about instructions contained within the current basic block. This kernel-specific meta-data is used by Granary to implement transparent page fault exception handling (\Cref{sec:interrupt_return_address_transparency}).
+	\item Ranges of instructions that must be executed atomically. Granary uses this information to implement selective interrupt delaying (\Cref{sec:interrupt_delay}).
+	\item The allocator used to allocate the instructions of the basic block. Granary uses this information to implement its trace-allocation optimization (\Cref{sec:trace_alloc}).
+	\item The instrumentation policy used to instrument the basic block. Granary uses this information to allow instrumentation tools to define policy-specific interrupt handling routines. For example, \toolname{RCUdbg} implements a read-side policy-specific interrupt handling routine that reports an error if a code executing within a read-side critical section is interrupted.
+\end{itemize} %
+%Granary uses basic block meta-data for trace allocation (\Cref{sec:trace_alloc}), interrupt delaying (\Cref{sec:interrupt_delay}), and policy-specific interrupt handling.
+
+Basic block meta-data can be also be extended by instrumentation tools. This makes developing instrumentation tools that record per-basic block statistics very easy to make. For example, Granary's control-flow graph tool, \toolname{cfg}, extends the basic block meta-data to track per-block and per-edge execution counts. This data is useful because it provides precise code coverage information (block and branch coverage), as well as useful data for profile-guided optimization. This meta-data is specified by \toolname{cfg} and automatically allocated for \toolname{cfg} by Granary. 
+
+%Basic block meta-data can also contain Granary's intermediate representation for x86-64 instructions. This is a unique feature that enables instrumentation tools to implement their own form of hot-code patching (among other things), as the intermediate representation remains tied to an emitted x86-64 instruction once the block is committed to the code cache.
+
+%Unlike any other instrumentation tool, Granary allows the x86-64 instruction intermediate representation 
+
+%Another 
+
+%novelty of Granary is that basic block meta-data enables a good 
+
+%Basic block meta-data is queried and extended by Granary instrumentation tools.
+
+
+
+%// TODO!
+
+%Block meta-data is also queried by interrupt handlers when deciding how to handle interrupts and exceptions in instrumented code, and by debuggers (e.g., \texttt{gdb}) to give contextual information about a translated basic block. This enables policy-specific interrupt handling. That is, when a basic block instrumented by a specific policy is interrupted, that policy can choose how to handle the interrupt. For example, Granary's address watchpoints framework can instrument code using a lightweight, \toolname{null} instrumentation.
 
 \subsection{Transparency}\label{sec:transparency}
-
 An instrumentation system is transparent if, given the same inputs, the instrumented and uninstrumented versions of a program behave in the same way \cite{Transparency}. Granary includes configurable levels of transparency to address the trade-off between transparency and overhead. By default, Granary uses a relaxed transparency model for efficiency, flexibility and increased visibility, but if instrumentation for some module requires transparency then it can be enabled at the cost of increased overheads and decreased visibility. By default, Granary exposes the following two artifacts: code cache addresses as function and interrupt return addresses.
 
-\subsubsection{Function return addresses}\label{para:return_address_transparency} Unlike most DBT frameworks, Granary inlines \texttt{call} instructions into basic blocks, which exposes code cache addresses to instrumented module code in the form of return addresses. Inlining \texttt{call} instructions avoids return-address mispredictions and unnecessary control-flow by building longer basic blocks. 
+\subsubsection{Function return addresses}\label{sec:return_address_transparency}
+Unlike most DBT frameworks, Granary includes \texttt{call} instructions into basic blocks, which exposes code cache addresses to instrumented module code in the form of return addresses. The benefit of including \texttt{call} instructions is better return-address prediction by the processor and longer basic blocks, which provide more code visibility to instrumentation tools at instrumentation time.
 
-\subsubsection{Interrupt return addresses} Kernel interrupts are not sensitive to return addresses and hence relaxing return address transparency has no effect on interrupts. A special case arises for page fault exceptions that occur within specific kernel functions that access user space data \cite{btkernel}. The Linux kernel records ranges of code addresses that are permitted to fault in an ``exception table'' data structure, and on a page fault exception, checks if the interrupt return address belongs to one of the pre-defined ranges. Granary records any exception table entries as part of each basic block's meta-data, so that a page fault in a basic block can be mapped to the correct native faulting program counter.
+\subsubsection{Interrupt return addresses}\label{sec:interrupt_return_address_transparency}
+Kernel interrupts are not sensitive to return addresses and hence relaxing return address transparency has no effect on interrupts. A special case arises for page fault exceptions that occur within specific kernel functions that access user space data \cite{btkernel}. The Linux kernel records ranges of code addresses that are permitted to fault in an ``exception table'' data structure, and on a page fault exception, checks if the exception return address belongs to one of the pre-defined ranges. Granary records any exception table entries as part of each basic block's meta-data, so that a page fault in a basic block can be mapped to the correct native faulting program counter.
 
 %\paragraph{Module function wrappers} Granary does not maintain transparency when its type wrappers replace pointers to module functions with pointers to wrapped module functions. This is perhaps the riskiest break in transparency within Granary because a module might treat a function pointer as being representative of the module being in some particular state.\footnote{We have not yet encountered a module where changing pointers to module functions into module wrappers altered the module's behavior under instrumentation.} If Granary is configured to use transparent module function pointer addresses in shared data structures then fast attaching is disabled and tools will not have access to the same level of static program information.
 
 \subsection{Reentrancy}
-Reentrancy is an important concern for all DBT systems, and is especially important for DBT systems operating in the kernel environment. For example, hardware interrupts can redirect control flow at any instruction, and interrupt delivery cannot be delayed past the execution of memory instructions that might alter the interrupt delivery state \cite{DRK}. Preserving interrupt transparency, however, requires that interrupts be delayed until the end of any injected instrumentation instructions.  Together, these requirements make it very difficult to write instrumentation tools.
+Reentrancy is an important concern for all DBT systems, and is especially important for DBT systems operating in the kernel environment. For example, hardware interrupts can redirect control flow at any instruction, and interrupt delivery cannot be delayed past the execution of memory instructions that might alter the interrupt delivery state \cite{DRK}. Preserving interrupt transparency, however, requires that interrupts either be delayed until the end of any injected instrumentation instructions. Together, these requirements make it very difficult to write instrumentation tools.
 
-\subsubsection{Code cache}
-Granary's code cache and JIT translation mechanisms are fully reentrant. Context-switches into Granary disable interrupts and switch execution onto a CPU-private stack. Context switches out of Granary and into the code cache or native code returns execution to the native stack and re-enables interrupts. This approach presents a minor challenge: context-switches save or restore the entire register state, so as not to disturb the execution of the instrumented program. 
+%Another concern is that instrumentation itself is not re-entrant. For example, instrumentation instructions added by a tool that access CPU-private information 
+
+\subsubsection{Granary}
+For efficiency, most kernel-space instrumentation systems (Granary included) operate on CPU-private state (e.g. Granary's CPU-private stacks). However, accessing CPU-private without first disabling interrupts results in undefined behavior. Therefore, context-switches into Granary first disable interrupts and then switch execution onto one of Granary's CPU-private stacks. Context switches out of Granary and into native code (\Cref{sec:detach}) or the code cache returns execution to the native stack and re-enable interrupts. Execution behavior is preserved because Granary saves the machine state (i.e. registers, flags) in a reentrant way. All other parts of Granary are fully reentrant.
 
 %Therefore, if a context switch into Granary occurs because the next basic block must be found/translated, then the address of that next basic block must be stored \emph{somewhere} in order for execution to eventually reach that basic block when the context switches back to the code cache. But context switching is not allowed to perturb the register state of the instrumented program, and so the target address must be resolved by another means.
 
@@ -215,9 +246,9 @@ Granary's code cache and JIT translation mechanisms are fully reentrant. Context
 
 %Granary also generates edge code for indirect control-flow instructions; however, this edge code is split into two separate components: entry and exit edge code. Entry edge code is generated on a per-indirect CTI instruction basis, and spills registers onto the runtime call stack. Entry edge is responsible for indirect branch lookup, and will indirectly jump to the exit edge code for a given basic block. Exit edge code is generated for each basic block that is targeted by an indirect CTI. Exit edge code restores the register state saved by the entry edge code, and then directly jumps to the beginning of the targeted basic block.
 
-\subsubsection{Instrumentation}
+\subsubsection{Instrumentation}\label{sec:interrupt_delay}
 
-One challenge with any DBT system is how it copes with non-reentrant instrumentation. For example, instrumentation that modifies CPU-private data structures cannot be safely executed by pre-emptive kernel running on a multi-core system. If the task being instrumented is interrupted, then the kernel might decide to re-schedule the task to resume its execution on a different CPU. Any modifications to CPU-private state would lead to undefined behavior.
+One challenge with any DBT system is how it copes with non-reentrant instrumentation. For example, instrumentation that modifies CPU-private data structures cannot be safely executed by a pre-emptive kernel running on an SMP. If the thread being instrumented is interrupted, then the kernel might decide to re-schedule the task to resume its execution on a different CPU. Any modifications to CPU-private state would lead to undefined behavior.
 
 DRK's solution to this problem assumes that all injected instrumentation instructions are potentially non-reentrant, and \emph{delays} interrupts occuring within instrumented code \cite{DRK}. Interrupt delaying allows DRK to maintain the precise interrupt semantics of x86: interrupts only arrive on \emph{logical} instruction boundaries, and kernel interrupt handlers only observe faults or exceptions at native instruction boundaries. This approach introduces subtle complexity when creating instrumentation that injects instructions both before (pre) and after (post) native instructions. For example, an interrupt occuring in the pre-instrumentation of a native instruction will be delayed only until the native instruction. When the interrupt is handled and execution attempts to return to the interrupted instructions, DRK re-instruments the ``tail" of interrupted basic block, starting from the native instruction. Instrumenting this tail involves injecting pre- and post-instrumentation around the first native instruction. If the pre-instrumentation is not idempotent, then its re-execution will result in undefined behavior. We encountered this issue when using DRK for kernel module instrumentation, where our pre-instrumentation spilled registers to the runtime call stack, and our post-instrumentation restored the spilled registers. Because of interrupt delaying, the spilling code was sometimes repeated many times, whereas the restoring was only executed once. This led to hard-to-debug kernel crashes.
 
@@ -281,7 +312,7 @@ When control flows through a basic block $B_{pred}$ for the first time, any jump
 Granary translates indirect control flow instructions (\texttt{call}, \texttt{jmp}) into their equivalent direct control flow versions, where the direct versions jump to ``in-edge" code. In-edge code loads the indirect jump target (e.g. a specific register or memory location), saves the flags register, and several scratch registers. Finally, the in-edge uses the indirect target as an index into a global, fixed-size hash table of indirect branch targets. The entries of the hash table either point to Granary or to ``out-edge" code (\Cref{fig:ibl}). 
 
 \begin{figure}[t!]
-\hspace{4em}\includegraphics[width=0.9\columnwidth]{diagrams/ibl.pdf}\vspace{-3em}
+\vspace{-1.5em}\hspace{4em}\includegraphics[width=0.9\columnwidth]{diagrams/ibl.pdf}\vspace{-2.5em}
 \caption{\label{fig:ibl}Process of resolving an indirect branch. Control transfers from a source basic block, to the in-edge code specific to where the indirect target is stored (e.g. register, memory address), through the global hash table and on to either one or more out-edge code stubs, or to Granary.}
 \end{figure}
 
@@ -353,14 +384,14 @@ One approach to change an instruction's alignment is to pad the basic block with
 
 %edge code use hot code patching to update a translated CTI to redirect execution 
 
-\subsubsection{Trace Allocation}
+\subsubsection{Trace Allocation}\label{sec:trace_alloc}
 Arranging for commonly executed sequences of basic blocks to appear adjacent in memory, also called tracing, typically improves the runtime performance of instrumented programs \cite{DynamoRIO}. Typical approaches to tracing require a runtime profiling infrastructure (e.g. recording basic block execution counts). Granary attempts to reap the benefits of tracing without the runtime profiling overhead by opportunistically forming traces using ahead-of-time translation (\Cref{sec:aot}), and by arranging for related basic blocks to be allocated sequentially in memory.
 
 Two basic blocks $B_1$ and $B_2$ are ``related" ($B_1 \to B_2$) if there is a control flow instruction from $B_1$ to $B_2$. Granary arranges for $B_2$ to be allocated nearby or adjacent to $B_1$ by allocating $B_2$'s instructions from the same pool of memory used to allocate $B_1$'s instructions. The base case of this induction are kernel entrypoints. For example, each system call is an entrypoint into the kernel, and is associated with a private memory pool. When a system call is executed for the first time, the basic blocks needed to fulfill the system call's computation are allocated from that system call's memory pool.
 
 To avoid translation conflicts (e.g. on utility functions being simultaneously executed by distinct system calls), and to improve the predictability and reproducability of a given code cache layout, Granary can delay the takeover of kernel entrypoints. That is, Granary can take over one entrypoint at a time, and wait for a specified period of time before taking over the next entrypoint. The effect of delaying the takeover process is that it increases the chances that a given entrypoint (e.g. a blocking system call) will execute to completion, and thus have all of its basic blocks  arranged sequentially in memory.
 
-Trace allocation is implemented by recording the memory pool used to allocate a given basic block in that basic block's metadata. When Granary needs to translate a new basic block, it inspects the predecessor basic block's metadata and uses the predecessor basic block's memory pool to service allocation requests for the basic block in translation.
+Trace allocation is implemented by recording the memory pool used to allocate a given basic block in that basic block's meta-data. When Granary needs to translate a new basic block, it inspects the predecessor basic block's meta-data and uses the predecessor basic block's memory pool to service allocation requests for the basic block in translation.
 
 %, and is associated with a private memory pool from which to allocate memory for basic blocks. The net result is that most of the basic blocks eecuted in service of a single system call are allocated from that system call's memory pool.
 %The intuition for this approach is that kernel code is not very ``loopy", and so 
@@ -387,7 +418,7 @@ Granary's translation post-processing mechanism identifies indirect control flow
 %\subsection{Reproducability}
 %Hello
 
-\section{Specializing on What to Instrument}
+\section{Specializing on What to Instrument}\label{sec:what}
 
 \begin{figure*}[ht!]
 \lstset{language=C, tabsize=2, stepnumber=1}
@@ -447,6 +478,7 @@ After Granary bootstraps on the module initialization process, \emph{attaching} 
 	\item {\bf Slow attaching:} the kernel invokes unwrapped module code. If the kernel executes a module function which was passed to the kernel in a type-unsafe manner, then the processor will raise a fault because Granary uses hardware page protection to prevent module code from being executed. Granary handles these faults by returning execution to the instrumented version of the faulting module code.
 \end{enumerate}
 
+\label{sec:detach}
 Granary \emph{detaches} when control transfers from instrumented code to native (uninstrumented) code. Detaching occurs in one of two ways: \begin{enumerate}
 	\item {\bf Implicit detaching:} instrumented module code returns to the kernel code which originally invoked the module, or is interrupted (initial interrupt handling is done by the kernel).
 	\item {\bf Wrapped detaching:} instrumented module code invokes a kernel wrapper, which later transfers control to the kernel.
