@@ -192,7 +192,7 @@ Granary's just-in-time translation approach means that code executing from the c
 %because kernel stacks are typically small (4K to 8K in size), and because context-switches into Granary can occur at arbitrary program points, Granary cannot risk 
 %and a context switch into Granary might occur at any point. If most of the stack is already used by current thread before it yields control to Granary then 
 
-\subsection{Basic Block Meta-Data}
+\subsection{Basic Block Meta-Data}\label{sec:metadata}
 
 Associated with each basic block is meta-data that describes the basic block. Basic block meta-data includes: \begin{itemize}
 	\item The length in bytes of the original and translated basic blocks, and the address of the first instruction in the original basic block and the instrumented basic block. This information helps provide a rich debugging interface for instrumentation tool authors. Granary is unique among DBT tools in that the debugging experience is actually pleasant. For example, Granary has a built-in debugging mechanism for stepping back in time through previously executed basic blocks, as well as querying past register state.
@@ -239,9 +239,7 @@ In some cases, emulating DRK's return-address lookup mechanism is desirable. For
 %Granary's approach improves on DRK and btkernel by allowing 
 %Better return-address prediction by the processor.
 
-	\item[iii) Improved visibility.] Not ending basic blocks on \texttt{call} instructions results in longer basic blocks, which in turn provide additional visibility to tools at instrumentation time into what will be executed by the current thread. \toolname{RCUdbg} benefits from this additional visibility because it can observe the end of read-side critical sections (\texttt{call}s to \texttt{rcu\_read\_unlock}), and optimistically assume that functions executing before the read-side critical section ends will execute within the read-side critical section.
-
-	\item[ii) Zero-overhead attaching.] (\Cref{sec:implicit_attach})
+	\item[ii) Improved visibility.] Not ending basic blocks on \texttt{call} instructions results in longer basic blocks, which in turn provide additional visibility to tools at instrumentation time into what will be executed by the current thread. \toolname{RCUdbg} benefits from this additional visibility because it can observe the end of read-side critical sections (\texttt{call}s to \texttt{rcu\_read\_unlock}), and optimistically assume that functions executing before the read-side critical section ends will execute within the read-side critical section.
 
 	%longer basic blocks, which provide more code visibility to instrumentation tools at instrumentation time.
 \end{description}
@@ -267,18 +265,41 @@ For efficiency, most kernel-space instrumentation systems (Granary included) ope
 
 \subsubsection{Instrumentation}\label{sec:interrupt_delay}
 
+\begin{figure}[t!]
+\begin{multicols}{2}
+\vspace{-1.5em}\subfloat[\label{fig:interrupt_delay_drk}Pre and post instrumentation in DRK. Injected instrumentation blocks are treated as atomic with respect to interrupts.]{\includegraphics[height=10em,clip=true,trim=0 5em 10em 0]{diagrams/drk_instrumented_mov.pdf}}\vspace{-2.5em}
+\columnbreak
+\vspace{-1.5em}\hspace{-0.5em}\subfloat[\label{fig:interrupt_delay_granary}Pre and post instrumentation in Granary. The two instrumentation blocks, as well as the native instruction are wrapped in a delay region.]{\includegraphics[height=10em,clip=true,trim=0 5em 10em 0]{diagrams/granary_instrumented_mov.pdf}}\vspace{-2.5em}
+\end{multicols}
+\caption{Example showing equivalent pre- and post-instruction instrumentation with DRK (left) and Granary (right). In DRK, the injected instrumentation instructions (grey) are guaranteed to execute atomically, up until the next native instruction (white). In Granary, no guarantees are made on injected instrumentation, unless otherwise instructed. In this case, a delay region surrounds both the pre- and post-instrumentation, as well as the native instruction, guaranteeing that the entire sequence of instructions execute on the same CPU.}
+\end{figure}
+
 One challenge with any DBT system is how it copes with non-reentrant instrumentation. For example, instrumentation that modifies CPU-private data structures cannot be safely executed by a pre-emptive kernel running on an SMP. If the thread being instrumented is interrupted, then the kernel might decide to re-schedule the task to resume its execution on a different CPU. Any modifications to CPU-private state would lead to undefined behavior.
 
-DRK's solution to this problem assumes that all injected instrumentation instructions are potentially non-reentrant, and \emph{delays} interrupts occuring within instrumented code \cite{DRK}. Interrupt delaying allows DRK to maintain the precise interrupt semantics of x86: interrupts only arrive on \emph{logical} instruction boundaries, and kernel interrupt handlers only observe faults or exceptions at native instruction boundaries. This approach introduces subtle complexity when creating instrumentation that injects instructions both before (pre) and after (post) native instructions. For example, an interrupt occuring in the pre-instrumentation of a native instruction will be delayed only until the native instruction. When the interrupt is handled and execution attempts to return to the interrupted instructions, DRK re-instruments the ``tail" of interrupted basic block, starting from the native instruction. Instrumenting this tail involves injecting pre- and post-instrumentation around the first native instruction. If the pre-instrumentation is not idempotent, then its re-execution will result in undefined behavior. We encountered this issue when using DRK for kernel module instrumentation, where our pre-instrumentation spilled registers to the runtime call stack, and our post-instrumentation restored the spilled registers. Because of interrupt delaying, the spilling code was sometimes repeated many times, whereas the restoring was only executed once. This led to hard-to-debug kernel crashes.
+DRK's solution to this problem assumes that all injected instrumentation instructions are potentially non-reentrant, and \emph{delays} interrupts occuring within instrumented code \cite{DRK}. Interrupt delaying allows DRK to maintain the precise interrupt semantics of x86: interrupts and exceptions only arrive on logical instruction boundaries in the native code, and kernel interrupt handlers only observe faults or exceptions at native instruction boundaries. This approach introduces subtle complexity when creating instrumentation that injects instructions both before (pre) and after (post) native instructions.
+
+\Cref{fig:interrupt_delay_drk} shows an example of pre- and post-instrumentation around a \texttt{mov} instruction. If an interrupt arrives within the pre-instrumentation, then DRK delays they delivery of the interrupt until the native instruction (\texttt{mov}). After the interrupt is handled and execution attempts to return to the interrupted instructions, DRK will re-instrument the ``tail" of interrupted basic block, starting from the \texttt{mov} instruction. This involves re-creating the pre- and post-instrumentation of the \texttt{mov} in the tail basic block. When executed, this will result in an unbalanced number of \texttt{push} and \texttt{pop} instructions. That is, \texttt{push \%rax} is executed in both the original and tail basic block, but \texttt{pop \%rax} is only executed in the tail basic block. This is a specific example of a more general problem: DRK's approach to interrupt delaying does not play well with idempotent instrumentation.
+
+%If the pre-instrumentation is not idempotent, then its re-execution will result in undefined behavior. We encountered this issue when using DRK for kernel module instrumentation, where our pre-instrumentation spilled registers to the runtime call stack, and our post-instrumentation restored the spilled registers. Because of interrupt delaying, the spilling code was sometimes repeated many times, whereas the restoring was only executed once. This led to hard-to-debug kernel crashes.
 
 Btkernel provides no solution to the problem of handling non-reentrant instrumentation, beyond requiring that instrumentation tools disable and re-enable interrupts around non-reentrant instrumentation code \cite{btkernel}. Unfortunately, disabling and re-enabling interrupt is costly.
 
-Granary charts a middle ground between the two aforementioned approaches. Interrupt delaying has value because it enables non-reentrant instrumentation to be injected without costly disabling/enabling of interrupts, while not supporting delaying has value because not all instrumentation is non-reentrant. By default, Granary does not delay interrupts. However, instrumentation tools can declare \emph{interrupt delay ranges}: sequences of instructions (which can contain internal control flow) inside of a basic block that must be executed atomically. Granary encodes bounds information about interrupt delay ranges inside of each basic block's meta-data. When a basic block is interrupted, Granary inspects the meta-data and determines if the interrupt must be delayed. If a delay is required, then the instructions belonging to the delay range are copied into a CPU-private buffer, followed by code that re-constructs the interrupt stack frame and re-issues the interrupt to Granary. Granary then emulates a return from the current interrupt handler (without issuing an \texttt{iret} instruction), but leaves interrupts disabled and redirects execution into the copied code. When the copied code finishes, Granary regains control and observes the reconstructed interrupt stack frame. At this point, Granary or the tool can choose to handle the interrupt or defer the handling of the interrupt to the kernel.
+Granary charts a middle ground between the two aforementioned approaches. Most instrumentation is re-entrant, partially because kernel instrumentation tools can depend on the runtime call stack for scratch storage space. However, interrupt delaying is sometimes useful because it enables non-reentrant instrumentation to avoid to continually disable and re-enable interrupts. For example, Granary's basic block tracing tool writes to a CPU-private buffer containing the sequence of executed basic block program counters. Operating on a CPU-private buffer is more efficient than operating on a global buffer because it avoids cache line contention and locking on an SMP. However, writing to a CPU-private buffer is only safe if the entire write executes on the same CPU. An equivalent tool developed for btkernel---which does not support interrupt delaying---would have to disable and the re-enable interrupts around the write. The is inefficient because it introduces flag stalls into the instruction pipeline \cite{AgnerMicroarchitecture}, and because interrupts arrive relatively infrequently.
+
+Granary conveniently solves this problem by allowing instrumentation tools to declare \emph{interrupt delay regions}. An interrupt delay region is a sequence of instructions (which can contain internal control flow) inside of a basic block that must be executed atomically. \Cref{fig:interrupt_delay_granary} shows an interrut delay region that surrounds both the pre- and post-instrumentation of a native \texttt{mov} instruction. If an interrupt arrives anywhere within this region of code, Granary will delay the interrupt to the end of the region. The declarative nature of interrupt delay regions allows instrumentation developers to opt-in to interrupt delaying, and control exactly when, where, and for how long interrupts can be delayed.
+
+Granary implements interrupt delay regions by recording bounds information about interrupt delay regions inside of each basic block's meta-data (\Cref{sec:metadata}). When a basic block is interrupted, Granary inspects the block's meta-data and determines if the interrupt must be delayed. If a delay is required, then all instructions belonging to the delay range are copied into a CPU-private buffer. All instructions are copied because a delay region might contain internal control-flow. A CPU-private buffer is used because the number of CPUs is a natural upper bound on the number of simultaneously executing delay regions. After the copied instructions, Granary emits code that code re-creates the interrupt stack frame, followed by a jump to the interrupt vector (which is controlled by Granary). This jump ensures that Granary's interrupt handler regains control after the instructions within the delay region fully execute, but before the kernel observes the interrupt. When Granary regains control, it can then delegate to the instrumentation tool to handle the interrupt, or defer handling of the interrupt to the kernel.
+
+When all instructions have been emitted to the CPU-private buffer, Granary emulates a return from the interrupt (without issuing an \texttt{iret} instruction). The emulated return leaves interrupts disabled and transfers control to the CPU-private buffer. Leaving interrupts disabled ensures that the remainder of the delay region will execute on the current CPU, and avoids reentrancy issues related to the copied region being located in a CPU-private buffer.
+
+% and re-issues the interrupt to Granary. Granary then emulates a return from the current interrupt handler (without issuing an \texttt{iret} instruction), but leaves interrupts disabled and redirects execution into the copied code.\footnote{Leaving interrupts disabled is required to ensure that executing the copied instructions in the CPU-private buffer is reentrant. Granary performs some sanity checks on the instructions being copied to ensure that they don't re-enable interrupts.} When the copied code finishes, Granary regains control and observes the reconstructed interrupt stack frame. At this point, Granary or the tool can choose to handle the interrupt or defer the handling of the interrupt to the kernel.
+
+%while not supporting delaying has value because not all instrumentation is non-reentrant. By default, Granary does not delay interrupts. However, instrumentation tools can declare \emph{interrupt delay ranges}: 
 
 %, but introduces implementation complexities and high overheads for interrupt-heavy workloads. Precise interrupt delivery is one of the ways which DRK maintains transparency: interrupt handlers only 
 %The interaction between DRK's interrupt delaying mechanism and how also makes designing instrumentation subtlely harder. For example, Granary's \toolname{RCUdbg} tool injects instrumentation inside of read-side critical sections that looks for loads/stores from tainted addresses. When necessary, \toolname{RCUdbg} spills and restores registers around each checked load/store operation, so that the registers can be safely used by the checking code. This is an examuple of pre and post instruction instrumentation: some instructions are injected before a native instruction, and some instructions are injected after. DRK is oblivious to the relationship between pre/post instrumentation, and so an interrupt that occurs within the pre-instrumentation will only be delayed until the native instruction.
 
-\subsection{Implementation}
+\subsection{Control Flow Implementation}
 \subsubsection{Direct Control Flow}
 % Code block showing an example JZ (jump if ZF=1).
 \lstset{language=[x64]Assembler}
@@ -314,9 +335,9 @@ edge_fall_through:
 \subfloat[Translated Code]{\usebox\translatedjcc}
 \caption{\label{fig:direct_edge_code}Example translation of a conditional control flow instruction (\texttt{jz}) and its edge code. The original \texttt{jz} is translated into a \texttt{jz} that uses a 32-bit relative displacement to transfer control to an edge code function call (\texttt{edge\_value\_is\_zero}). When executed, the function call reads its target from an edge data structure (\texttt{jz\_patch\_data}), which contains all information necessary to resolve the \texttt{jz}'s target and patch the original \texttt{jz}. Patching is performed with a four byte atomic write to the relative displacement operand of the \texttt{jz} instruction. Finally, the return address of the \texttt{call} instruction is altered to transfer control to the newly resolved target.}
 \end{figure}
-Like btkernel, Granary translates direct control-flow instructions (CTIs) into equivalent jumps into CTI-specific ``edge code" (\Cref{fig:direct_edge_code}). Edge code lives outside the code cache, so as to not pollute the icache \cite{btkernel}.
+Like btkernel, Granary translates direct control-flow instructions (CTIs) into equivalent jumps into CTI-specific ``edge code" (\Cref{fig:direct_edge_code}). Edge code lives outside the code cache, so as to not pollute the processor's instruction cache \cite{btkernel}.
 
-When control flows through a basic block $B_{pred}$ for the first time, any jumps taken will transfer control to edge code that is specific to the jump taken. Edge code contains only a single indirect \texttt{call} instruction, thus allowing multiple edge codes to occupy a single cache line. The indirect \texttt{call} transfers control to Granary via a function pointer located in an ``edge data structure", which describes how to translate the target basic block, $B_{succ}$. Granary gains control and looks up or translates the target code according instrumentation policy information stored in the edge data structure. Then, Granary uses hot-code patching (\Cref{sec:patching}) to modify the original CTI that led to the edge code \texttt{call}, so that it now transfers control to $B_{succ}$ instead. Finally, Granary releases control and returns to $B_{succ}$.
+When control flows through a basic block $B_{pred}$ for the first time, any jumps taken will transfer control to edge code that is specific to the jump taken. Edge code contains only a single indirect \texttt{call} instruction, thus allowing multiple edge codes to occupy a single cache line. The indirect \texttt{call} transfers control to Granary via a function pointer located in an ``edge data structure", which describes how to translate the target basic block, $B_{succ}$. Granary gains control and looks up or translates the target code according instrumentation policy stored in the edge data structure. Then, Granary uses modifies the original CTI in $B_{pred}$ in place so that it transfers control to $B_{succ}$  (\Cref{sec:patching}). Finally, Granary releases control and context switches to $B_{succ}$.
 
 % and is responsible for transferring control from a basic block ($B_{pred}$) to Granary so that the next basic block ($B_{succ}$) can be found/translated, and then connected ($B_{pred} \underset{\texttt{jz}}{\to} B_{succ}$) via hot code patching.
 
@@ -324,7 +345,6 @@ When control flows through a basic block $B_{pred}$ for the first time, any jump
 
 
 %Indirect branch lookup through a global, fixed-size hash table. A basic block making an indirect control flow transfer jumps to an in-edge that knows where to find the indirect CTI target (e.g. in a specific register or memory location). The in-edge then uses the target as an index into the hash table, and jumps to the target address stored in the indexed hash table entry. That entry will either be the address of an out-edge, or of Granary's indirect branch resolver. Each out-edge is specific to a target basic block, and first checks if the intended jump target matches the out-edge's target. If so, then control is transfered to the target basic block, otherwise control is transfered either to Granary or to the next out-edge. Granary chains together out-edges through conditional jumps just as 
-
 
 %Hash table entries are code addresses of out-edge code stub. Each out-edge code stub is specific to a target basic block, and is responsible for checking if the intended control-flow target is the out-edge's target or not. If not, the out-edge either directly jumps to the next out-edge whose target also fits into the same hash table bucket, or jumps to Granary to determine the target basic block.
 
@@ -347,6 +367,7 @@ Out-edge code is specific to a target basic block, and performs the function of 
 %using a fixed-size hash table, where the native target of the indirect 
 
 \subsection{Optimizations}
+
 \subsubsection{Ahead-of-time Translation} \label{sec:aot}
 Granary ends basic blocks at conditional branches (\texttt{jCC}), direct and indirect \texttt{jmp}s, and \texttt{ret}s and \texttt{iret}s. Basic blocks ending in conditional branches are extended to contain two trailing CTIs: a copy of the native \texttt{jCC}, and a synthesized direct \texttt{jmp} to the code executed when the condition code is not set (i.e. when the conditional jump is not taken).
 
@@ -367,7 +388,6 @@ Granary's tracing strategy is based on the observation that the most commonly ex
 %On recent x86-based architectures, these hints only affect the schedule of basic blocks in the intraprocedural control-flow graph \cite{AgnerMicroarchitecture}.
 
 \subsubsection{Patching and Alignment}\label{sec:patching}
-
 For efficiency, basic blocks in Granary's code cache are directly connected through direct control flow instructions (\texttt{call}, \texttt{jmp}, \texttt{jCC}). That is, if there is a direct branch from one native instruction to another, then there will be a corresponding direct branch between two translated instructions in Granary's code cache.
 
 Granary opportunistically connects two basic blocks together using a direct branch if \begin{inparaenum}[i)]
@@ -382,25 +402,15 @@ Granary atomically patches direct CTIs that target edge code to instead point to
 One approach to change an instruction's alignment is to pad the basic block with additional \texttt{nop} instructions. An alternative when more than a few bytes of padding are needed is to introduce a single control-flow instruction (\texttt{jmp}) that jumps around the padded area. However, adding extra instructions introduces latency into the fetch/decode/execute cycle. Therefore, when possible, Granary uses ignored instruction prefixes to alter an instruction's alignment. For example, Granary aligns patchable conditional jumps using static branch prediction hint prefixes, which are ignored by recent x86 processors \cite{AgnerMicroarchitecture}. Finally, most basic blocks are small (i.e. fit in one cache line), therefore, aligning basic blocks on a cache line boundary naturally avoids the potential for a patchable instruction to straddle two cache lines.
 
 %To reduce the overhead of alignment 
-
 %In some cases, basic blocks can be directly connected during basic block translation time. For example, intra-trace CTIs, or CTIs targeting already translated basic blocks. However, not all basic blocks can be connected this way, therefore some runtime 
-
 %Granary connects some basic blocks at translation time (e.g. intra-trace control-flow instructions). This is common when tracing is enabled, but also occurs when a branch targets an already translated basic block. However, 
-
 %Some basic blocks are directly connected at basic block translation time. One example is branches that target other basic blocks within a trace. Another example is a branch to an already translated basic block.
-
 %Other basic blocks are only connected at runtime. For example, if the function \texttt{memset} has never been executed, then a \texttt{call} to \texttt{memset} will be translated to target edge code (\Cref{fig:direct_edge_code}) that, when executed, will translate \texttt{memset}'s first basic block and patch the \texttt{call} to target the translated basic block.
-
 %For example, the targets of function call instruction (\texttt{call}) are resolved just-in-time (unless the target is already known). For each translated \texttt{call} instruction, Granary generates edge code (\Cref{fig:direct_edge_code}) that will find or translate the first basic block of the function being called, and patch the translated \texttt{call} instruction to point to the function's first basic block.
-
 %For example, if a direct branch in one basic block targets another block within the trace under construction, then that 
-
 %Basic blocks are directly connected at block translation time when branches in traces re-enter a trace, or when branches target previously translated basic blocks. If a branch does not target another basic block within its trace, or does not target a previously translated basic block, then the branch will target edge code that will resolve that branches target at runtime.
-
 % However, when a given basic block is translated, not all of its targets are known (e.g. \texttt{call} and \texttt{jCC} targets). Therefore, edge code (\Cref{fig:direct_edge_code}) is generated that translates/resolves a branch target when that branch is first executed, and patches the translated branch to avoi
-
 % The targets of some of these direct CTIs are only resolved at runtime, by executing edge code. As an optimization, jumps to edge code are dynamically patched to transfer control to their intended targeted basic blocks.
-
 %edge code use hot code patching to update a translated CTI to redirect execution 
 
 \subsubsection{Trace Allocation}\label{sec:trace_alloc}
@@ -430,14 +440,22 @@ Granary treats indirect \texttt{jmp}s or \texttt{call}s through the Linux kernel
 Granary's translation post-processing mechanism identifies indirect control flow through the system call table and alters those CTIs to direct control flow through the shadow system call table instead. The entries of the shadow system call table are ``lazy" entrypoint translator functions. Upon their first execution, these entrypoint translators find or translate the first basic block of the system call handler, and update the shadow system call table accordingly. 
 
 %Directing control through the shadow system call table avoids the overhead of going through the indirect branch lookup (IBL) table (\Cref{sec:ibl}), and reduces the number of potential conflicts in the IBL table.
-
 % whose entries are code cache basic block addresses translated according to the starting instrumentation policy.
-
-
 %\subsection{Reproducability}
 %Hello
 
 \section{Specializing on What to Instrument}\label{sec:what}
+
+\begin{figure}
+\captionsetup[subfloat]{width=0.45\columnwidth}
+\begin{tabularx}{\columnwidth}{XX}%
+\subfloat[Full kernel instrumentation.]{\hspace{2.5em}\epsfig{file=diagrams/kernel.eps,width=0.125\textwidth}} & %
+\subfloat[Module-only instrumentation]{\hspace{2.5em}\epsfig{file=diagrams/module.eps,width=0.125\textwidth}} \\
+\subfloat[Module-only instrumentation, with a function specialized to run natively by using a module function wrapper.]{\hspace{2.5em}\epsfig{file=diagrams/module_wrapper.eps,width=0.125\textwidth}} & %
+\subfloat[\label{fig:module_probe}Module-only instrumentation, with a kernel function specialized to also be instrumented by using a probe-based wrapper.]{\hspace{2.5em}\epsfig{file=diagrams/module_probe.eps,width=0.125\textwidth}}
+\end{tabularx}
+\caption{Example of using different granularities of instrumentation to selectively instrument or not instrument specific code.}
+\end{figure}
 
 \begin{figure*}[ht!]
 \lstset{language=C, tabsize=2, stepnumber=1}
@@ -485,7 +503,7 @@ Unlike DRK and btkernel, Granary can target instrumentation only at specific ker
 
 Granary interposes on an existing module by using hardware page protection to mark an existing module as non-executable and trap attempts to execute that module's code. Granary transparently recovers from these traps by returning execution to instrumented code. Granary takes control of dynamically loaded modules by interposing on the Linux kernel's module loading process. When a kernel module is loaded, Granary bootstraps by translating the first basic block of the module's initialization function.  It then replaces the pointer to that function with a pointer to the translated basic block. The translation process continues when the kernel initializes the module by invoking the translated module code. As with existing modules, the native code segments of dynamically loaded modules are page protected to prevent and recover from accidental execution. 
 
-While sufficient for comprehensiveness, hardware page protection is an inefficient mechanism for gaining control of module code execution. That is, after the (instrumented) module initializer runs to completion, Granary needs an efficient way to regain control of future invocations of the module's code. Our approach to regaining control is based on the observation that modules tell the kernel about their interfaces by registering functions with the kernel. We expect that at least some of the registered functions will be executed by the kernel because this is the mechanism by which modules extend the kernel's functionality. To Granary, registered module functions represent potential future \emph{attach} points, where a switch from native to instrumented execution will occur. Furthermore, Granary discovers additional attach points at detach points by observing pointers to module functions that are passed by modules to the kernel.
+While correct, hardware page protection is an inefficient mechanism for gaining control of module code execution. That is, after the (instrumented) module initializer runs to completion, Granary needs an efficient way to regain control of future invocations of the module's code. Our approach to regaining control is based on the observation that modules tell the kernel about their interfaces by registering functions with the kernel. We expect that at least some of the registered functions will be executed by the kernel because this is the mechanism by which modules extend the kernel's functionality. To Granary, registered module functions represent potential future \emph{attach} points, where a switch from native to instrumented execution will occur. Furthermore, Granary discovers additional attach points at detach points by observing pointers to module functions that are passed by modules to the kernel.
 
 Granary uses static analysis to dynamically discover attach points by wrapping the kernel/module interface. Kernel functions are wrapped by \emph{kernel wrappers} that inspect and traverse argument pointers in search of pointers to module functions. \Cref{fig:type_wrapper} shows an example of a type wrapper for the Linux device driver structure. If a pointer to a module function (a future attach point) is discovered, then Granary replaces that pointer with a function-specific \emph{module wrapper}. Granary inspects and modifies arguments to module wrappers in the same way as for kernel wrappers. This allows Granary to discover kernel entry points that will cause instrumentation to detach. Finally, Granary redirects execution to the appropriate kernel or instrumented module function after wrapping has occurred.
 
@@ -507,28 +525,6 @@ Granary \emph{detaches} when control transfers from instrumented code to native 
 Granary's wrappers expose a wealth of static program information to instrumentation tools. Instrumentation tools can use information present in wrappers to alter how code is instrumented, or to simply inspect the runtime object graph in a type-safe way. For example, we are actively using type information present in wrappers to create a tool that generates models of typical module behavior. The wrapper information serves two roles in our tool. First, we use type wrappers to assign type-specific IDs to module-allocated memory that is shared across the module/kernel interface. Type ID assignment is critical because it allows us to match memory reads and writes to specific kernel data structure fields. Second, we use the kernel and module function wrappers to generate call graphs of a module's execution. This call graph models module behavior (according to the kernel) because we label module code nodes with kernel data structure and function pointer field names (derived from module wrappers). This labelling allows us to generalize across similar modules. For example, code reached by calling the \texttt{ext4\_mount} and \texttt{btrfs\_mount} functions from the \texttt{ext4} and \texttt{btrfs} file system modules, respectively, are both labelled as \texttt{file\_system\_type::mount}, because the function addresses are stored (and later replaced by module wrappers) in the \texttt{mount} field of a \texttt{file\_system\_type} data structure. The combined records from multiple ``trusted'' modules of the same class (e.g., mature, open-source file systems) models the behavior of typical kernel modules. We hope that these models will help us build tools that classify and identify spurious module behavior. 
 
 \subsection{Functions}\label{sec:function_wrapper}
-
-\begin{figure}
-\captionsetup[subfloat]{width=0.45\columnwidth}
-\begin{tabularx}{\columnwidth}{XX}%
-\subfloat[Full kernel instrumentation.]{\hspace{2.5em}\epsfig{file=diagrams/kernel.eps,width=0.125\textwidth}} & %
-\subfloat[Module-only instrumentation]{\hspace{2.5em}\epsfig{file=diagrams/module.eps,width=0.125\textwidth}} \\
-\subfloat[Module-only instrumentation, with a function specialized to run natively by using a module function wrapper.]{\hspace{2.5em}\epsfig{file=diagrams/module_wrapper.eps,width=0.125\textwidth}} & %
-\subfloat[\label{fig:module_probe}Module-only instrumentation, with a kernel function specialized to also be instrumented by using a probe-based wrapper.]{\hspace{2.5em}\epsfig{file=diagrams/module_probe.eps,width=0.125\textwidth}}
-\end{tabularx}
-%
-%\begin{multicols}{2}
-%\subfloat[Full kernel instrumentation.]{\epsfig{file=diagrams/kernel.eps,width=0.125\textwidth}}
-%\columnbreak
-%\subfloat[Module-only instrumentation]{\epsfig{file=diagrams/module.eps,width=0.125\textwidth}}
-%\end{multicols}
-%\begin{multicols}{2}
-%\subfloat[Module-only instrumentation, with a function specialized to run natively by using a module function wrapper.]{\epsfig{file=diagrams/module_wrapper.eps,width=0.125\textwidth}}
-%\columnbreak
-%\subfloat[Module-only instrumentation, with a kernel function specialized to also be instrumented by using a probe-based wrapper.]{\epsfig{file=diagrams/module_probe.eps,width=0.125\textwidth}}
-%\end{multicols}
-\caption{Example of using different granularities of instrumentation to selectively instrument or not instrument specific code.}
-\end{figure}
 
 Granary can instrument or not instrument functions in several different ways. For example, \emph{probe-based} instrumentation allows Granary to selectively instrument only a particular function, while \emph{wrapper-based} instrumentation allows Granary to isolate a particular function that is invoked by instrumented code, and choose to instrument that function or run it natively (all while having the flexibility to arbitrarily inspect that function's arguments and return values in a type-safe way).
 
