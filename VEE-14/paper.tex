@@ -47,6 +47,7 @@
 % Customize cleverref
 \crefname{section}{Section}{Sections}
 
+
 \begin{document}
 
 %make title bold and 14 pt font (Latex default is non-bold, 16 pt)
@@ -225,9 +226,9 @@ Basic block meta-data can be also be extended by instrumentation tools. This mak
 An instrumentation system is transparent if, given the same inputs, the instrumented and uninstrumented versions of a program behave in the same way \cite{Transparency}. Granary includes configurable levels of transparency to address the trade-off between transparency and overhead. By default, Granary uses a relaxed transparency model for efficiency, flexibility and increased visibility, but if instrumentation for some module requires transparency then it can be enabled at the cost of increased overheads and decreased visibility. By default, Granary exposes the following two artifacts: code cache addresses as function and interrupt return addresses.
 
 \subsubsection{Function return addresses}\label{sec:return_address_transparency}
-Unlike most DBT frameworks, Granary's basic blocks do not terminate at \texttt{call} instructions. This exposes code cache addresses to instrumented module code in the form of return addresses stored on the runtime call stack. The benefit of including \texttt{call} instructions are: \begin{description}[labelindent=\parindent]
+Unlike most DBT frameworks, Granary's basic blocks do not terminate at \texttt{call} instructions. This exposes code cache addresses to instrumented module code in the form of return addresses stored on the runtime call stack. The benefit of including \texttt{call} instructions are: \begin{enumerate}
 
-	\item[i) Zero overhead procedure returns.] Unlike Granary, DRK emulates procedure calls and returns. DRK emulates \texttt{call} instructions by pushing the intended native return address onto the runtime call stack, followed by a direct direct jump to the next (instrumented) basic block \cite{DRK}. This approach enables return address transparency, but introduces additional overheads on procedure returns, which must do costly indirect branch lookups to find the intended return target. 
+	\item {\bf Zero overhead procedure returns.} Unlike Granary, DRK emulates procedure calls and returns. DRK emulates \texttt{call} instructions by pushing the intended native return address onto the runtime call stack, followed by a direct direct jump to the next (instrumented) basic block \cite{DRK}. This approach enables return address transparency, but introduces additional overheads on procedure returns, which must do costly indirect branch lookups to find the intended return target. 
 
 Btkernel's approach is similar in spirit to Granary's; however, btkernel ends basic blocks at \texttt{call} instructions. This introduces unnecessary control-flow on the return path from procedures. That is, btkernel's ``call/ret optimization" ostensibly enables zero-overhead procedure returns by leaving \texttt{ret} instructions as-is; however, the benefits are more apparent than real. To transfer control to the next logical basic block after a procedure return, btkernel's \texttt{ret}s first transfer control to the end of the basic block that performed the \texttt{call}, and then \texttt{jmp} to the next basic block. Granary avoids this unnecessary \texttt{jmp} because basic blocks do not end at \texttt{call} instructions.
 	
@@ -239,10 +240,10 @@ In some cases, emulating DRK's return-address lookup mechanism is desirable. For
 %Granary's approach improves on DRK and btkernel by allowing 
 %Better return-address prediction by the processor.
 
-	\item[ii) Improved visibility.] Not ending basic blocks on \texttt{call} instructions results in longer basic blocks, which in turn provide additional visibility to tools at instrumentation time into what will be executed by the current thread. \toolname{RCUdbg} benefits from this additional visibility because it can observe the end of read-side critical sections (\texttt{call}s to \texttt{rcu\_read\_unlock}), and optimistically assume that functions executing before the read-side critical section ends will execute within the read-side critical section.
+	\item {\bf Improved visibility.} Not ending basic blocks on \texttt{call} instructions results in longer basic blocks, which in turn provide additional visibility to tools at instrumentation time into what will be executed by the current thread. \toolname{RCUdbg} benefits from this additional visibility because it can observe the end of read-side critical sections (\texttt{call}s to \texttt{rcu\_read\_unlock}), and optimistically assume that functions executing before the read-side critical section ends will execute within the read-side critical section.
 
 	%longer basic blocks, which provide more code visibility to instrumentation tools at instrumentation time.
-\end{description}
+\end{enumerate}
 
 \subsubsection{Interrupt return addresses}\label{sec:interrupt_return_address_transparency}
 Kernel interrupts are not sensitive to return addresses and hence relaxing return address transparency has no effect on interrupts. A special case arises for page fault exceptions that occur within specific kernel functions that access user space data \cite{btkernel}. The Linux kernel records ranges of code addresses that are permitted to fault in an ``exception table'' data structure, and on a page fault exception, checks if the exception return address belongs to one of the pre-defined ranges. Granary records any exception table entries as part of each basic block's meta-data, so that a page fault in a basic block can be mapped to the correct native faulting program counter.
@@ -306,7 +307,7 @@ When all instructions have been emitted to the CPU-private buffer, Granary emula
 \newsavebox\nativejcc
 \begin{lrbox}{\nativejcc}
 \begin{minipage}[b]{4cm}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 cmp $0x0, %rax
 jz value_is_zero 
 ...
@@ -316,7 +317,7 @@ jz value_is_zero
 \end{lrbox}
 
 \newsavebox\translatedjcc
-\begin{lrbox}{\translatedjcc}\begin{minipage}[b]{4cm}\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+\begin{lrbox}{\translatedjcc}\begin{minipage}[b]{4cm}\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
   cmp $0x0, %rax
   jz edge_value_is_zero
   jmp edge_fall_through
@@ -348,7 +349,7 @@ When control flows through a basic block $B_{pred}$ for the first time, any jump
 
 %Hash table entries are code addresses of out-edge code stub. Each out-edge code stub is specific to a target basic block, and is responsible for checking if the intended control-flow target is the out-edge's target or not. If not, the out-edge either directly jumps to the next out-edge whose target also fits into the same hash table bucket, or jumps to Granary to determine the target basic block.
 
-Granary translates indirect control flow instructions (\texttt{call}, \texttt{jmp}) into their equivalent direct control flow versions, where the direct versions jump to ``in-edge" code. In-edge code loads the indirect jump target (e.g. a specific register or memory location), saves the flags register, and several scratch registers. Finally, the in-edge uses the indirect target as an index into a global, fixed-size hash table of indirect branch targets. The entries of the hash table either point to Granary or to ``out-edge" code (\Cref{fig:ibl}). 
+Granary translates indirect CTIs (\texttt{call}, \texttt{jmp}) into their equivalent direct control flow versions, where the direct versions jump to ``in-edge" code. In-edge code loads the indirect jump target (e.g. a specific register or memory location), saves the flags register, and several scratch registers. Finally, the in-edge uses the indirect target as an index into a global, fixed-size hash table of indirect branch targets. The entries of the hash table either point to Granary or to ``out-edge" code (\Cref{fig:ibl}). 
 
 \begin{figure}[t!]
 \vspace{-1.5em}\hspace{4em}\includegraphics[width=0.9\columnwidth]{diagrams/ibl.pdf}\vspace{-2.5em}
@@ -357,6 +358,18 @@ Granary translates indirect control flow instructions (\texttt{call}, \texttt{jm
 
 Out-edge code is specific to a target basic block, and performs the function of separate chaining in the indirect branch lookup hash table. When control transfers to out-edge code, the out-edge checks to see if the indirect target matches the out-edge code's target basic block. If they match, then the out-edge code restores scratch and flags registers and jumps directly to the target basic block. Otherwise, the out-edge code jumps to another out-edge code or to Granary. If one out-edge code block jumps to another one, then the targets of the two out-edge code blocks collide in the global hash table. In this respect, out-edge code is chained together through control flow, just as colliding entries in a typical hash table can be chained together through a linked list.
 
+Granary's use of out-edge code avoids re-entrancy issues related to indirect control flow that present in DRK and btkernel. Both DRK and btkernel store the target of an indirect CTI in a CPU-private memory location. To complete an indirect control transfer, both systems perform (roughly) the following steps: \begin{enumerate}[itemindent=\parindent]%
+\setlength{\itemsep}{2pt}%
+\setlength{\parskip}{0pt}%
+	\item Save the flags and disable interrupts.
+	\item Save registers.
+	\item Lookup the next basic block address.
+	\item Store that address in a CPU private memory location.
+	\item Restore registers.
+	\item Restore the flags and interrupt state.
+	\item Indirectly jump to the target basic block through the CPU-private location.
+\end{enumerate} %
+However, the ordering of steps (6) and (7) introduce a reentrancy problem: the access to the CPU-private location is not safe because an interrupt might arrive before the indirect jump in step (7). This unusual design is motivated by the constraint that the entire lookup procedure must save (2) and restore (5) the register state for correctness, but must also save the target pc \emph{somewhere} so that execution can eventually be redirected. Granary's out-edge code avoids this reentrancy issue by having the out edge code itself (in the form of a direct \texttt{jmp}) contain the target pc.
 
 %If an entry points to Granary, then no as-of-yet resolved indirect jump target hashes to that entry.
 
@@ -460,21 +473,21 @@ Granary's translation post-processing mechanism identifies indirect control flow
 \begin{figure*}[ht!]
 \lstset{language=C, tabsize=2, stepnumber=1}
 \begin{multicols}{2}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 struct device_driver {
   ...
-  int (*probe)(struct device *);
-  int (*remove)(struct device *);
+  int  (*probe)(struct device *);
+  int  (*remove)(struct device *);
   void (*shutdown)(struct device *);
-  int (*suspend)(struct device *, pm_message_t);
-  int (*resume)(struct device *);
+  int  (*suspend)(struct device *, pm_message_t);
+  int  (*resume)(struct device *);
   ...
   const struct dev_pm_ops *pm;
   ...
 };
 \end{lstlisting}
 \columnbreak
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 TYPE_WRAPPER(struct device_driver, {
   PRE_OUT {
     ABORT_IF_FUNCTION_IS_WRAPPED(arg.probe)
@@ -540,7 +553,7 @@ Wrapper-based instrumentation makes use of the same wrapper capabilities used by
 
 \begin{figure}[t!]
 \lstset{language=C, tabsize=2, stepnumber=1}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 MODULE_FUNCTION_WRAPPER(__kmalloc, (size, gfp), {
   void *addr = __kmalloc(size, gfp);
   if(is_valid_address(addr)) {
@@ -665,7 +678,7 @@ Granary's \toolname{RCUdbg} tool is designed to catch RCU bugs related to kernel
 % Example code showing an existence bug.
 \newsavebox\rcuexistencebug
 \begin{lrbox}{\rcuexistencebug}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 rcu_read_lock();
   elm = rcu_dereference(list_head);
   data = elm->data;                  /* Valid */
@@ -677,7 +690,7 @@ data = elm->data;                     /* BUG! */
 % Example code showing another existence bug.
 \newsavebox\rcuderefbug
 \begin{lrbox}{\rcuderefbug}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 rcu_read_lock();
   elm = rcu_dereference(list_head);
   if(elm != NULL)
@@ -689,7 +702,7 @@ rcu_read_unlock();
 % Example code showing another existence bug.
 \newsavebox\rcuassignderefbug
 \begin{lrbox}{\rcuassignderefbug}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 spin_lock();
   elm = kmalloc(...);
   elm->next = list_head->next;
@@ -753,7 +766,7 @@ Bugs B1 and B2 relate to whether or not we can prove that a given RCU protected 
 
 \begin{figure}[t!]
 \lstset{language=C, tabsize=2, stepnumber=1}
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 // As used in the code:
 //   p = rcu_dereference(q);
 // Internally annotated to become:
@@ -774,7 +787,7 @@ FUNCTION_WRAPPER(__rcudbg_deref, (q_addr, q), {
 
 %\begin{center}
 %\begin{minipage}{0.6\columnwidth}
-%\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+%\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 %elm = rcu_dereference(list_head);
 %\end{lstlisting}
 %\end{minipage}
@@ -784,7 +797,7 @@ FUNCTION_WRAPPER(__rcudbg_deref, (q_addr, q), {
 %
 %\begin{center}
 %\begin{minipage}{0.8\columnwidth}
-%\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+%\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 %elm = deref_taint(rcu_dereference(list_head));
 %\end{lstlisting}
 %\end{minipage}
