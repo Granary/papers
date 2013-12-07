@@ -460,25 +460,39 @@ Granary's translation post-processing mechanism identifies indirect control flow
 %\subsection{Reproducability}
 %Hello
 
-\section{Scope-Driven Specialization}\label{sec:what}
-
 \begin{table*}[ht!]
 \scriptsize
-\begin{tabularx}{\linewidth}{| c | >{\raggedright}m{0.3\linewidth} | X |}
+\begin{tabularx}{\linewidth}{| l | >{\raggedright}p{0.3\linewidth} | X |}
 \hline
-\bf Scope & \bf Description & \bf Example Tool \\
+\bf Granularity & \bf Description & \bf Example Tool \\
 \hline
 Kernel & All kernel code is instrumented. & Granary's \toolname{cfg} tool constructs inter- and intra-procedural control flow graphs and records per-basic block and per-edge performance counters. This data is useful for debugging an performance analysis. Applying the \toolname{cfg} tool to the whole kernel allows us to perform profile-guided optimization of kernel code, including a form of de-virtualization. That is, most indirect control flow instructions (\texttt{call}, \texttt{jmp}) within the kernel target only one destination. Fast checks can be inlined into kernel code that use direct control transfer instructions when possible, and fall-back on indirect control transfer instructions when necessary.\\
 \hline
-Module & All code from a specific kernel module or driver is instrumented. Granary detaches when module code invokes kernel code, and re-attaches when kernel code invokes module code. All non-module kernel code executes with zero overhead. & TODO \\
+Module & All code from a specific kernel module or driver is instrumented. Granary detaches when module code invokes kernel code, and re-attaches when kernel code invokes module code. All non-module kernel code executes with zero overhead. & Granary's Guardrail tool records traces all instructions and memory operations performed by device driver code \cite{Guardrail}. A sideline thread analyzes the recorded traces to detect data race bugs and memory access bugs. \\
 \hline
 Function & All code within a particular function is instrumented. Granary attaches when the function is invoked, and detaches when the function returns or invokes another function. & TODO \\
 \hline
 Basic Block & Individual basic blocks are instrumented on demand. & Granary's address watchpoints framework can be tuned to instrument only code accessing specific data. A general protection fault occurs when native code dereferences a  ``watched address". Granary can transparently handle this fault by returning execution to an instrumented version of the faulting code (where the instrumentation prevents such faults). Native execution can resume at the end of the basic block. \\
 \hline
 \end{tabularx}
-\caption{\label{tab:what_kinds}Different kinds to instrumentation strategies supported by Granary.}
+\caption{\label{tab:granularities}Different granularities of instrumentation supported by Granary.}
 \end{table*}
+
+\section{Scope-Driven Specialization}\label{sec:what}
+
+Some instrumentation tools have a limited scope. That is, they are made to solve a specific problem within a specific domain. For example, Granary's Guardrail tool is concerned with finding bugs in Linux device drivers \cite{Guardrail}. Guardrail records and analyzes traces of device driver code to find bugs. However, Guardrail's analysis can be heavyweight, and so limiting the analysis to only device driver code results in better performance. Granary allows Guardrail to set the granularity of instrumentation to only instrument a specific module, while leaving the rest of the kernel to execute without overhead.
+
+%The recording and analysis phases of Guardrail are heavyweight, therefore, limiting 
+
+% Instrumenting the whole kernel to observer driver (module) execution is unnecessary and potentially very inefficient (especially if the tool is meant for online analysis). That is, 
+
+Guardrail is an example of how tools can choose an instrumentation granularity that better matches their scope and needs. That is, a Granary tool can choose to instrument some code, while leaving other code to execute natively. This is useful when the instrumentation in question has a high overhead or when only a subset of the kernel's code is of interest. \Cref{tab:granularities} provides a high-level overview of the different granularities of instrumentation supported by Granary. Granary tools, however, are not restricted to only the Granularities listed in the table.
+
+%instrument all kernel code, specific module code, or only specific function code.
+%what code should be instrumented. Example granularities of instrumentation include the whole kernel, only specific modules, only specific functions, or on-demand instrumentation based on events (e.g. interrupts or exceptions).
+
+\subsection{Instrumenting All Kernel Code}
+Like DRK and btkernel, Granary can instrument the whole kernel. Instrumenting the whole kernel requires interposing on the system call entrypoint (x86-64 \texttt{MSR\_LSTAR} model-specific register) and on the interrupt vector entrypoints (stored in the interrupt descriptor table). For whole-kernel instrumentation, Granary boostraps by duplicating the the early entrypoint instructions that are responsible for switching execution onto a kernel stack, and then injects a jump to translate/instrumented kernel code after the stack switch. The translation process continues when a system call or interrupt occurs and follows the jump from duplicated into translated code. Granary only translate code that is known to operate on a kernel stack\footnote{Not all kernel code executes on a kernel stack. For example, when a user space application invokes the \texttt{syscall} instruction, control is transferred to the kernel, but no stack switch occurs. The kernel's early system call entrypoint code is responsible for switching execution onto a kernel stack.} so that instrumentation tools can safely save transient data in a reentrant way by spilling that data to the stack.
 
 \begin{figure}[t]
 \captionsetup[subfloat]{width=0.45\columnwidth}
@@ -488,8 +502,10 @@ Basic Block & Individual basic blocks are instrumented on demand. & Granary's ad
 \subfloat[Module-only instrumentation, with a function specialized to run natively by using a module function wrapper.]{\hspace{2.5em}\epsfig{file=diagrams/module_wrapper.eps,width=0.125\textwidth}} & %
 \subfloat[\label{fig:module_probe}Module-only instrumentation, with a kernel function specialized to also be instrumented by using a probe-based wrapper.]{\hspace{2.5em}\epsfig{file=diagrams/module_probe.eps,width=0.125\textwidth}}
 \end{tabularx}
-\caption{Example of using different granularities of instrumentation to selectively instrument or not instrument specific code.}
+\caption{Visual example of using different granularities of instrumentation to selectively instrument or not instrument specific code.}
 \end{figure}
+
+\subsection{Instrumenting Only Module Code}\label{sec:module}
 
 \begin{figure*}[ht!]
 \lstset{language=C, tabsize=2, stepnumber=1}
@@ -526,15 +542,6 @@ TYPE_WRAPPER(struct device_driver, {
 \label{fig:type_wrapper}
 \end{figure*}
 
-Granary allows tool developers to precisely specify the scope or granularity of instrumentation. For example, Granary can instrument all kernel code, specific module code, or only specific function code.
-
-%what code should be instrumented. Example granularities of instrumentation include the whole kernel, only specific modules, only specific functions, or on-demand instrumentation based on events (e.g. interrupts or exceptions).
-
-\subsection{Kernel}
-Like DRK and btkernel, Granary can instrument the whole kernel. Instrumenting the whole kernel requires interposing on the system call entrypoint (x86-64 \texttt{MSR\_LSTAR} model-specific register) and on the interrupt vector entrypoints (stored in the interrupt descriptor table). For whole-kernel instrumentation, Granary boostraps by duplicating the the early entrypoint instructions that are responsible for switching execution onto a kernel stack, and then injects a jump to translate/instrumented kernel code after the stack switch. The translation process continues when a system call or interrupt occurs and follows the jump from duplicated into translated code. Granary only translate code that is known to operate on a kernel stack\footnote{Not all kernel code executes on a kernel stack. For example, when a user space application invokes the \texttt{syscall} instruction, control is transferred to the kernel, but no stack switch occurs. The kernel's early system call entrypoint code is responsible for switching execution onto a kernel stack.} so that instrumentation tools can safely save transient data in a reentrant way by spilling that data to the stack.
-
-\subsection{Modules}\label{sec:module}
-
 Unlike DRK and btkernel, Granary can target instrumentation only at specific kernel modules, while executing the rest of the kernel natively and without overhead. Instrumenting only specific kernel modules is particularly useful for debugging tools because modules represent the bulk of new kernel code under development, and contain the most bugs \cite{FaultsInLinux}.
 
 Granary interposes on an existing module by using hardware page protection to mark an existing module as non-executable and trap attempts to execute that module's code. Granary transparently recovers from these traps by returning execution to instrumented code. Granary takes control of dynamically loaded modules by interposing on the Linux kernel's module loading process. When a kernel module is loaded, Granary bootstraps by translating the first basic block of the module's initialization function.  It then replaces the pointer to that function with a pointer to the translated basic block. The translation process continues when the kernel initializes the module by invoking the translated module code. As with existing modules, the native code segments of dynamically loaded modules are page protected to prevent and recover from accidental execution. 
@@ -560,40 +567,40 @@ Granary \emph{detaches} when control transfers from instrumented code to native 
 
 Granary's wrappers expose a wealth of static program information to instrumentation tools. Instrumentation tools can use information present in wrappers to alter how code is instrumented, or to simply inspect the runtime object graph in a type-safe way. For example, we are actively using type information present in wrappers to create a tool that generates models of typical module behavior. The wrapper information serves two roles in our tool. First, we use type wrappers to assign type-specific IDs to module-allocated memory that is shared across the module/kernel interface. Type ID assignment is critical because it allows us to match memory reads and writes to specific kernel data structure fields. Second, we use the kernel and module function wrappers to generate call graphs of a module's execution. This call graph models module behavior (according to the kernel) because we label module code nodes with kernel data structure and function pointer field names (derived from module wrappers). This labelling allows us to generalize across similar modules. For example, code reached by calling the \texttt{ext4\_mount} and \texttt{btrfs\_mount} functions from the \texttt{ext4} and \texttt{btrfs} file system modules, respectively, are both labelled as \texttt{file\_system\_type::mount}, because the function addresses are stored (and later replaced by module wrappers) in the \texttt{mount} field of a \texttt{file\_system\_type} data structure. The combined records from multiple ``trusted'' modules of the same class (e.g., mature, open-source file systems) models the behavior of typical kernel modules. We hope that these models will help us build tools that classify and identify spurious module behavior. 
 
-\subsection{Functions}\label{sec:function_wrapper}
+\subsection{Instrumenting Specific Functions}\label{sec:function_wrapper}
 
-Granary can instrument or not instrument functions in several different ways. For example, \emph{probe-based} instrumentation allows Granary to selectively instrument only a particular function, while \emph{wrapper-based} instrumentation allows Granary to isolate a particular function that is invoked by instrumented code, and choose to instrument that function or run it natively (all while having the flexibility to arbitrarily inspect that function's arguments and return values in a type-safe way).
+%Granary can instrument or not instrument functions in several different ways. For example, \emph{probe-based} instrumentation allows Granary to selectively instrument only a particular function, while \emph{wrapper-based} instrumentation allows Granary to isolate a particular function that is invoked by instrumented code, and choose to instrument that function or run it natively (all while having the flexibility to arbitrarily inspect that function's arguments and return values in a type-safe way).
 
-\subsubsection{Probe-based instrumentation}
+%\subsubsection{Probe-based instrumentation}
 
 Probe-based instrumentation allows an instrumentation tool to replace \emph{all} executions of a particular kernel function, regardless of whether or not the replaced function is executed by native or instrumented code \cite{KProbes, AnyWhereAnyTimeDBT, KernInst}. Probe-based instrumentation can be used to wrap a particular function without instrumenting its code, or to wrap and instrument the probed function's code.
 
 Probe-based instrumentation provides visibility into specific kernel events (e.g. memory allocations) to instrumentation tools that don't instrument the whole kernel (e.g. module-only, \Cref{fig:module_probe}). One example tool that combines module-only and probe-based instrumentation is Granary's kernel module memory leak detector. This leak detector finds leaks of module-owned memory. We say that the some memory is owned by a module iff that memory is deallocated by a module. Unfortunately, ownership of module-allocated memory (for an arbitrary, binary module) is not known \emph{a priori}. Therefore, our tool conservatively assumes that all module-allocated memory is module-owned, unless it is freed by the kernel (observed via probe-based instrumentation of a kernel memory deallocator). We also use probe-based instrumentation to assign module ownership to kernel-allocated \texttt{sk\_buff} data structures, which are allocated by the kernel but deallocated by network device driver modules.
 
-\subsubsection{Wrapper-based instrumentation}
-
-Wrapper-based instrumentation makes use of the same wrapper capabilities used by module-only instrumentation (\Cref{sec:module}), but is available regardless of the instrumentation granularity. Wrapper-based instrumentation is similar to probe-based instrumentation, but permits more selectivity in terms of the context in which the function will be wrapped. That is, a function can be wrapped in one way when executed by instrumented kernel code, and in another way when executed by instrumented module code. Finer-grained selectivity can be achieved by having individual instrumentation policies manually decide how to wrap a given function.
-
-\begin{figure}[t!]
-\lstset{language=C, tabsize=2, stepnumber=1}
-\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
-MODULE_FUNCTION_WRAPPER(__kmalloc, (size, gfp), {
-  void *addr = __kmalloc(size, gfp);
-  if(is_valid_address(addr)) {
-    add_watchpoint(addr, addr, size);
-  }
-  return addr;
-})
-\end{lstlisting}
-\caption{Example module function wrapper for the \texttt{\_\_kmalloc} function. This wrapper adds an ``address watchpoint" to the address returned by the kernel's \texttt{\_\_kmalloc} memory allocator. Granary's module memory leak detector uses address watchpoints to track the liveness of module-allocated memory. Every access of a ``watched address" marks the associated memory as live within the current epoch. Memory that has not been live for several consecutive epochs is treated as a potential leak, and a is checked for reachability using a heap memory scanner.}
-\label{fig:malloc_wrapper}
-\end{figure}
-
-Granary's module memory leak detector is one example application that uses the selectivity of wrappers (with respect to their calling context) to distinguish between module-allocated and kernel-allocated memory. \Cref{fig:malloc_wrapper} shows a module function wrapper that adds ``address watchpoints"  \cite{BehaveOrBeWatched} to module-allocated memory.
+%\subsubsection{Wrapper-based instrumentation}
+%
+%Wrapper-based instrumentation makes use of the same wrapper capabilities used by module-only instrumentation (\Cref{sec:module}), but is available regardless of the instrumentation granularity. Wrapper-based instrumentation is similar to probe-based instrumentation, but permits more selectivity in terms of the context in which the function will be wrapped. That is, a function can be wrapped in one way when executed by instrumented kernel code, and in another way when executed by instrumented module code. Finer-grained selectivity can be achieved by having individual instrumentation policies manually decide how to wrap a given function.
+%
+%\begin{figure}[t!]
+%\lstset{language=C, tabsize=2, stepnumber=1}
+%\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
+%MODULE_FUNCTION_WRAPPER(__kmalloc, (size, gfp), {
+%  void *addr = __kmalloc(size, gfp);
+%  if(is_valid_address(addr)) {
+%    add_watchpoint(addr, addr, size);
+%  }
+%  return addr;
+%})
+%\end{lstlisting}
+%\caption{Example module function wrapper for the \texttt{\_\_kmalloc} function. This wrapper adds an ``address watchpoint" to the address returned by the kernel's \texttt{\_\_kmalloc} memory allocator. Granary's module memory leak detector uses address watchpoints to track the liveness of module-allocated memory. Every access of a ``watched address" marks the associated memory as live within the current epoch. Memory that has not been live for several consecutive epochs is treated as a potential leak, and a is checked for reachability using a heap memory scanner.}
+%\label{fig:malloc_wrapper}
+%\end{figure}
+%
+%Granary's module memory leak detector is one example application that uses the selectivity of wrappers (with respect to their calling context) to distinguish between module-allocated and kernel-allocated memory. \Cref{fig:malloc_wrapper} shows a module function wrapper that adds ``address watchpoints"  \cite{BehaveOrBeWatched} to module-allocated memory.
 
 %Granary can instrument, or not instrument, particular function
 
-\subsection{On-demand}
+\subsection{On-Demand Instrumentation}
 
 On-demand instrumentation makes use of Granary's control over interrupt and exception handling. When a specific exception or interrupt occurs, a Granary tool can turn on instrumentation for the interrupted code. This ties in well with Granary's address watchpoints system, which taints memory addresses by changing their high-order 16 bits into a ``non-canonical" form. Watched addresses trap when accessed by native code, which introduces an opportunity for on-demand instrumentation to be enabled. Another application of on-demand instrumentation is data watchpoints based on hardware page protection and memory shadowing.
 
