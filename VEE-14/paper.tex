@@ -240,7 +240,7 @@ Granary's use of out-edge code avoids re-entrancy issues related to indirect con
 \end{enumerate} %
 However, the ordering of steps (6) and (7) introduce a reentrancy problem: the access to the CPU-private location is not safe because an interrupt might arrive before the indirect jump in step (7). This unusual design is motivated by the constraint that the entire lookup procedure must save (2) and restore (5) the register state for correctness, but must also save the target pc \emph{somewhere} so that execution can eventually be redirected. Granary's out-edge code avoids this reentrancy issue by having the out edge code itself (in the form of a direct \texttt{jmp}) contain the target pc.
 
-\subsection{Optimizations}
+\subsection{Optimizations}\label{sec:optimize}
 
 \subsubsection{Ahead-of-time Translation Optimization} \label{sec:aot}
 Granary ends basic blocks at conditional branches (\texttt{jCC}), direct and indirect \texttt{jmp}s, and \texttt{ret}s and \texttt{iret}s. Basic blocks ending in conditional branches are extended to contain two trailing CTIs: a copy of the native \texttt{jCC}, and a synthesized direct \texttt{jmp} to the code executed when the condition code is not set (i.e. when the conditional jump is not taken).
@@ -689,39 +689,12 @@ FUNCTION_WRAPPER(__rcudbg_deref, (q_addr, q), {
 
 \section{Evaluation}\label{sec:eval}
 
-What has been evaluated:
-
-\paragraph{lmbench}
-\begin{itemize}
-	\item Btkernel
-	\item Granary, full-kernel, null
-	\item Granary, full-kernel, even/odd
-	\item Granary, full-kernel, even/odd, where even/odd is a runtime check and branch.
-\end{itemize}
-
-\paragraph{fileserver}
-Setup: 1GB RAM, 3GB partition, ext3+jbd, >1GB mounted file system.
-\begin{itemize}
-	\item full-kernel
-	\begin{itemize}
-		\item Btkernel
-		\item Granary, null
-		\item Granary, even/odd
-		\item Granary, even/odd, where even/odd is a runtime check and branch.
-	\end{itemize}
-	\item module-only, (ext3+jbd)
-	\begin{itemize}
-		\item Granary, null
-		\item Granary, even/odd
-		\item Granary, even/odd, where even/odd is a runtime check and branch.
-	\end{itemize}
-\end{itemize}
-
-\paragraph{kernel compile}
-Same as fileserver, but with 8GB RAM instead of 3GB.
-
-\paragraph{recursive copy of kernel source tree}
-Same as fileserver, but with 8GB RAM instead of 3GB.
+\begin{figure*}
+\centering\epsfig{file=charts/lmbench_legend.eps,height=6em} \\
+\subfloat[Fast operations]{\epsfig{file=charts/lmbench_fast.eps,height=18em}}
+\subfloat[Fork operations]{\epsfig{file=charts/lmbench_fork.eps,height=18em}}
+\caption{Microbenchmark results from \texttt{lmbench} that shows the effect of Granary's code cache optimizations (\Cref{sec:optimize}).}
+\end{figure*}
 
 \section{Related Work}\label{sec:related}
 Prior work can be classified as either whole-kernel/system DBT, or probe-based kernel instrumentation. We discuss how Granary differs from these approaches.

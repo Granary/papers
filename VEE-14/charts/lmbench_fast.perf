@@ -1,0 +1,70 @@
+=cluster;No optimizations;Trace Allocator;Ahead-of-time Tracing (AOTT);AOTT+PGO;Combined;Combined+PGO;Native
+=table,
+=nolegend
+ylabel=Time (Microseconds)
+#xscale=0.6
+yformat=%1.2f
+=norotate
+xscale=1.3
+#rotateby=-50
+
+# Processor,in microseconds - smaller is better
+# --------------------------------------------
+# Host      null 	null      		open 	slct 	sig  	sig 
+#           call 	 I/O 	stat 	clos 	TCP  	inst 	hndl
+# --------- ---- ---- ---- ---- ---- ---- ----
+# all   	0.05	0.12	0.60	1.28	4.04	0.12	0.84
+# all   	0.05	0.12	0.60	1.28	4.16	0.12	0.84
+# aot   	0.05	0.12	0.59	1.30	4.20	0.12	0.77
+# aot   	0.05	0.12	0.59	1.36	4.36	0.12	0.77
+# aotpgo	0.05	0.12	0.59	1.28	3.77	0.12	0.77
+# aotpgo	0.05	0.12	0.59	1.22	3.87	0.12	0.76
+# dtrace	0.05	0.13	0.71	1.75	4.35	0.13	0.82
+# dtrace	0.05	0.13	0.71	1.85	4.50	0.13	0.86
+# native	0.05	0.11	0.56	1.27	2.84	0.11	0.76
+# native	0.05	0.11	0.56	1.27	2.84	0.11	0.76
+# null  	0.05	0.13	0.73	1.82	4.32	0.13	0.85
+# null  	0.05	0.13	0.72	1.82	4.91	0.13	0.87
+# pgo   	0.05	0.12	0.59	1.23	3.70	0.12	0.76
+# pgo   	0.05	0.12	0.61	1.23	3.74	0.12	0.76
+
+# File & VM system latencies in microseconds - smaller is better
+# ------	-----	-------	
+# Host  	Prot 	 Page  	
+#       	Fault	 Fault 	
+# ------	-----	-------	
+# all   	0.168	0.18300	
+# all   	0.186	0.17570	
+# aot   	0.236	0.17140	
+# aot   	0.249	0.17310	
+# aotpgo	0.236	0.17150	
+# aotpgo	0.237	0.17440	
+# dtrace	0.265	0.17400	
+# dtrace	0.223	0.18290	
+# native	0.224	0.16720	
+# native	0.215	0.16910	
+# null  	0.209	0.17370	
+# null  	0.211	0.17560	
+# pgo   	0.237	0.17190	
+# pgo   	0.239	0.17480	
+
+# Averaged
+#			null_call	null_io	stat	open_close	sighdl_install	sighdl_handle	prot_fault	page_fault
+# null		0.05		0.13	0.725	1.82		0.13			0.86			0.21		0.17465
+# trace		0.05		0.13	0.71	1.8			0.13			0.84			0.244		0.17845
+# aot		0.05		0.12	0.59	1.33		0.12			0.77			0.2425		0.17225
+# aot+pgo	0.05		0.12	0.59	1.25		0.12			0.765			0.2365		0.17295
+# all		0.05		0.12	0.6		1.28		0.12			0.84			0.177		0.17935
+# pgo+all	0.05		0.12	0.6		1.23		0.12			0.76			0.238		0.17335
+# native	0.05		0.11	0.56	1.27		0.11			0.76			0.2195		0.16815
+
+#						null	trace	aot		aot+pgo	all		pgo+all	native
+null_call,				0.05,	0.05,	0.05,	0.05,	0.05,	0.05,	0.05
+null_i/o,				0.13,	0.13,	0.12,	0.12,	0.12,	0.12,	0.11
+stat,					0.725,	0.71,	0.59,	0.59,	0.6,	0.6,	0.56
+open/close,				1.82,	1.8,	1.33,	1.25,	1.28,	1.23,	1.27
+install_sighdl,			0.13,	0.13,	0.12,	0.12,	0.12,	0.12,	0.11
+handle_sig,				0.86,	0.84,	0.77,	0.765,	0.84,	0.76,	0.76
+prot_fault,				0.21,	0.244,	0.2425,	0.2365,	0.177,	0.238,	0.2195
+page_fault,				0.17465,0.17845,0.17225,0.17295,0.17935,0.17335,0.16815
+
