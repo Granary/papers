@@ -1,4 +1,4 @@
-=cluster;Default Granary with no optimizations;Trace Allocator (syscalls, memory management, scheduler);Ahead-of-time Tracing (AOTT);Profile-guided AOTT;Combined AOTT and Trace Allocator;Profile-guided AOTT and Trace Allocator;Native
+=cluster;Default Granary with no optimizations;Trace Allocator;Ahead-of-time Tracing (AOTT);Profile-guided AOTT;AOTT, Trace Allocator;Profile-guided AOTT, Trace Allocator;Native
 =norotate
 =nolegoutline
 =table

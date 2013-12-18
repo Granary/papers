@@ -499,6 +499,24 @@ Another example of partial specialization that benefits instrumentation tools is
 
 
 \section{Application: Control-Flow Graphs}\label{sec:cfg}
+Granary's \toolname{cfg} tool constructs inter- and intra-procedural control flow graphs from the instrumented kernel execution. The \toolname{cfg} tool can also act as a code coverage and profiling tool by recording basic block and conditional branch execution counts. \Cref{fig:lmbench} evaluates the performance impact of using the \toolname{cfg} tool for profile-guided optimization. First, \toolname{cfg} instruments a single run of the \texttt{lmbench} microbenchmark suite. Then, the recorded profile data is used to guide the ahead-of-time tracing infrastructure (\Cref{sec:aot}) on the evaluated runs of \texttt{lmbench}.
+
+\toolname{cfg}'s instrumentation introduces counter increments into basic blocks, counter increments following conditional branches, and target recorders for indirect CTIs (\texttt{call}, \texttt{jmp}). Each indirect CTI recorder maintains a variable-sized array of all observed targets for the given CTI. The recording process follows either a fast or a slow path. In the fast path, the target is compared with a cached version of the most recent target. If they are the same then no further action is taken, as this implies that the target has already been recorded. Most executions ``hit" in this cache because most indirect branches in the kernel only have a single target. If the target and the cached target differ, then the cached target is immediately updated and the slow path is executed. The slow path checks to see if the target has been permanently recorded, and if not, records it.
+
+Control-flow graphs are reported in terms of basic blocks (nodes) and edges (control flow transfers). The reporting operates by iterating over each basic block and performing the following for each basic block: \begin{enumerate*}
+	\item Decode the native instructions associated with the basic block. The location and number of instructions to decode is found in the basic block's meta-data (\Cref{sec:metadata}).
+	\item For each decoded direct CTI, print out the target PC of the CTI. If the CTI is a conditional CTI, then print out two PCs: the target PC, and the fall-through PC. If conditional branch counting is enabled, then the value of the counter associated with the fall-through edge is also printed.
+	\item For each decoded indirect CTI, print out all target PCs from the associated indirect CTI recorder.
+\end{enumerate*}
+
+The reported data can be re-integrated into Granary to drive profile-guided optimizations, or post-processed into a format for use by tools like KCacheGrind for profile data visualization.
+
+%A single-element cache is also maintained that records the most recent indirect branch target. Most indirect CTIs in the kernel only have one target, and so once the target has been permanently recorded, all future executions hit the cache.
+
+%As an optimization, the indirect target recorders maintain a one-element cache of the most recent target of a given indirect branch
+
+
+% Basic blocks in the graph can be labeled with execution counts, and control-flow edges between basic blocks can also be labeled with execution counts. Counting basic block and edge executions enables Granary's \toolname{cfg} tool implicitly provides code coverage and profiling information. \Cref{fig:lmbench} evaluates how profiling information from Granary's \toolname{cfg} tool is integrated with Granary's ahead-of-time translation optimization (\Cref{sec:aot}).
 
 \section{Application: RCUdbg}\label{sec:rcudbg}
 
@@ -689,12 +707,26 @@ FUNCTION_WRAPPER(__rcudbg_deref, (q_addr, q), {
 
 \section{Evaluation}\label{sec:eval}
 
-\begin{figure*}
-\centering\epsfig{file=charts/lmbench_legend.eps,height=6em} \\
-\subfloat[Fast operations]{\epsfig{file=charts/lmbench_fast.eps,height=18em}}
-\subfloat[Fork operations]{\epsfig{file=charts/lmbench_fork.eps,height=18em}}
-\caption{Microbenchmark results from \texttt{lmbench} that shows the effect of Granary's code cache optimizations (\Cref{sec:optimize}).}
+\begin{figure*}[ht!]
+\includegraphics[height=14em,clip=true,trim=0 -5em 10em -5em]{charts/lmbench_legend.eps}
+\subfloat[Fast operations]{\epsfig{file=charts/lmbench_fast.eps,height=14em}}
+\subfloat[Fork operations]{\epsfig{file=charts/lmbench_fork.eps,height=14em}}
+\caption{\label{fig:lmbench}Microbenchmark results from \texttt{lmbench} that shows the effect of Granary's code cache optimizations (\Cref{sec:optimize}).}
 \end{figure*}
+
+Before examining applications that are enabled by Granary, \Cref{sec:microbench} evaluates the overhead of the baseline instrumentation. Then, \Cref{sec:macrobenchmark} does something with the evaluation TODO.
+
+\subsection{Microbenchmark}\label{sec:microbench}
+For these experiments, we operate with a large enough code cache (\texttildelow 4MB) so that flushes do not occur. We perform a number of stress tests with a high level of kernel activity, to show the robustness of Granary and to illustrate worst-case behavior of the baseline instrumentation system. These tests ran on a Lenovo X230 laptop with 8GB of RAM and four Intel\textregistered\ Core\texttrademark\ i5 CPUs operating at 2.50GHz.
+
+\Cref{fig:lmbench} shows the results of running the \texttt{lmbench} microbenchmark, which compares the overhead of Granary's baseline instrumentation (with and without optimizations) to native execution. The results highlight that the biggest performance boost is achieved with aggressive ahead-of-time tracing (\Cref{sec:aot}), and that profiling information from Granary's \toolname{cfg} tool can improve on these results by guiding which branches the tracer follows.
+
+\subsection{Macrobenchmark}\label{sec:macrobenchmark}
+
+
+% when profiling data from Granary's \toolname{cfg} tool are used to predict and potentially exchange the targets of conditional branches.
+
+% We evaluated behavioral watchpoints using a microbenchmark and measured the performance of common filesystem operations on an in-memory disk. Our tests ran on a desktop equipped with an Intel\textregistered\ Core\texttrademark\ 2 Duo 2.93 GHz CPU with 4GB physical memory. %Watchpoint instrumentation was enabled for every memory operation. We measured the overhead of the watchpoint framework using a null client and heap-based buffer overflow detector. %We also evaluated the performance of heap-based buffer overflow detector developed using watchpoints.
 
 \section{Related Work}\label{sec:related}
 Prior work can be classified as either whole-kernel/system DBT, or probe-based kernel instrumentation. We discuss how Granary differs from these approaches.

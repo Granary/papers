@@ -6,6 +6,7 @@ ylabel=Time (Microseconds)
 yformat=%1.2f
 =norotate
 xscale=1.3
+ylabelshift=2,0
 #rotateby=-50
 
 # Processor,in microseconds - smaller is better

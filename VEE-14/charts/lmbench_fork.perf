@@ -4,6 +4,7 @@
 =nolegend
 ylabel=Time (Microseconds)
 xscale=0.6
+ylabelshift=2,0
 
 # Raw
 #          fork+exit    fork+execve     fork+sh         #
