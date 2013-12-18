@@ -509,7 +509,7 @@ Control-flow graphs are reported in terms of basic blocks (nodes) and edges (con
 	\item For each decoded indirect CTI, print out all target PCs from the associated indirect CTI recorder.
 \end{enumerate*}
 
-The reported data can be re-integrated into Granary to drive profile-guided optimizations, or post-processed into a format for use by tools like KCacheGrind for profile data visualization.
+The reported data can be re-integrated into Granary to drive profile-guided optimizations, or post-processed into a format for use by tools like KCacheGrind for profile data visualization \cite{KCacheGrind}.
 
 %A single-element cache is also maintained that records the most recent indirect branch target. Most indirect CTIs in the kernel only have one target, and so once the target has been permanently recorded, all future executions hit the cache.
 
@@ -524,7 +524,31 @@ Read-Copy-Update (RCU) is a scalable, lock-free synchronization mechanism used i
 
 % (assuming that pointer reachability is sufficient to determine semantic reachability in this case).
 
-Granary's \toolname{RCUdbg} tool is designed to catch RCU bugs related to kernel code misusing pointers to RCU-protected data structures. The following is a non-exhaustive list of requirements that must be met by reader and writer threads operating on an RCU-protected data structure. The list omits a description of how RCU-protected data structures are garbage collected, which is beyond the scope of the bugs caught by \toolname{RCUdbg}.
+Granary's \toolname{RCUdbg} tool is designed to catch bugs related to misuses of pointers to RCU-protected data structures. These pointers, called RCU-protected pointers, link together discrete objects within larger RCU-protected data structure. For example, in an RCU-protected linked list, the RCU-protected pointers are the \texttt{next} pointers that connect list elements. An RCU-protected pointer is like a normal pointer, but points to a potentially incomplete or partially-constructed data structure. Data structures can be potentially incomplete or partially constructed because RCU permits concurrent reads and writes to the shared data structure. Because of this, reads can sometimes see an inconsistent version of the data structure. For example, if a writer modifies the \texttt{next} pointer of an RCU-protected linked list, then a concurrently executing reader may see either the old value or the new value of the \texttt{next} pointer. This is further complicated by multi-step updates (e.g. adding or removing an element from a doubly-linked list). %For example, adding an element to a doubly-linked list requires two separate pointers to be updated. Concurrently executing readers can therefore observe the list in one of several intermediate states.
+
+%
+%\toolname{RCUdbg} infers that some pointers are RCU-protected pointers based on how specific RCU API functions are used by the instrumented code. When certain API functions are invoked, \toolname{RCUdbg} knows that some of the function's arguments or return values are RCU-protected pointers, and therefore treats them as such. For example, the RCU API includes two functions for operating on RCU-protected pointers: \begin{inparaenum}[i)]
+%	\item \texttt{rcu\_\linebreak[0]dereference} for reading the value of an RCU-protected pointer, and;
+%	\item \texttt{rcu\_\linebreak[0]assign\_\linebreak[0]pointer} for assigning a value to an RCU-protected pointer. 
+%\end{inparaenum}
+%
+The following requirements describe how code can use the RCU API to read from and modify a data structure like an RCU-protected linked list.
+
+% with eachother and operate on RCU-protected pointers.
+
+%There are two kinds of RCU-protected pointers: read-only pointers, and read/write pointers. Read-only pointers can only be read from within RCU read-side critical sections, delimited by  \texttt{rcu\_\linebreak[0]read\_\linebreak[0]lock} and \texttt{rcu\_\linebreak[0]read\_\linebreak[0]unlock}. Read/write pointers can be written to 
+
+
+
+%Code operating on RCU-protected pointers must use specific API functions: , and By assuming that these functions are correctly used some of the time, we can 
+
+%Therefore, a use of \texttt{rcu\_\linebreak[0]dereference} implies that the pointer being read should be RCU-protected, and the the value returned should also be RCU-protected. Without an \emph{a priori} understanding of the data structures being operated on, these two API functions give \toolname{RCUdbg} enough information about RCU protected pointers to find bugs.
+
+%Without a prior understanding of what pointers are RCU-protected pointers, we can assume that any pointer operated on by one the aforementioned API functions is an RCU-protected pointer.
+
+%Without an \emph{a priori} understanding of the structure of the data being syncrhonized using RCU, we can conservatively assert that RCU-protected pointers.
+
+
 
 %the associated memory may or may not be free, but the data structure occupying that memory can't be proven to exist. This 
 %  However, this class of RCU bugs is not well-suited to being detected by a use-after-free memory checker tool
@@ -533,15 +557,15 @@ Granary's \toolname{RCUdbg} tool is designed to catch RCU bugs related to kernel
 %While bugs related to mutual exlusion locks might result in easily observable deadlocks, bugs related to RCU typically result in use-after-free errors, which sometimes go silently unnoticed, sometimes result in kernel panics, and most of the time work as expected because the associated data is .
 
 \begin{enumerate}
-	\item Readers must tolerate an inconsistent view of the shared data structure. That is, a reader operating concurrently with a writer might observe either the version of the data before or after the writer's changes have been published. This can be complicated when writers perform multiple, discrete updates to a data structure. One example of this is a doubly linked list: a writer that is adding a new entry into a doubly linked list must update at least two RCU-protected pointers.
+%	\item Readers must tolerate an inconsistent view of the shared data structure. That is, a reader operating concurrently with a writer might observe either the version of the data before or after the writer's changes have been published. This can be complicated when writers perform multiple, discrete updates to a data structure. One example of this is a doubly linked list: a writer that is adding a new entry into a doubly linked list must update at least two RCU-protected pointers.
 	
 	\item Readers must operate within \emph{read-side} critical sections, which are delimited by \texttt{rcu\_read\_lock} and \texttt{rcu\_read\_unlock}, respectively.
 	
-	\item Within read-side critical sections, readers can only read a shared data structure after obtaining a pointer to that shared data structure using the \texttt{rcu\_dereference} API function. An RCU-protected pointer is like a normal pointer, but points to a potentially incomplete or partially-constructed data structure. \texttt{rcu\_dereference} operates on an RCU-protected pointer and returns an ``unprotected" version of the pointer. The reader can use the unprotected pointer to safely access the shared data structure within the remainder of the its read-side critical section. If \texttt{rcu\_dereference} is not used, then the reader might observe a partially-constructed (i.e. incomplete) version of the shared data structure. Notably, accessing the original data structure and not the dereferenced data structure pointer--even after an \texttt{rcu\_dereference}--is undefined behavior. That is, within a read-side critical section, RCU only guarantees the ``completeness" of data structures pointed to by RCU-dereferenced pointers. Data accessed within a read-side critical section is \emph{not} guaranteed to exist outside the read-side critical section.
+	\item Within read-side critical sections, readers can only read a shared data structure after obtaining a pointer to that shared data structure using the \texttt{rcu\_dereference} API function. This API function operates on an RCU-protected pointer and returns a read-access-only version of the pointer.  The reader can use the read-access pointer to safely read from the shared data structure within the remainder of its read-side critical section. If \texttt{rcu\_dereference} is not used, then the reader might observe a partially-constructed (i.e. incomplete) version of the shared data structure. Notably, accessing the original data structure and not the dereferenced data structure pointer--even after an \texttt{rcu\_dereference}--is undefined behavior. That is, within a read-side critical section, RCU only guarantees the ``completeness" of data structures pointed to by the read-access-only pointers obtained from  \texttt{rcu\_dereference}. Data accessed within a read-side critical section is \emph{not} guaranteed to exist outside the read-side critical section.
 
 	\item Writers must synchronize among themselves before any writes to a shared data structure are performed. Synchronization is typically achieved via mutual exclusion locks, spin locks, or by having a single, designated writer thread. We say writes to the shared data structure occur within \emph{write-side} critical sections.
 
-	\item RCU only defines how writers can update RCU-protected pointer within a shared data structure. Modification of non-RCU-protected pointer fields within an RCU-protected data structure is beyond the scope of RCU's correctness guarantees.
+%	\item RCU defines how writers can update RCU-protected pointers within a shared data structure. Modification of non-RCU-protected pointer fields within an RCU-protected data structure is beyond the scope of RCU's correctness guarantees.
 
 	\item Writers wishing to update an RCU-protected pointer in a shared data structure must use the \texttt{rcu\_assign\_pointer} API function. \texttt{rcu\_assign\_pointer} assigns a new value to an RCU-protected pointer in a shared data structure.
 
@@ -565,9 +589,9 @@ Granary's \toolname{RCUdbg} tool is designed to catch RCU bugs related to kernel
 \begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 rcu_read_lock();
   elm = rcu_dereference(list_head);
-  data = elm->data;                  /* Valid */
+  data = elm->data;                         /* Valid */
 rcu_read_unlock();
-data = elm->data;                     /* BUG! */
+data = elm->data;                            /* BUG! */
 \end{lstlisting}
 \end{lrbox}
 
@@ -578,7 +602,7 @@ data = elm->data;                     /* BUG! */
 rcu_read_lock();
   elm = rcu_dereference(list_head);
   if(elm != NULL)
-    data = list_head->data;           /* BUG! */
+    data = list_head->data;                  /* BUG! */
 rcu_read_unlock();
 \end{lstlisting}
 \end{lrbox}
@@ -597,22 +621,22 @@ rcu_read_lock();
   elm = rcu_dereference(list_head);
   while(elm != NULL) {
     data += elm->data;
-    elm = elm->next;                  /* BUG! */
+    elm = elm->next;                         /* BUG! */
   }
 rcu_read_unlock();
 \end{lstlisting}
 \end{lrbox}
 
 \begin{figure}[ht!] %
-\subfloat[\label{fig:rcu_existence_bug}Despite correctly obtaining a pointer to a shared data structure using \texttt{rcu\_dereference} within a read-side critical section, properties (2) and (3) tell us that the data pointed to by \texttt{elm} is not guaranteed to exist after the read-side critical section ends.]{\fbox{\usebox\rcuexistencebug}} %
+\subfloat[\label{fig:rcu_existence_bug}Despite correctly obtaining a pointer to a shared data structure using \texttt{rcu\_dereference} within a read-side critical section, the data pointed to by \texttt{elm} is not guaranteed to exist after the read-side critical section ends.]{\fbox{\usebox\rcuexistencebug}} %
 
-\subfloat[\label{fig:rcu_deref_bug}Despite the call to \texttt{rcu\_dereference}, properties (1) and (3) tell us that \texttt{list\_head} is not guaranteed to be equivalent to \texttt{elm} because a writer might have concurrently changed the value of the \texttt{list\_head} pointer. That is, if \texttt{elm} is non-\texttt{NULL}, then the data pointed to by \texttt{elm} is guaranteed to exist for the remainder of the read-side critical section. However, the value of \texttt{list\_head} is \emph{not} guaranteed to remain consistent--even within read-side critical sections--and so \texttt{list\_head} might point to a \texttt{NULL} pointer when \texttt{elm} does not.]{\fbox{\usebox\rcuderefbug}} %
+\subfloat[\label{fig:rcu_deref_bug}Despite the call to \texttt{rcu\_dereference}, \texttt{list\_head} is not guaranteed to be equivalent to \texttt{elm} because a writer might have concurrently changed the value of the \texttt{list\_head} pointer. That is, if \texttt{elm} is non-\texttt{NULL}, then the data pointed to by \texttt{elm} is guaranteed to exist for the remainder of the read-side critical section. However, the value of \texttt{list\_head} is \emph{not} guaranteed to remain consistent--even within read-side critical sections--and so \texttt{list\_head} might point to a \texttt{NULL} pointer when \texttt{elm} does not.]{\fbox{\usebox\rcuderefbug}} %
 
-\subfloat[\label{fig:rcu_assign_bug}This example shows the code for a writer thread adding a new element into the second position of an RCU-protected list. The code for reader threads is also shown, where readers iterate over the list by traversing \texttt{next} pointers and sum up the \texttt{data} fields of each visited list element. The access of \texttt{elm->next} violates of properties (3) and (7). That is, the next element of the list is only guaranteed to be fully constructed within the read-side critical section if the reader executes \texttt{rcu\_dereference(elm->next)}. Therefore, the first read of \texttt{elm->next} might yield a pointer to partially constructed data.  Because that data is not guaranteed to be fully constructed, the next read of \texttt{elm->next} (i.e. \texttt{elm->next->next}) might read an invalid pointer from uninitialized memory. Treating the value of uninitialized memory as a valid pointer could trigger a kernel panic or silent data corruption.]{\fbox{\usebox\rcuassignderefbug}} %
+\subfloat[\label{fig:rcu_assign_bug}This example shows the code for a writer thread adding a new element into the second position of an RCU-protected linked list. The code for reader threads is also shown, where readers iterate over the list by traversing \texttt{next} pointers and sum up the \texttt{data} fields of each visited list element. Unfortunately, the access of \texttt{elm->next} results in undefined behavior. This is because the next element of the list is only guaranteed to be fully constructed within the read-side critical section if the reader executes \texttt{rcu\_dereference(elm->next)}. Therefore, the first read of \texttt{elm->next} might yield a pointer to partially constructed data.  Because that data is not guaranteed to be fully constructed, the next read of \texttt{elm->next} (i.e. \texttt{elm->next->next}) might read an invalid pointer from uninitialized memory. Treating the value of uninitialized memory as a valid pointer could trigger a kernel panic or silent data corruption.]{\fbox{\usebox\rcuassignderefbug}} %
 \caption{\label{fig:rcu_bugs}Example RCU bugs related to misuses of RCU-protected pointers.}
 \end{figure}
 
-\toolname{RCUdbg} is primarily concerned with finding bugs related to RCU-rpotected pointer misuses by reader threads (both inside and outside of read-side critical sections). As mentioned above, RCU bugs sometimes manifest as use-after-free bugs. Unfortunately, a pure use-after-free-based checking approach is insufficient (\Cref{fig:rcu_assign_bug} is one such example). \Cref{fig:rcu_existence_bug} is an example of an RCU usage bug that can manifest as a use-after-free bug if one is unlucky enough to observe a very specific thread schedule. Suppose that execution is interrupted after \texttt{rcu\_read\_unlock}, but before the access to \texttt{elm->data}. If \texttt{elm} is garbage collected and freed before the code resumes its execution, then the access to \texttt{elm->data} is a use-after-free bug. This kind of bug is a time bomb waiting to go off. Fortunately, \toolname{RCUdbg} catches the bug in \Cref{fig:rcu_existence_bug} right when \texttt{elm->data} is accessed.
+\toolname{RCUdbg} is primarily concerned with finding bugs related to RCU-protected pointer misuses by reader threads (both inside and outside of read-side critical sections). As mentioned above, RCU bugs sometimes manifest as use-after-free bugs. Unfortunately, a pure use-after-free-based checking approach is insufficient. \Cref{fig:rcu_assign_bug} is an example where a use-after-free based checking approach will miss an RCU-protected pointer misuse because the bug does not manifest as a use-after-free. \Cref{fig:rcu_existence_bug} is an example of an RCU usage bug that can manifest as a use-after-free bug, but only if one is unlucky enough to observe a very specific thread schedule. That is, suppose that execution is interrupted after \texttt{rcu\_read\_unlock}, but before the access to \texttt{elm->data}. If \texttt{elm} is freed before the interrupted code resumes its execution, then the access to \texttt{elm->data} is a use-after-free bug. This kind of bug is a time bomb waiting to go off. Fortunately, \toolname{RCUdbg} catches this bug and others in a scheduling-independent way.
 
 
 %\Cref{fig:rcu_bugs} shows some example usages of RCU, and some of the more subtle pointer-related bugs that can happen because of the interaction of rules (1), (2), (3), and (7).
@@ -648,26 +672,26 @@ Bugs B1 and B2 relate to whether or not we can prove that a given RCU protected 
 
 %Function wrappers are used to specialize the execution of \texttt{rcu\_\linebreak[0]dereference} and \texttt{rcu\_assign\_\linebreak[0]pointer}:
 
-\begin{figure}[t!]
-\lstset{language=C, tabsize=2, stepnumber=1}
-\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
-// As used in the code:
-//   p = rcu_dereference(q);
-// Internally annotated to become:
-//   p = __rcudbg_deref(&q, q);
-// Wrapper:
-FUNCTION_WRAPPER(__rcudbg_deref, (q_addr, q), {
-  if(is_watched_address(q_addr)) {
-    // Make sure q_addr
-  } else {
-
-  }
-  return add_watchoint(q, DEREF);
-})
-\end{lstlisting}
-\caption{}
-\label{fig:rcu_dereference_wrapper}
-\end{figure}
+%\begin{figure}[t!]
+%\lstset{language=C, tabsize=2, stepnumber=1}
+%\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
+%// As used in the code:
+%//   p = rcu_dereference(q);
+%// Internally annotated to become:
+%//   p = __rcudbg_deref(&q, q);
+%// Wrapper:
+%FUNCTION_WRAPPER(__rcudbg_deref, (q_addr, q), {
+%  if(is_watched_address(q_addr)) {
+%    // Make sure q_addr
+%  } else {
+%
+%  }
+%  return add_watchoint(q, DEREF);
+%})
+%\end{lstlisting}
+%\caption{}
+%\label{fig:rcu_dereference_wrapper}
+%\end{figure}
 
 %\begin{center}
 %\begin{minipage}{0.6\columnwidth}
@@ -705,14 +729,14 @@ FUNCTION_WRAPPER(__rcudbg_deref, (q_addr, q), {
 
 % a data structure cannot be proven to exist at some potentially allocated memory. Existence in this case relates to semantic reachability. For example, if a list element $E_n$ from an RCU-protected list is reachable from the head of the list by traversing zero-or-more intermediate elements $E_0, ..., E_{n-1}$, then $E_n$ is said to exist. While related, memory leak detection (e.g. via conservate mark and sweep) is also insufficient for ladidadidaaaa TODO TODO TODO
 
-\section{Evaluation}\label{sec:eval}
-
 \begin{figure*}[ht!]
 \includegraphics[height=14em,clip=true,trim=0 -5em 10em -5em]{charts/lmbench_legend.eps}
 \subfloat[Fast operations]{\epsfig{file=charts/lmbench_fast.eps,height=14em}}
 \subfloat[Fork operations]{\epsfig{file=charts/lmbench_fork.eps,height=14em}}
 \caption{\label{fig:lmbench}Microbenchmark results from \texttt{lmbench} that shows the effect of Granary's code cache optimizations (\Cref{sec:optimize}).}
 \end{figure*}
+
+\section{Evaluation}\label{sec:eval}
 
 Before examining applications that are enabled by Granary, \Cref{sec:microbench} evaluates the overhead of the baseline instrumentation. Then, \Cref{sec:macrobenchmark} does something with the evaluation TODO.
 
