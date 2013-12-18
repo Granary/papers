@@ -64,7 +64,7 @@
 \begin{document}
 
 %make title bold and 14 pt font (Latex default is non-bold, 16 pt)
-\title{Fast and Flexible Binary Instrumentation for the Kernel}
+\title{Fast and Flexible Dynamic Binary Translation for the Kernel}
 
 %for single author (just remove % characters)
 \authorinfo{Peter Goodman \and Angela Demke Brown \and Ashvin Goel}
@@ -247,7 +247,9 @@ Granary ends basic blocks at conditional branches (\texttt{jCC}), direct and ind
 
 If a basic block ends in either a copy of a native direct \texttt{jmp} or synthesized direct \texttt{jmp}, then Granary will perform ahead-of-time translation and instrumentation of the targeted basic block. The repeated application of translating \texttt{jmp} targets forms traces in Granary's code cache. Granary optimizes traces by directly connecting basic blocks together when there is internal control flow within the blocks of the trace, and by eliding \texttt{jmp}s between adjacent basic blocks.
 
-Granary's tracing strategy is based on the observation that the most commonly executed path through code follows a straight line. That is, execution is more likely to fall through a conditional CTI than it is to take the conditional CTI. We experimentally verified Granary's tracing strategy by disabling tracing and relying on Granary's internal performance counters to count how many conditional branches were patched (by their edge code, \texttildelow 25\%), versus how many synthesized fall-through \texttt{jmp}s were patched (\texttildelow 80\%).
+Granary's tracing strategy is based on the observation that the most commonly executed path through code follows a straight line. That is, execution is more likely to fall through a conditional CTI than it is to take the conditional CTI. We experimentally verified Granary's tracing strategy by disabling tracing and relying on Granary's internal performance counters to count how many conditional branches were patched (by their edge code, \texttildelow 35\%), versus how many synthesized fall-through \texttt{jmp}s were patched (\texttildelow 80\%).
+
+Profile-guided ahead-of-time tracing further improves on Granary's otherwise na\"{i}ve tracing strategy by integrating profile information from Granary's \toolname{cfg} tool (\Cref{sec:cfg}).
 
 \subsubsection{Patching and Alignment  Optimizations}\label{sec:patching}
 For efficiency, basic blocks in Granary's code cache are directly connected through direct control flow instructions (\texttt{call}, \texttt{jmp}, \texttt{jCC}). That is, if there is a direct branch from one native instruction to another, then there will be a corresponding direct branch in the translated code.
@@ -259,7 +261,9 @@ Granary opportunistically connects two basic blocks together using a direct bran
 
 Granary atomically patches direct CTIs that target edge code to instead point to their (now resolved) target basic block. Due to limitations of the x86-64 architecture, atomic operations cannot straddle cache lines. Therefore, patchable instructions (or parts thereof) must be aligned so as to not straddle two cache lines.
 
-One approach to change an instruction's alignment is to pad the basic block with additional \texttt{nop} instructions. An alternative when more than a few bytes of padding are needed is to introduce a single control-flow instruction (\texttt{jmp}) that jumps around the padded area. However, adding extra instructions introduces latency into the processor's fetch/decode/execute cycle. Therefore, when possible, Granary uses ignored instruction prefixes to alter an instruction's alignment. For example, Granary aligns patchable conditional jumps using static branch prediction hint prefixes, which are ignored by recent x86-64 processors \cite{AgnerMicroarchitecture}. Finally, most basic blocks are small (i.e. fit in one cache line), therefore, aligning basic blocks on cache line boundaries naturally avoids the potential for a patchable instruction to straddle two cache lines.
+One approach to change an instruction's alignment is to pad the basic block with additional \texttt{nop} instructions. An alternative when more than a few bytes of padding are needed is to introduce a single control-flow instruction (\texttt{jmp}) that jumps around the padded area. However, adding extra instructions introduces latency into the processor's fetch/decode/execute cycle. Therefore, when possible, Granary uses ignored instruction prefixes to alter an instruction's alignment. For example, Granary aligns patchable conditional jumps using static branch prediction hint prefixes, which are ignored by recent x86-64 processors \cite{AgnerMicroarchitecture}. When possible, alignment requirements are reduced by allowing a patchable instruction to straddle a cache line, but for the part to be patched to be fully contained by a single cache line. Finally, most basic blocks are small (i.e. fit in one cache line), therefore, aligning basic blocks on cache line boundaries naturally avoids the potential for a patchable instruction to straddle two cache lines.
+
+
 
 \subsubsection{Trace Allocation Optimization}\label{sec:trace_alloc}
 Arranging for commonly executed sequences of basic blocks to appear adjacent in memory, also called tracing, typically improves the runtime performance of instrumented programs \cite{DynamoRIO}. Typical approaches to tracing require a runtime profiling infrastructure \cite{DynamoRIOOptimization}. Granary attempts to reap the benefits of tracing without the runtime profiling overhead by opportunistically forming traces using ahead-of-time translation (\Cref{sec:aot}), and by arranging for related basic blocks to be allocated sequentially in memory.
@@ -644,14 +648,14 @@ rcu_read_unlock();
 
 \toolname{RCUdbg} detects the the following RCU bugs related to misuses of RCU-protected pointers.
 \begin{itemize}[leftmargin=3.2em]
-	\item[B1)] Reads through an RCU-dereferenced pointer outside of a read-side critical section (\Cref{fig:rcu_existence_bug}).
-	\item[B2)] Reads through an RCU-dereferenced pointer in the wrong read-side critical section.
+	\item[\bf B1] Reads through an RCU-dereferenced pointer outside of a read-side critical section (\Cref{fig:rcu_existence_bug}).
+	\item[\bf B2] Reads through an RCU-dereferenced pointer in the wrong read-side critical section.
 
-	\item[B2)] Reads through an RCU-assigned pointer that don't first use \texttt{rcu\_dereference} (\Cref{fig:rcu_deref_bug}).
-	\item[B3)] Reads through fields of RCU-protected data structures that should be accessed via \texttt{rcu\_dereference} (\Cref{fig:rcu_assign_bug}).
+	\item[\bf B2] Reads through an RCU-assigned pointer that don't first use \texttt{rcu\_dereference} (\Cref{fig:rcu_deref_bug}).
+	\item[\bf B3] Reads through fields of RCU-protected data structures that should be accessed via \texttt{rcu\_dereference} (\Cref{fig:rcu_assign_bug}).
 	
-	\item[B5)] Writes through an RCU-dereferenced pointer.
-	\item[B6)] Writes through an RCU-assigned pointer by a non-write thread.
+	\item[\bf B5] Writes through an RCU-dereferenced pointer.
+	\item[\bf B6] Writes through an RCU-assigned pointer by a non-write thread.
 \end{itemize}
 
 Bugs B1 and B2 relate to whether or not we can prove that a given RCU protected data structure exists. Bugs B2 and B3 relate to whether or not a given RCU protected data structure has been fully constructed. Finally, bugs B5 and B6 relate to invalid uses RCU-protected and RCU-unprotected pointers, where correct synchronization among writers is not maintained.
