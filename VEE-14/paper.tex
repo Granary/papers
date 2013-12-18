@@ -733,7 +733,7 @@ Bugs B1 and B2 relate to whether or not we can prove that a given RCU protected 
 
 % a data structure cannot be proven to exist at some potentially allocated memory. Existence in this case relates to semantic reachability. For example, if a list element $E_n$ from an RCU-protected list is reachable from the head of the list by traversing zero-or-more intermediate elements $E_0, ..., E_{n-1}$, then $E_n$ is said to exist. While related, memory leak detection (e.g. via conservate mark and sweep) is also insufficient for ladidadidaaaa TODO TODO TODO
 
-\begin{figure*}[ht!]
+\begin{figure*}
 \includegraphics[height=14em,clip=true,trim=0 -5em 10em -5em]{charts/lmbench_legend.eps}
 \subfloat[Fast operations]{\epsfig{file=charts/lmbench_fast.eps,height=14em}}
 \subfloat[Fork operations]{\epsfig{file=charts/lmbench_fork.eps,height=14em}}
@@ -748,6 +748,10 @@ Before examining applications that are enabled by Granary, \Cref{sec:microbench}
 For these experiments, we operate with a large enough code cache (\texttildelow 4MB) so that flushes do not occur. We perform a number of stress tests with a high level of kernel activity, to show the robustness of Granary and to illustrate worst-case behavior of the baseline instrumentation system. These tests ran on a Lenovo X230 laptop with 8GB of RAM and four Intel\textregistered\ Core\texttrademark\ i5 CPUs operating at 2.50GHz.
 
 \Cref{fig:lmbench} shows the results of running the \texttt{lmbench} microbenchmark, which compares the overhead of Granary's baseline instrumentation (with and without optimizations) to native execution. The results highlight that the biggest performance boost is achieved with aggressive ahead-of-time tracing (\Cref{sec:aot}), and that profiling information from Granary's \toolname{cfg} tool can improve on these results by guiding which branches the tracer follows.
+
+The trace allocation optimization (\Cref{sec:trace_alloc}) does not result in significant performance improvements, and sometimes results in worse performance. This is because Granary's default allocation strategy (allocating space for instructions from per-CPU memory pools) already results in similar memory layouts to the trace allocator. A more significant difference would  be observed if Granary defaulted to a global allocation mechanism instead. Also, Granary's inclusion of function call instructions (\texttt{call}) into basic blocks likely works against the trace allocator. If basic blocks ended at \texttt{call} instructions, then the trace allocation strategy would arrange for the returning basic block and the returned-to basic blocks to be adjacent in memory.
+
+%This is because the memory layout of basic blocks with and without the trace allocation optimization ends up being similar in Granary. 
 
 \subsection{Macrobenchmark}\label{sec:macrobenchmark}
 
