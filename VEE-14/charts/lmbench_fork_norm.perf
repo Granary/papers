@@ -1,0 +1,40 @@
+=cluster;No optimizations;Trace Allocator;Ahead-of-time Tracing (AOTT);AOTT+PGO;Combined;Combined+PGO;Native
+=table
+=norotate
+=nolegend
+yformat=%1.2f
+ylabel=Overhead (Normalized to native)
+xscale=0.6
+ylabelshift=2,0
+
+# Raw
+#          fork+exit    fork+execve     fork+sh         #
+# all      79.7         285.            677.            5
+# all      79.5         284.            664.            5
+# aot      78.0         279.            691.            3
+# aot      78.7         278.            705.            3
+# aotpgo   77.5         272.            648.            4
+# aotpgo   77.5         274.            647.            4
+# dtrace   85.3         318.            785.            2
+# dtrace   85.6         315.            787.            2
+# native   72.4         242.            612.            7
+# native   72.0         252.            603.            7
+# null     84.2         310.            759.            1
+# null     83.7         293.            748.            1
+# pgo      77.9         268.            664.            6
+# pgo      78.7         277.            681.            6
+
+# Averaged
+#
+#   1   83.95   301.5   753.5
+#   2   85.45   316.5   786
+#   3   78.35   278.5   698
+#   4   77.5    273     647.5
+#   5   79.6    284.5   670.5
+#   6   78.3    272.5   672.5
+#   7   72.2    247     607.5
+
+#           1       2       3       4       5       6       7
+fork+exit 1.16	1.18	1.09	1.07	1.10	1.08	1.00
+fork+execve 1.22	1.28	1.13	1.11	1.15	1.10	1.00
+fork+sh 1.24	1.29	1.15	1.07	1.10	1.11	1.00

@@ -667,8 +667,10 @@ Bugs B1 and B2 relate to whether or not we can prove that a given RCU protected 
 \toolname{RCUdbg} gains visibility on RCU operations in three ways: \begin{enumerate}
 	\item The Linux kernel RCU implementation is annotated to provide more information to \toolname{RCUdbg}. This information includes source code file and line information for bug reporting, and additional memory references that \toolname{RCUdbg} uses to get better visibility on bugs. These annotations are strictly internal to the RCU API, and thus require no changes to code using this API.
 	\item The annotated RCU API functions are specialized using Granary's function wrapping feature (\Cref{sec:function_wrapper}). Interposing on these functions allows \toolname{RCUdbg} to add an address watchpoint to the address returned by \texttt{rcu\_\linebreak[0]dereference}, and to correlate uses of \texttt{rcu\_\linebreak[0]dereference} and \texttt{rcu\_\linebreak[0]assign\_\linebreak[0]pointer}.
-	\item Read-side critical sections are discovered at instrumentation time (rather than run time) by observing \texttt{call}s to \texttt{rcu\_\linebreak[0]read\_\linebreak[0]lock} and \texttt{rcu\_\linebreak[0]read\_\linebreak[0]unlock}, respectively. This allows \toolname{RCUdbg} to instrument code running inside of read-side critical sections using one policy ($P_{read}$), and code running outside of read-side critical sections using another policy ($P_{outside}$).
+	\item Read-side critical sections are discovered at instrumentation time (rather than run time) by observing \texttt{call}s to \texttt{rcu\_\linebreak[0]read\_\linebreak[0]lock} and \texttt{rcu\_\linebreak[0]read\_\linebreak[0]unlock}, respectively. This allows \toolname{RCUdbg} to instrument code running inside of read-side critical sections using one policy ($P_{read}$), and code running outside of read-side critical sections using another policy ($P_{outside}$). \toolname{RCUdbg} switches between the two policies on entry to and exit from a read-side critical section.
 \end{enumerate}
+
+
 
 %\toolname{RCUdbg} interposes on an annotations are added into the Linux kernel's RCU implementation. These annotations 
 
@@ -737,7 +739,9 @@ Bugs B1 and B2 relate to whether or not we can prove that a given RCU protected 
 \begin{figure*}
 \includegraphics[height=14em,clip=true,trim=0 -5em 10em -5em]{charts/lmbench_legend.eps}
 \subfloat[Fast operations]{\epsfig{file=charts/lmbench_fast.eps,height=14em}}
-\subfloat[Fork operations]{\epsfig{file=charts/lmbench_fork.eps,height=14em}}
+\subfloat[Fork operations]{\epsfig{file=charts/lmbench_fork.eps,height=14em}}\\
+\subfloat[Fast operations (Normalized)]{\epsfig{file=charts/lmbench_fast_norm.eps,height=14em}}
+\subfloat[Fork operations (Normalized)]{\epsfig{file=charts/lmbench_fork_norm.eps,height=14em}}
 \caption{\label{fig:lmbench}Microbenchmark results from \texttt{lmbench} that shows the effect of Granary's code cache optimizations (\Cref{sec:optimize}).}
 \end{figure*}
 
@@ -786,6 +790,8 @@ Other examples with similar or more restricted functionality include LTTng \cite
 
 
 \section{Conclusion}\label{sec:conclusion}
+In summary, we conclude.
+
 %We created Granary to address the challenges of instrumenting binary kernel modules.  Granary provides mixed-mode execution to remove the overheads of DBT for uninstrumented kernel code.  A relaxed transparency model further improves performance and allows greater visibility into the interactions between module and kernel code.  Granary also supports policy-driven instrumentation, which allows tools to specialize their instrumentation based on the context in which code executes.  Finally, Granary exposes high-level static analysis information to dynamic instrumentation tools, making it easy to match low-level memory reads with specific fields in data structures at the source code level. 
 
 %Together, Granary's features simplify the development of powerful kernel module analysis tools, while delivering lower overheads than previous kernel dynamic binary instrumentation solutions.
