@@ -664,9 +664,10 @@ Bugs B1 and B2 relate to whether or not we can prove that a given RCU protected 
 
 % of this class of RCU bugs is proof-of-existence or proof-of-constructedness bugs. That is, an RCU-protected data structue exists if it is \emph{reachable} (i.e. by at least one reader thread), and if it is \emph{fully constructed} (i.e. all fields or components of the data structure have been initialized). 
 
-\toolname{RCUdbg} gains visibility on RCU operations in two ways: \begin{enumerate}
+\toolname{RCUdbg} gains visibility on RCU operations in three ways: \begin{enumerate}
 	\item The Linux kernel RCU implementation is annotated to provide more information to \toolname{RCUdbg}. This information includes source code file and line information for bug reporting, and additional memory references that \toolname{RCUdbg} uses to get better visibility on bugs. These annotations are strictly internal to the RCU API, and thus require no changes to code using this API.
-	\item The annotated RCU API functions are specialized using Granary's function wrapping feature (\Cref{sec:function_wrapper}). Specifically, 
+	\item The annotated RCU API functions are specialized using Granary's function wrapping feature (\Cref{sec:function_wrapper}). Interposing on these functions allows \toolname{RCUdbg} to add an address watchpoint to the address returned by \texttt{rcu\_\linebreak[0]dereference}, and to correlate uses of \texttt{rcu\_\linebreak[0]dereference} and \texttt{rcu\_\linebreak[0]assign\_\linebreak[0]pointer}.
+	\item Read-side critical sections are discovered at instrumentation time (rather than run time) by observing \texttt{call}s to \texttt{rcu\_\linebreak[0]read\_\linebreak[0]lock} and \texttt{rcu\_\linebreak[0]read\_\linebreak[0]unlock}, respectively. This allows \toolname{RCUdbg} to instrument code running inside of read-side critical sections using one policy ($P_{read}$), and code running outside of read-side critical sections using another policy ($P_{outside}$).
 \end{enumerate}
 
 %\toolname{RCUdbg} interposes on an annotations are added into the Linux kernel's RCU implementation. These annotations 
@@ -754,6 +755,8 @@ The trace allocation optimization (\Cref{sec:trace_alloc}) does not result in si
 %This is because the memory layout of basic blocks with and without the trace allocation optimization ends up being similar in Granary. 
 
 \subsection{Macrobenchmark}\label{sec:macrobenchmark}
+
+Perhaps I should do one...
 
 
 % when profiling data from Granary's \toolname{cfg} tool are used to predict and potentially exchange the targets of conditional branches.
