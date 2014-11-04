@@ -1,0 +1,198 @@
+%--------sigalternate----------
+\documentclass{sig-alternate}
+%--------/sigalternate----------
+
+%\documentclass[letterpaper,twocolumn,10pt]{article}
+%\usepackage{endnotes,multirow}
+\usepackage{refstyle,amsmath,chngcntr}
+\usepackage{epsfig,subfigure,framed}
+\usepackage{textcomp} % for tilde
+\usepackage{paralist} % for in-paragraph lists
+\usepackage{graphicx}
+
+% Used for code snippets
+\usepackage{listings,courier}
+
+% Make text in figure captions small
+\usepackage{caption3} % load caption package kernel first
+%\DeclareCaptionOption{parskip}[]{} % disable "parskip" caption option
+\usepackage{caption}
+
+% Make sure that figure numbers are continuous through the document
+\counterwithout{figure}{section}
+\counterwithout{figure}{subsection}
+
+% Settings on code listings.
+\lstset{language=C,
+		xleftmargin=0pt,
+		xrightmargin=0pt,
+		framexbottommargin=0pt,
+        framextopmargin=0pt,
+        framesep=0pt}
+
+% Modify spacing before/after title, sections, and subsections.
+%\setlength{\droptitle}{-3em}  %--------sigalternate----------
+%\posttitle{\par\end{center}\vspace{-1.5em}} %--------sigalternate----------
+\newcommand{\Sref}[1]{Section~\ref{#1}} 
+
+%--------sigalternate----------\titlespacing\section{0pt}{5pt plus 4pt minus 2pt}{5pt plus 2pt minus 2pt}        
+%--------sigalternate----------\titlespacing\subsection{0pt}{5pt plus 4pt minus 2pt}{5pt plus 2pt minus 2pt}   
+
+% Add a horizontal rule above captions, and make captions closer to their figures
+\DeclareCaptionFormat{ruled_caption}{#1#2#3\hrulefill}
+\captionsetup[figure]{format=ruled_caption}
+
+% Prevent footnotes from spanning multiple pages
+\interfootnotelinepenalty=10000
+
+% For leaving some comments in the draft.
+\newcommand{\comment}[1]{}
+\newcommand{\Toolname}{DataReactor}
+
+% For getting rid of copyright box
+\makeatletter
+\def\@copyrightspace{\relax}
+\makeatother
+
+\begin{document}
+
+%make title bold and 14 pt font (Latex default is non-bold, 16 pt)
+\title{\Large \bf \Toolname: Precise Detection of False Sharing in COTS Binaries}
+\numberofauthors{3}
+\author{
+% 1st. author
+\alignauthor
+Peter Goodman\\
+       \email{pag@cs.toronto.edu}
+\and
+% 2nd. author
+\alignauthor
+Ashvin Goel\\
+       \email{asvhin@eecg.toronto.edu}
+% 3rd. author
+\alignauthor
+Angela Demke Brown\\
+       \email{demke@cs.toronto.edu}
+}
+\maketitle
+\begin{abstract}
+
+Hello
+\end{abstract}
+
+\section{Introduction}\label{sec:intro}
+
+In this work, we present \Toolname, a system for precisely detecting the sources of false sharing in
+multi-threaded, commercial off-the-shelf (COTS) binaries. This is important because false sharing
+can limit the scalability of multi-threaded applications on cache-coherent multiprocessors
+\cite{ImpactOfFalseSharing}. The key insight of our approach is that it begins by focusing on what
+data is being accessed, and then uses that information to progressively narrow down on what code
+is participating in a data race.
+
+% TODO: Define precise
+% TODO: Define false-sharing
+
+\section{Related Work}\label{sec:background}
+\Toolname{} draws on techniques from existing race detectors and false sharing detectors. This
+is appropriate because some forms of false-positives for race detectors are caused by false
+sharing. That is, where race detectors focus on two threads concurrently accessing the same
+data, false sharing detectors focus on two threads concurrently accessing different data, but
+on the same cache line.
+
+\subsection{Race Detection}
+
+Race detectors can be categorized according to the following parameters:
+\begin{description}
+\item[Approach] Static or dynamic. \hfill \\
+Static race detectors analyze source code or binaries, typically performing interprocedural control-
+and data-flow analyses. The benefit of static analysis is that they can inspect all program paths.
+
+Dynamic race detectors monitor memory accesses for races. The benefit of this approach is that
+races can be caught "in the act". The drawbacks of this approach is that most dynamic race detectors
+are too slow to run in production environments, and therefore must be tested on simulated workloads.
+If these workloads do not exercise all code paths than many races can be missed. Dynamic race detectors
+can be further broken down into on-the-fly detectors or post-mortem detectors, which analyze memory
+access logs.
+
+\item[Model] Precise or imprecise.  \hfill \\
+Precise race detectors report no false-positives and are usually implemented using Lamport's
+happens-before relationship \cite{VectorClocks}. Precise race detectors often trade efficiency
+for completeness in order to achieve their precision. That is, they sometime miss true races in
+code.
+
+Imprecise race detectors can have high false positive rates, but tend to be more complete in terms of
+including races not detected by precise detectors. They tend to be implemented using a variant of the
+lockset algorithm \cite{Eraser}.
+
+\item[Granularity] Fine-grained or coarse-grained. \hfill \\
+Fine-grained race detectors operate at or close to the granularity of memory accesses. Coarse-grained
+race detectors operate at an object granularity, or at a fixed granularity (e.g. cache line, page).
+
+The granularity of a race detector can affect its precision. For example, a happens-before race detector 
+can be imprecise (i.e. report false positives) by operating at a coarse granularity. If the granularity were
+the size of a cache line, then the race detector would be a cache line contention detector: it would hint
+at races as well as false-sharing.
+
+\item[Mode] Comprehensive or sampling-based. \hfill \\
+Comprehensive race detectors typically analyze every memory read and write. They are usually implemented
+by instrumenting all program code.
+
+Sampling-based race detectors analyze either a subset of the code or a subset of the data. In the former
+case, they focus on detecting races by specific code.
+\end{description}
+
+\Toolname{} is a dynamic, precise, variable-granularity, mixed-mode false-sharing detector. It draws inspiration
+from a number of existing race detectors, including LiteRace \cite{LiteRace}, MultiRace \cite{MultiRace},
+RaceMob \cite{RaceMob}, RaceTrack \cite{RaceTrack}, and DataCollider \cite{DataCollider}.
+
+LiteRace \cite{LiteRace} is a precise, sampling-based dynamic race detector implemented on top of the Microsoft
+Pheonix binary translator. It samples at a function granularity, and executes either one specialized version of the
+code or another. The sampling rate for a function is inversely proportional to how often it executes. This is based
+on the insight that races are likely to occur in infrequently executed code, because otherwise they are benign or
+would have been noticed and resolved. This insight, called the ``cold code hypothesis", motivated \Toolname's
+post-mortem ranking scheme: cases of false sharing are more highly ranked when one---but \emph{not} both---of
+the participating threads are executing cold code. This variant on the cold code hypothesis emphasizes the similarly
+hard-to-find case of cold code pessimizing hot code.
+
+MultiRace \cite{MultiRace} is a comprehensive, dynamic race detector that employs a hybrid happens-before and
+lockset-based approach. It operates at an object granularity, and therefore reports false-positives. It is unique
+in that it uses ``pointer swizzing" as a means of remapping memory to ``minipages" that track the dominating
+access pattern of a thread (no-acces, read-only, read-write). \Toolname{} uses a similar pointer swizzing approach, but
+in the form of address watchpoints \cite{AddressWatchpoints}. Pointers to heap-allocated objects are ``swizzled" to
+include a type identifier that is unique to a $\langle PC,size \rangle$ pair. This improves the diagnosis of false-sharing,
+because it allows \Toolname{} to distinguish between two threads accessing different fields of the same object, and
+two threads accessing two nearby objects of the same (or different) types.
+
+RaceMob \cite{RaceMob} and RaceTrack \cite{RaceTrack} are two hybrid happens-before and lockset-based race detectors.
+RaceMob begins by statically analyzing source code to find potential races (lockset), then dynamically verifies those races
+(happens-before). RaceTrack is a JIT-based race-detector for Microsoft's common language runtime (CLR). It uses the
+concept of threadsets to efficiently maintain happens-before relationships for memory locations and detect the possible
+presence of a race and uses lockets to confirm predicted races. The novelty of RaceTrack is that it adapts the detection
+granularity from object-granularity to field-granularity. \Toolname{} follows the same high-level approach as both RaceMob
+and RaceTrack in that it attempts to predict the source of false-sharing at one granularity, then verify those predictions 
+at another granularity.
+
+DataCollider \cite{DataCollider} is a dynamic, precise, sampling-based race detector for the kernel. The key strengths of
+DataCollider is that it has low overhead, it is independent of the synchronization mechanisms being employed, and that
+it often catches both threads in the act. DataCollider uniformly samples code by introducing breakpoints into the code.
+When a breakpoint is hit, a hardware watchpoint is added to data that was about to be accessed by the interrupted instruction.
+Then, the interrupted thread is paused for a short period of time to give another thread the opportunity to access the
+same data, thus triggering the watchpoint and detecting a race. This brilliantly simple approach was the main inspiration
+for \Toolname{}. \Toolname{} differs from DataCollider, in that the latter is code-centric insofar as it samples code, whereas
+\Toolname{} is data-centric insofar as it samples data.
+
+\subsection{False Sharing Detection}
+
+
+\section{Design}\label{sec:design}
+
+
+\section{Status}\label{sec:status}
+
+\section{Evaluation}\label{sec:evaluation}
+
+\bibliographystyle{abbrv}
+\bibliography{library}
+\end{document}
+
+

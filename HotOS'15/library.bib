@@ -1,0 +1,285 @@
+% ----------------------- Granary -----------------------------------------------
+
+@inproceedings{AddressWatchpoints,
+  title={Behave or be watched: debugging with behavioral watchpoints},
+  author={Kumar, Akshay and Goodman, Peter and Goel, Ashvin and Brown, Angela Demke},
+  booktitle={Proceedings of the 9th Workshop on Hot Topics in Dependable Systems},
+  pages={11},
+  year={2013},
+  organization={ACM}
+}
+
+% ------------------------ DBT ----------------------------------------------------
+
+@inproceedings{DynamoRIOKernel,
+  author = {Feiner, Peter and Brown, Angela Demke and Goel, Ashvin},
+  title = {{Comprehensive Kernel Instrumentation via Dynamic Binary Translation}},
+  booktitle = {ASPLOS},
+  year = {2012},
+}
+
+@phdthesis{DynamoRIO,
+  author = {Bruening, Derek L.},
+  title = {Efficient, transparent, and comprehensive runtime code manipulation},
+  year = {2004},
+  publisher = {Massachusetts Institute of Technology},
+  address = {Cambridge, MA, USA},
+}
+
+@inproceedings{PinOS,
+  author = {Bungale, Prashanth P. and Luk, Chi-Keung},
+  booktitle = {In VEE},
+  title = {PinOS: a programmable framework for whole-system dynamic instrumentation.},
+  year = 2007
+}
+
+% TODO: PIN
+% TODO: btkernel
+% TODO: QEMU
+
+% ----------------------------- Memory access bugs ----------------------------
+
+
+@inproceedings{DrMemory,
+ author = {Bruening, Derek and Zhao, Qin},
+ title = {Practical memory checking with Dr. Memory},
+ booktitle = {Proceedings of the 9th Annual IEEE/ACM International Symposium on Code Generation and Optimization},
+ series = {CGO '11},
+ year = {2011},
+ pages = {213--223},
+ numpages = {11},
+}
+
+@inproceedings{AddressSanitizer,
+  title = {{AddressSanitizer: A Fast Address Sanity Checker}},
+  author  = {Konstantin Serebryany and Derek Bruening and Alexander Potapenko and Dmitry Vyukov},
+  year  = 2012,
+  booktitle = {USENIX ATC 2012}
+}
+
+@inproceedings{Valgrind,
+ author = {Nethercote, Nicholas and Seward, Julian},
+ title = {Valgrind: a framework for heavyweight dynamic binary instrumentation},
+ series = {PLDI'07},
+ year = {2007},
+ pages = {89--100},
+ numpages = {12},
+ keywords = {Memcheck, Valgrind, dynamic binary analysis, dynamic binary instrumentation, shadow values},
+} 
+
+% ----------------------------- Watchpoints --------------------------------------
+
+@inproceedings{UnlimitedWatchpoints,
+   author              = {Joseph L. Greathouse and 
+                          Hongyi Xin and 
+                          Yixin Luo and 
+                          Todd M. Austin},
+   title               = {A case for unlimited watchpoints.},
+   booktitle           = {ASPLOS},
+   year                = {2012},
+}
+
+@inproceedings{DynamoRIOWatchpoints,
+  author = {Zhao, Qin and Rabbah, Rodric and Amarasinghe, Saman and Rudolph, Larry and Wong, Weng-Fai},
+  title = {How to do a million watchpoints: efficient debugging using dynamic instrumentation},
+  booktitle = {CC / ETAPS},
+  year = {2008},
+}
+
+@INPROCEEDINGS{PracticalDataBreakpoints,
+    author = {Robert Wahbe and Steven Lucco and Susan L. Graham},
+    title = {Practical Data Breakpoints: Design and Implementation},
+    booktitle = {In Proceedings of the ACM SIGPLAN Conference on Programming Language Design and Implementation},
+    year = {1993},
+    pages = {1--12},
+    publisher = {ACM Press}
+}
+
+@MISC{DataBreakpointsInDebugger,
+    author = {Paul E. Roberts and Paul E. Roberts and Robert R. Kessler and Gary E. Lindstrom and Date John and B. Carter and Ann W. Hart},
+    title = {Implementation And Evaluation Of Data Breakpoint Schemes In An Interactive Debugger},
+    year = {1996}
+}
+
+% TODO: MemTrace for memory bugs and unlimited watchpoints
+% TODO: Behavioural Watchpoints
+% TODO: Watchdog, Watchdog Lite
+
+% ---------------------------- Race Detection --------------------------------
+
+@inproceedings{RacerX,
+  title={RacerX: effective, static detection of race conditions and deadlocks},
+  author={Engler, Dawson and Ashcraft, Ken},
+  booktitle={ACM SIGOPS Operating Systems Review},
+  volume={37},
+  number={5},
+  pages={237--252},
+  year={2003},
+  organization={ACM}
+}
+
+@inproceedings{ThreadSanitizer,
+  title={ThreadSanitizer: data race detection in practice},
+  author={Serebryany, Konstantin and Iskhodzhanov, Timur},
+  booktitle={Proceedings of the Workshop on Binary Instrumentation and Applications},
+  pages={62--71},
+  year={2009},
+  organization={ACM}
+}
+
+@inproceedings{DataCollider,
+  title={Effective Data-Race Detection for the Kernel.},
+  author={Erickson, John and Musuvathi, Madanlal and Burckhardt, Sebastian and Olynyk, Kirk},
+  booktitle={OSDI},
+  volume={10},
+  pages={1--16},
+  year={2010}
+}
+
+@inproceedings{LiteRace,
+  title={LiteRace: effective sampling for lightweight data-race detection},
+  author={Marino, Daniel and Musuvathi, Madanlal and Narayanasamy, Satish},
+  booktitle={ACM Sigplan Notices},
+  volume={44},
+  number={6},
+  pages={134--143},
+  year={2009},
+  organization={ACM}
+}
+
+@article{FastTrackTSX,
+  title={Accelerating Precise Race Detection Using Commercially-Available Hardware Transactional Memory Support},
+  author={Matar, Hassan Salehe and Kuru, Ismail and Tasiran, Serdar and Dementiev, Roman}
+}
+
+@inproceedings{RaceTM,
+  title={Using hardware transactional memory for data race detection},
+  author={Gupta, Shantanu and Sultan, Florin and Cadambi, Srihari and Ivancic, Franjo and Rotteler, Martin},
+  booktitle={Parallel \& Distributed Processing, 2009. IPDPS 2009. IEEE International Symposium on},
+  pages={1--11},
+  year={2009},
+  organization={IEEE}
+}
+
+@inproceedings{FastTrack,
+ author = {Flanagan, Cormac and Freund, Stephen N.},
+ title = {FastTrack: Efficient and Precise Dynamic Race Detection},
+ series = {PLDI '09},
+ year = {2009},
+ pages = {121--133},
+ keywords = {concurrency, dynamic analysis, race conditions},
+}
+
+@inproceedings{RaceTrack,
+  title={Racetrack: efficient detection of data race conditions via adaptive tracking},
+  author={Yu, Yuan and Rodeheffer, Tom and Chen, Wei},
+  booktitle={ACM SIGOPS Operating Systems Review},
+  volume={39},
+  number={5},
+  pages={221--234},
+  year={2005},
+  organization={ACM}
+}
+
+@article{MultiRace,
+  title={MultiRace: efficient on-the-fly data race detection in multithreaded C++ programs},
+  author={Pozniansky, Eli and Schuster, Assaf},
+  journal={Concurrency and Computation: Practice and Experience},
+  volume={19},
+  number={3},
+  pages={327--340},
+  year={2007},
+  publisher={Wiley Online Library}
+}
+
+@inproceedings{RaceMob,
+  title={RaceMob: Crowdsourced data race detection},
+  author={Kasikci, Baris and Zamfir, Cristian and Candea, George},
+  booktitle={Proceedings of the Twenty-Fourth ACM Symposium on Operating Systems Principles},
+  pages={406--422},
+  year={2013},
+  organization={ACM}
+}
+
+@inproceedings{RELAY,
+  title={RELAY: static race detection on millions of lines of code},
+  author={Voung, Jan Wen and Jhala, Ranjit and Lerner, Sorin},
+  booktitle={Proceedings of the the 6th joint meeting of the European software engineering conference and the ACM SIGSOFT symposium on The foundations of software engineering},
+  pages={205--214},
+  year={2007},
+  organization={ACM}
+}
+
+@article{Eraser,
+  title={Eraser: A dynamic data race detector for multithreaded programs},
+  author={Savage, Stefan and Burrows, Michael and Nelson, Greg and Sobalvarro, Patrick and Anderson, Thomas},
+  journal={ACM Transactions on Computer Systems (TOCS)},
+  volume={15},
+  number={4},
+  pages={391--411},
+  year={1997},
+  publisher={ACM}
+}
+
+% ------------------------ FALSE SHARING ------------------
+
+@inproceedings{ImpactOfFalseSharing,
+  title={False sharing and its effect on shared memory performance},
+  author={Bolosky, William J and Scott, Michael L},
+  booktitle={USENIX Systems on USENIX Experiences with Distributed and Multiprocessor Systems-Volume 4},
+  pages={3--3},
+  year={1993},
+  organization={USENIX Association}
+}
+
+@inproceedings{Plastic,
+  title={Whose cache line is it anyway?: operating system support for live detection and repair of false sharing},
+  author={Nanavati, Mihir and Spear, Mark and Taylor, Nathan and Rajagopalan, Shriram and Meyer, Dutch T and Aiello, William and Warfield, Andrew},
+  booktitle={Proceedings of the 8th ACM European Conference on Computer Systems},
+  pages={141--154},
+  year={2013},
+  organization={ACM}
+}
+
+@inproceedings{DrContention,
+  title={Dynamic cache contention detection in multi-threaded applications},
+  author={Zhao, Qin and Koh, David and Raza, Syed and Bruening, Derek and Wong, Weng-Fai and Amarasinghe, Saman},
+  booktitle={ACM SIGPLAN Notices},
+  volume={46},
+  number={7},
+  pages={27--38},
+  year={2011},
+  organization={ACM}
+}
+
+@inproceedings{Pluto,
+  title={Assessing cache false sharing effects by dynamic binary instrumentation},
+  author={G{\"u}nther, Stephan M and Weidendorfer, Josef},
+  booktitle={Proceedings of the Workshop on Binary Instrumentation and Applications},
+  pages={26--33},
+  year={2009},
+  organization={ACM}
+}
+
+@inproceedings{SHERIFF,
+  title={SHERIFF: precise detection and automatic mitigation of false sharing},
+  author={Liu, Tongping and Berger, Emery D},
+  booktitle={ACM SIGPLAN Notices},
+  volume={46},
+  number={10},
+  pages={3--18},
+  year={2011},
+  organization={ACM}
+}
+
+% ---------------------- TIme ------------------------------
+@article{VectorClocks,
+  title={Time, clocks, and the ordering of events in a distributed system},
+  author={Lamport, Leslie},
+  journal={Communications of the ACM},
+  volume={21},
+  number={7},
+  pages={558--565},
+  year={1978},
+  publisher={ACM}
+}
