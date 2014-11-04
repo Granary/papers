@@ -1,5 +1,13 @@
 % ----------------------- Granary -----------------------------------------------
 
+@article{Granary,
+  title={Granary: Comprehensive kernel module instrumentation},
+  author={Goodman, Peter and Kumar, Akshay and Brown, Angela Demke and Goel, Ashvin},
+  journal={Poster at OSDI},
+  volume={12},
+  year={2012}
+}
+
 @inproceedings{AddressWatchpoints,
   title={Behave or be watched: debugging with behavioral watchpoints},
   author={Kumar, Akshay and Goodman, Peter and Goel, Ashvin and Brown, Angela Demke},
@@ -36,6 +44,17 @@
 % TODO: PIN
 % TODO: btkernel
 % TODO: QEMU
+
+% -------------------------- Shadow Memory -----------------------------------
+
+@inproceedings{Umbra,
+  title={Umbra: Efficient and scalable memory shadowing},
+  author={Zhao, Qin and Bruening, Derek and Amarasinghe, Saman},
+  booktitle={Proceedings of the 8th annual IEEE/ACM international symposium on Code generation and optimization},
+  pages={22--31},
+  year={2010},
+  organization={ACM}
+}
 
 % ----------------------------- Memory access bugs ----------------------------
 
@@ -272,7 +291,27 @@
   organization={ACM}
 }
 
-% ---------------------- TIme ------------------------------
+@article{DegenerateSharingAndFalseCoherence,
+  title={An analysis of degenerate sharing and false coherence},
+  author={Hyde, Randall L and Fleisch, Brett D},
+  journal={Journal of Parallel and Distributed Computing},
+  volume={34},
+  number={2},
+  pages={183--195},
+  year={1996},
+  publisher={Elsevier}
+}
+
+% ---------------------- Performance ----------------------------------
+
+@online{IntelVTune,
+ title={Intel\textregistered VTune\textsuperscript{TM} Amplifier 2015}
+ year={2014},
+ url={https://software.intel.com/en-us/intel-vtune-amplifier-xe},
+ organization={Intel Corportation},
+}
+
+% ---------------------- Distributed Systems ------------------------------
 @article{VectorClocks,
   title={Time, clocks, and the ordering of events in a distributed system},
   author={Lamport, Leslie},
@@ -282,4 +321,15 @@
   pages={558--565},
   year={1978},
   publisher={ACM}
+}
+
+@article{TreadMarks,
+  title={Treadmarks: Shared memory computing on networks of workstations},
+  author={Amza, Cristiana and Cox, Alan L and Dwarkadas, Sandhya and Keleher, Pete and Lu, Honghui and Rajamony, Ramakrishnan and Yu, Weimin and Zwaenepoel, Willy},
+  journal={Computer},
+  volume={29},
+  number={2},
+  pages={18--28},
+  year={1996},
+  publisher={IEEE}
 }
