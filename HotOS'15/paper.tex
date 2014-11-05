@@ -308,20 +308,35 @@ and finally how we rank discovered instances of false sharing (\Secref{ranking})
 
 % --------------------------------------
 \subsection{Proxy Memory and Tagged Reads}\label{sec:proxymem}
+Proxy memory is a form of variable-granularity shadow memory that proxies actual memory access behavior. The key
+idea is to instrument all loads and stores in such a way that their load/store behavior is reflected in the shadow
+memory in a way that can be externally observed. For example, one way to achieve this is to instrument every load
+to read from shadow memory, every store to modify shadow memory, and trap loads and stores by adding hardware
+watchpoints to shadow memory locations. Such heavyweight instrumentation would be inefficient, and so we apply
+two optimizations: belief-based selective instrumentation, and tagged reads.
 
-Proxy memory is a form of read-only shadow memory that summarizes or proxies actual memory access behavior. The key
-idea  .... TODO!!
+\paragraph{Selective Instrumentation}
+The first optimization to proxy memory is to not instrument all code to operate on proxy memory. Initially, \Toolname{}
+comprehensively instruments all code, thus incurring significant overheads. However, as beliefs about false sharing
+are refined, less and less code is instrumented, thus allowing code to run faster when precision during identification of
+potential false sharing is needed.
+
+\paragraph{Tagged Reads}
+The second optimization avoids the problem of introducing unnecessary cache coherency traffic by treating proxy memory
+as read-only, and disambiguating the intention of an operation (load, store) by using a \emph{tagged read}. In our implementation,
+a read operations (on the proxy memory) that intend to communicate loads (of actual memory) are distinguished from
+read operations that intend to communicate a store by using different encodings of the logical \texttt{OR} instruction.
 
 % --------------------------------------
 \subsection{Heap Sampling}\label{sec:heapsample}
 
 \Toolname{} follows DataCollider's sampling based approach, but samples proxy memory instead of code \cite{DataCollider}.
-\Toolname{} applies the roughly the following high-level algorithm to sample proxy memory and detect potential false sharing:
+\Toolname{} applies roughly the following high-level algorithm to sample proxy memory and detect potential false sharing:
 \begin{enumerate}
 \item Choose a proxy memory address $P$ uniformly at random. Add a hardware watchpoint $w(P)$ to $P$.
 \item If the watchpoint $w(P)$ is not triggered within $t$ units of time, then remove $w(P)$ and go to step (1).
 \item If $w(P)$ is triggered for thread $T_i$ then pause $T_i$ for $t$ units of time. The hope is that within this
-time slice, another thread, $T_j$ will be caught in the act of false sharing by triggering $w(P)$.
+time slice, another thread, $T_j$ will be caught in the act of contending on $P$ by triggering $w(P)$.
 \item If $w(P)$ is not triggered again for another $t$ time units, then remove $w(P)$ and go to step (1).
 \item If another thread $T_j$ triggers $w(P)$, then record stack traces for $T_i$ and $T_j$, and mark the associated program
 counters of each of $T_i$ and $T_j$ as potentially having false sharing.
@@ -331,7 +346,6 @@ counters of each of $T_i$ and $T_j$ as potentially having false sharing.
 As described, our sampling algorithm is susceptible to bias: if only a small percentage of the application's data is concurrently
 modified, or ``hot", then our algorithm might miss potential false sharing by wasting time sampling from the cold data.
 To avoid this issue, we apply two new techniques: \emph{uniform heap sampling}, and \emph{selective heap sampling}.
-
 
 \newcommand\TypeId{$TypeId$}
 
@@ -429,20 +443,47 @@ code ``pessimizing" hot code more highly.
 
 % --------------------------------------------------------------------------------------
 \section{Status}\label{sec:status}
-\Toolname{} is being implemented using the Granary dynamic binary translator \cite{Granary}, as well as the address watchpoints
-\cite{AddressWatchpoints} framework.
+\Toolname{} is being implemented using the Granary dynamic binary translator \cite{Granary} for the x86-64 architecture.
 
-The following has been implemented:
+A limited form of proxy memory has been implemented. Work is progressing on making it possible to generically interpose
+on memory allocators. Once this is done, the next step will be to work on the type analysis, as well as to associate typesets
+with proxy memory locations. Code hotness analysis is expected to be an easy-to-do task. Concurrency analysis will be trickier.
+
+Sampling and hardware watchpoint management will be orchestrated using GDB scripts.
+
 % TODO...
 
 % --------------------------------------------------------------------------------------
 \section{Evaluation}\label{sec:evaluation}
+Our evaluation aims to answer the following questions:
+\begin{itemize}
+\item What are \Toolname{}'s overheads? For example, what was the performance impact of the selective instrumentation
+and tagged read optimizations?
 
-% Answer the following questions:
-%		1)	What are DataReactor's overheads over time?
-%		2) 	How sensitive is DataReactor to different sampling rates?s
-%		3)	How effective is DataReactor as discovering false sharing?
-%		4)	Are the cases of detected false sharing high impact?
+\item How sensitive is \Toolname{} to different sampling rates, delays, and approaches? How does the thread
+pause time during sampling affect our ability to detect false sharing? Can we quantify the benefits (if any) of
+uniform heap sampling over na{\"i}ve heap sampling?
+
+\item How effective is \Toolname{} at discovering false sharing? Is it able to distinguish between true sharing, false sharing,
+and pseudo sharing?
+
+\item How impactful are the instances of false sharing detected by \Toolname{}? Is code hotness a good metric for ranking
+false sharing?
+\end{itemize}
+
+\subsection{Evaluation Challenges}
+Granary is a medium weight DBT system, therefore its overheads will likely be significant. It is also new, and so no time has been
+spent optimizing the code produced by Granary. Therefore, the overheads are not expected to be particularly good. The major
+challenge will be convincing readers that:
+\begin{enumerate}
+\item Most of the analysis can be performed in a non-production environment, where we can claim that speed doesn't matter.
+This will obviously be a contentious claim, because speed always matters, especially in false sharing detection. Here, I hope
+that the belief propagation steps of the type and concurrency analysis stages will be beneficial in allaying those concerns.
+
+\item The application of DataCollider to distinguish true and false sharing can be performed in production given the results of
+all prior stages of the pipeline.
+\end{enumerate}
+
 
 % --------------------------------------------------------------------------------------
 \bibliographystyle{abbrv}
