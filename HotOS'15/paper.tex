@@ -9,6 +9,7 @@
 \usepackage{textcomp} % for tilde
 \usepackage{paralist} % for in-paragraph lists
 \usepackage{graphicx}
+\usepackage{hyperref}
 
 % Used for code snippets
 \usepackage{listings,courier}
@@ -101,7 +102,7 @@ In this work, we present \Toolname{}, a system for precisely detecting and diagn
 in multi-threaded, commercial off-the-shelf (COTS) binaries. The key insights of our approach is that
 it iteratively discovers and specializes instrumentation to detect false sharing at increasingly finer
 granularities. Our work addresses three limitations of prior work:
-\begin{itemize}
+\begin{enumerate}
 \item They introduce extra cache coherency traffic, which limits scalability and hides performance
 problems. The extra traffic introduced comes from the mechanisms used to track cache line ownership.
 
@@ -112,7 +113,7 @@ code.
 data races), and and pseudo sharing. This can result in high false-positive rates that decrease the
 usefulness of the tools.
 
-\end{itemize}
+\end{enumerate}
 
 \paragraph{Contributions}
 This paper makes the following contributions:
@@ -206,12 +207,14 @@ post-mortem ranking scheme: cases of false sharing are more highly ranked when o
 the participating threads are executing cold code. This variant on the cold code hypothesis emphasizes the similarly
 hard-to-find case of cold code pessimizing hot code.
 
+\newcommand\TypeIdPair{$\langle PC,size \rangle$ }
+
 MultiRace \cite{MultiRace} is a comprehensive, dynamic race detector that employs a hybrid happens-before and
 lockset-based approach. It operates at an object granularity, and therefore reports false-positives. It is unique
 in that it uses ``pointer swizzing" as a means of remapping memory to ``minipages" that track the dominating
 access pattern of a thread (read-write > read-only > no-access). \Toolname{} uses a similar pointer swizzing approach, but
 in the form of address watchpoints \cite{AddressWatchpoints}. Pointers to heap-allocated objects are ``swizzled" to
-include a type identifier that is unique to a $\langle PC,size \rangle$ pair. This improves the diagnosis of false-sharing,
+include a type identifier that is unique to a \TypeIdPair{} pair. This improves the diagnosis of false-sharing,
 because it allows \Toolname{} to distinguish between two threads accessing different fields of the same object, and
 two threads accessing two nearby objects of the same (or different) types.
 
@@ -278,13 +281,68 @@ on instances of false sharing. Like \Toolname{}, SHERIFF uses a coarse-grained m
 % --------------------------------------------------------------------------------------
 \section{Design}\label{sec:design}
 
+At a high-level, \Toolname{} follows the same principle as Plastic \cite{Plastic} and SHERIFF \cite{SHERIFF}: it detects
+false sharing at coarse granularity and then verifies cases of false sharing at a finer granularity. Unlike other approaches,
+\Toolname{} repeats this process by incrementally refining the detection granularity, and by selectively instrumenting only
+that code that appears to trigger false sharing.
+
+As described, this design presents two challenges. First, because our proportional sampling approach will sample
+data of all types, we might find instances of false sharing that have no significant performance impact. Therefore,
+we need a means of estimating the performance impact of false sharing so that we can rank detected instances of
+false sharing from most to least important. We accomplish this as part of a separate analysis step. This step
+instruments all code to count how often each basic block is executed. We correlate this information with detected
+instances of false sharing to infer cases where one or both threads are executing hot code and contending on a single
+cache line. In the former case, we apply a variant of the cold code hypothesis \cite{LiteRace} to rank cases of cold
+code ``pessimizing" hot code more highly.
+
+Second, our sampling approach can miss false sharing, simply by sampling the right data at the wrong time, or by
+sampling unshared data. Our approach to solving these these problems is to infer beliefs about the sharing of
+objects of specific types, and to propagate these beliefs to code operating on those objects. By propagating these
+beliefs to code, we can selectively instrument only specific code and sample specific data in order to discover
+false sharing on specific types of objects. We discuss this further in \Secref{beliefs}.
+
+\subsection{Type-specific Sampling}\label{sec:beliefs}
+
+%First, a sampling based approach implies the potential for false-negatives. That is, \Toolname{} can report that no
+%false sharing was detected in some particular code. This, however, does not imply the absense of false sharing. Merely,
+%it suggests that if there is false sharing, then it was missed because the wrong data was sampled at the wrong time.
+
+
+
+%\begin{description}
+%\item[Code Hotness Analysis] \hfill \\
+%Here we instrument all code to count how often each basic block is executed. The results of this analysis are used when 
+%
+%The purpose of this
+%stage is to measure code hotness for the sake of ranking detected instances of false sharing. The accuracy of this stage depends
+%on the workload used to exercise the code. If this workload does not resemble production workloads then the recorded metrics
+%might rank false sharing instances incorrectly.
+%
+%\newcommand\TypeId{$TypeId$}
+%
+%\item[Type Analysis] \hfill \\
+%This stage instruments all code and identifies what types of objects are accessed by what code. Object types are loosely
+%defined as \TypeIdPair{} pairs, where $PC$ is the return address of an allocation function, and $size$ is the number of bytes
+%being allocated. To each \TypeIdPair pair, we associate a unique \TypeId{}. This \TypeId{} is used to ``taint" allocated
+%addresses \cite{AddressWatchpoints}, and when accessed, is used to taint the code accessing the data with the \TypeId{}.
+%The overarching purpose of this step is to map every program counter to a set of 
+%
+%\end{description}
+
+%\subsection{Code Hotness}
+%\Toolname{} instruments all code and counts the number of times each basic block is executed.
+
 % --------------------------------------------------------------------------------------
 \section{Implementation}\label{sec:implementation}
 \Toolname{} is implemented using the Granary dynamic binary translator \cite{Granary}, as well as the address watchpoints
 \cite{AddressWatchpoints} framework.
 
+
+% --------------------------------------------------------------------------------------
 \section{Status}\label{sec:status}
 
+
+% --------------------------------------------------------------------------------------
 \section{Evaluation}\label{sec:evaluation}
 
 % Answer the following questions:
@@ -293,6 +351,7 @@ on instances of false sharing. Like \Toolname{}, SHERIFF uses a coarse-grained m
 %		3)	How effective is DataReactor as discovering false sharing?
 %		4)	Are the cases of detected false sharing high impact?
 
+% --------------------------------------------------------------------------------------
 \bibliographystyle{abbrv}
 \bibliography{library}
 \end{document}
