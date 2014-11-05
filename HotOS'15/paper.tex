@@ -99,9 +99,14 @@ of false sharing requires that one distinguish accesses to the same objects from
 occurs when two nearby objects are separately but concurrently accessed \cite{DegenerateSharingAndFalseCoherence}.
 
 In this work, we present \Toolname{}, a system for precisely detecting and diagnosing false sharing
-in multi-threaded, commercial off-the-shelf (COTS) binaries. The key insights of our approach is that
-it iteratively discovers and specializes instrumentation to detect false sharing at increasingly finer
-granularities. Our work addresses three limitations of prior work:
+in multi-threaded applications. \Toolname{} uses dynamic binary translation (DBT) and shadow memory
+to instrument and detect false sharing in commercial off-the-shelf (COTS) binaries.  The key insight of our
+approach is that accesses to shadow memory can be used as a proxy for accesses to actual memory. By 
+detecting contention on proxied accesses, we can establish beliefs about the sources of false sharing. These
+beliefs are strenghtened and eventually verified by specializing code to proxy memory accesses at increasingly
+finer granularities.
+
+Our work addresses three limitations of prior work:
 \begin{enumerate}
 \item They introduce extra cache coherency traffic, which limits scalability and hides performance
 problems. The extra traffic introduced comes from the mechanisms used to track cache line ownership.
@@ -116,7 +121,7 @@ usefulness of the tools.
 \end{enumerate}
 
 \paragraph{Contributions}
-This paper makes the following contributions:
+This paper makes the following significant contributions:
 \begin{itemize}
 \item It presents \Toolname{}, a software-only framework that dynamically and precisely diagnoses
 false sharing  in multi-threaded, CTOS binaries. We believe that operating directly on binaries is
@@ -282,9 +287,16 @@ on instances of false sharing. Like \Toolname{}, SHERIFF uses a coarse-grained m
 \section{Design}\label{sec:design}
 
 At a high-level, \Toolname{} follows the same principle as Plastic \cite{Plastic} and SHERIFF \cite{SHERIFF}: it detects
-false sharing at coarse granularity and then verifies cases of false sharing at a finer granularity. Unlike other approaches,
+false sharing at a coarse granularity and then verifies detected cases at a finer granularity. Unlike other approaches,
 \Toolname{} repeats this process by incrementally refining the detection granularity, and by selectively instrumenting only
-that code that appears to trigger false sharing.
+that code that appears to trigger false sharing. Whereas Plastic and SHERIFF use page-granularity detection, \Toolname{}
+is able to vary the granularity over time using a shadow memory. The key insight of our approach is that accesses to
+shadow memory at varying granularities can be used as a proxy for accesses to actual memory.
+
+\Toolname{} operates as follows:
+\begin{enumerate}
+\item Choose 
+\end{enumerate}
 
 As described, this design presents two challenges. First, because our proportional sampling approach will sample
 data of all types, we might find instances of false sharing that have no significant performance impact. Therefore,
@@ -300,6 +312,8 @@ sampling unshared data. Our approach to solving these these problems is to infer
 objects of specific types, and to propagate these beliefs to code operating on those objects. By propagating these
 beliefs to code, we can selectively instrument only specific code and sample specific data in order to discover
 false sharing on specific types of objects. We discuss this further in \Secref{beliefs}.
+
+\subsection{Proxy Memory and Tagged Reads}\label{sec:proxymem}
 
 \subsection{Type-specific Sampling}\label{sec:beliefs}
 
