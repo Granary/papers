@@ -94,15 +94,15 @@ False-sharing is a performance-degrading problem that limits the scalability of 
 concurrency in applications is growing to match the additional processing power provided by increasing
 core counts on modern processors. Despite this rise in importance, detecting and diagnosing false
 sharing in large systems remains challenging. Due to the nature of cache coherent multiprocessors, false
-sharing is often indistinguishable from true sharing (including race conditions). Also, diagnosing the cause
+sharing is often indistinguishable from true sharing (including data races). Also, diagnosing the cause
 of false sharing requires that one distinguish accesses to the same objects from ``pseudo sharing", which
 occurs when two nearby objects are separately but concurrently accessed \cite{DegenerateSharingAndFalseCoherence}.
 
 In this work, we present \Toolname{}, a system for precisely detecting and diagnosing false sharing
 in multi-threaded applications. \Toolname{} uses dynamic binary translation (DBT) and shadow memory
-to instrument and detect false sharing in commercial off-the-shelf (COTS) binaries.  The key insight of our
+to detect false sharing in commercial off-the-shelf (COTS) binaries.  The key insight of our
 approach is that accesses to shadow memory can be used as a proxy for accesses to actual memory. By 
-detecting contention on proxied accesses, we can establish beliefs about the sources of false sharing. These
+detecting contention on proxied accesses, we can establish beliefs about what code causes false sharing. These
 beliefs are strenghtened and eventually verified by specializing code to proxy memory accesses at increasingly
 finer granularities.
 
@@ -130,9 +130,8 @@ that are running in a production environment.
 
 \item It presents two new techniques, \emph{proxy memory} and \emph{tagged reads}, that enable
 efficient determination of memory access behavior using shadow memory. Unlike existing shadow
-memory systems, proxy memory is not treated as a mutable meta-data store. This is important
-for false sharing detection as it avoids the extra serialization and coherence traffic that is introduced
-by dynamically manipulating shadow state.
+memory systems, proxy memory is not treated as a mutable meta-data store. This avoids extra
+serialization and coherence traffic introduced by prior work when dynamically manipulating shadow state.
 
 \item It describes a two new, data-centric sampling approaches: \begin{inparaenum}[i)]
 \item uniform heap sampling, and
@@ -284,77 +283,89 @@ the twinning and diffing approach of TreadMarks \cite{TreadMarks} to detect loca
 on instances of false sharing. Like \Toolname{}, SHERIFF uses a coarse-grained mechanism to hint at the potential for races.
 
 % --------------------------------------------------------------------------------------
-\section{Design}\label{sec:design}
+\section{Methodology}\label{sec:methodology}
 
-At a high-level, \Toolname{} follows the same principle as Plastic \cite{Plastic} and SHERIFF \cite{SHERIFF}: it detects
-false sharing at a coarse granularity and then verifies detected cases at a finer granularity. Unlike other approaches,
-\Toolname{} repeats this process by incrementally refining the detection granularity, and by selectively instrumenting only
-that code that appears to trigger false sharing. Whereas Plastic and SHERIFF use page-granularity detection, \Toolname{}
-is able to vary the granularity over time using a shadow memory. The key insight of our approach is that accesses to
-shadow memory at varying granularities can be used as a proxy for accesses to actual memory.
+This section introduces our approach to finding false sharing bugs. The goal of our approach is extract beliefs about
+where false sharing might be, then iteratively strenghten those beliefs, either verifying or discarding them in the process.
 
-\Toolname{} operates as follows:
-\begin{enumerate}
-\item Choose 
-\end{enumerate}
+We begin with the same intuition as SHERIFF: if false sharing occurs on a single cache line, then that implies that two
+threads are simultaneously accessing the same page of memory \cite{SHERIFF}. Therefore, by detecting contention on
+a single page, we can establish a belief that false sharing might occur on the contended page.
 
-As described, this design presents two challenges. First, because our proportional sampling approach will sample
-data of all types, we might find instances of false sharing that have no significant performance impact. Therefore,
-we need a means of estimating the performance impact of false sharing so that we can rank detected instances of
+Unfortunately, a page-granularity detection of false sharing is na{\"i}ve: it provides no guidance as to the location of the
+contended cache line, if any. Our insight is that we can narrow down on instances of false sharing by varying the
+granularity of the mechanism used to detect thread contention. That is, we can start with a coarse-grained but
+innacurate approach that tells us what code might cause false sharing, thus establishing an initial belief set. Then, we
+can strengthen or discard beliefs by repeating this same process, but using finer-grained detection mechanisms that
+apply only to code thought to contain false sharing.
+
+The remainder of this section explains how we vary the detection granularity (\Secref{proxymem}), how we use sampling
+to detect contending accesses to shared memory (\Secref{heapsample}), how we reduce false negatives with our
+sampling-based approach (\Secref{falsenegs}), and finally how we rank discovered instances of false sharing (\Secref{ranking})
+
+\subsection{Proxy Memory and Tagged Reads}\label{sec:proxymem}
+
+\subsection{Heap Sampling}\label{sec:heapsample}
+
+\subsection{Reducing False Negatives}\label{sec:falsenegs}
+
+One challenge with sampling-based approaches is their ability to get ``unlucky" and either not sample
+the right thing, or sample the right thing at the wrong time. In our case, this results in false-negatives:
+we might report that no false sharing is detected in some code, but this does not imply the absence of
+false sharing.
+
+To address this challenge, we propagate existing beliefs about potential false sharing on a single instruction
+to nearby instructions, as well as to instructions that operate on data of the same type. The intuition is
+two-fold. First, we assume locality of accesses to shared data: if we observe a shared access on one instruction,
+then nearby instructions probably access shared data as well. Second, a belief of false sharing is a belief of
+sharing: if we observe an object of a particular type being concurrently accessed in one place, then it might
+imply that concurrent accesses can also happen in other places.
+
+\newcommand\TypeId{$TypeId$}
+
+We perform two separate analyses to extend belief sets: \begin{description}
+\item[Type Analysis] \hfill \\
+This analysis instruments all code and identifies what types of objects are accessed by what code. Object types are loosely
+defined as \TypeIdPair{} pairs, where $PC$ is the return address of an allocation function, and $size$ is the number of bytes
+being allocated. To each \TypeIdPair pair, we associate a unique \TypeId{}. We taint \cite{AddressWatchpoints} allocated
+addresses with their \TypeId{}, and propagate this taint to code accessing typed data.
+
+\item[Concurrency Analysis] \hfill \\
+This analysis instruments all code and identifies what functions can execute concurrently. Each instrumented function
+is associated with a core set and a threadset \cite{DrContention}. When executed, the coreset is updated to include the
+identifier of the CPU core executing the function. Similarly, the function's threadset is updated to include an approximation
+of the thread identifier ($SP >> 13$). We anlayse the coresets and threadsets of each function to determine whether or
+not a function can execute concurrently (across CPU cores, or in two threads on the same core).
+
+\end{description}
+
+We combine the type and concurrency analyses to propagate beliefs in the following way: if sampling detects potential
+false sharing on a single instruction operating on a specific type of object, then we mark all instructions in the intersection
+of those identified to operate on the same type with the set of concurrent functions.
+
+\subsection{Ranking}\label{sec:ranking}
+
+Because we sample data of all types, we might find instances of false sharing that have no significant impact on performance.
+Therefore, we need a means of estimating the performance impact of false sharing so that we can rank detected instances of
 false sharing from most to least important. We accomplish this as part of a separate analysis step. This step
 instruments all code to count how often each basic block is executed. We correlate this information with detected
 instances of false sharing to infer cases where one or both threads are executing hot code and contending on a single
 cache line. In the former case, we apply a variant of the cold code hypothesis \cite{LiteRace} to rank cases of cold
 code ``pessimizing" hot code more highly.
 
-Second, our sampling approach can miss false sharing, simply by sampling the right data at the wrong time, or by
-sampling unshared data. Our approach to solving these these problems is to infer beliefs about the sharing of
-objects of specific types, and to propagate these beliefs to code operating on those objects. By propagating these
-beliefs to code, we can selectively instrument only specific code and sample specific data in order to discover
-false sharing on specific types of objects. We discuss this further in \Secref{beliefs}.
-
-\subsection{Proxy Memory and Tagged Reads}\label{sec:proxymem}
-
-\subsection{Type-specific Sampling}\label{sec:beliefs}
-
-%First, a sampling based approach implies the potential for false-negatives. That is, \Toolname{} can report that no
-%false sharing was detected in some particular code. This, however, does not imply the absense of false sharing. Merely,
-%it suggests that if there is false sharing, then it was missed because the wrong data was sampled at the wrong time.
-
-
-
-%\begin{description}
-%\item[Code Hotness Analysis] \hfill \\
-%Here we instrument all code to count how often each basic block is executed. The results of this analysis are used when 
-%
-%The purpose of this
-%stage is to measure code hotness for the sake of ranking detected instances of false sharing. The accuracy of this stage depends
-%on the workload used to exercise the code. If this workload does not resemble production workloads then the recorded metrics
-%might rank false sharing instances incorrectly.
-%
-%\newcommand\TypeId{$TypeId$}
-%
-%\item[Type Analysis] \hfill \\
-%This stage instruments all code and identifies what types of objects are accessed by what code. Object types are loosely
-%defined as \TypeIdPair{} pairs, where $PC$ is the return address of an allocation function, and $size$ is the number of bytes
-%being allocated. To each \TypeIdPair pair, we associate a unique \TypeId{}. This \TypeId{} is used to ``taint" allocated
-%addresses \cite{AddressWatchpoints}, and when accessed, is used to taint the code accessing the data with the \TypeId{}.
-%The overarching purpose of this step is to map every program counter to a set of 
-%
-%\end{description}
-
-%\subsection{Code Hotness}
-%\Toolname{} instruments all code and counts the number of times each basic block is executed.
-
-% --------------------------------------------------------------------------------------
-\section{Implementation}\label{sec:implementation}
-\Toolname{} is implemented using the Granary dynamic binary translator \cite{Granary}, as well as the address watchpoints
-\cite{AddressWatchpoints} framework.
-
+%At a high-level, \Toolname{} follows the same principle as Plastic \cite{Plastic} and SHERIFF \cite{SHERIFF}: it detects
+%false sharing at a coarse granularity and then verifies detected cases at a finer granularity. Unlike other approaches,
+%\Toolname{} repeats this process by incrementally refining the detection granularity, and by selectively instrumenting only
+%that code that appears to trigger false sharing. Whereas Plastic and SHERIFF use page-granularity detection, \Toolname{}
+%is able to vary the granularity over time using a \emph{proxy memory} (\Secref{proxymem}). 
 
 % --------------------------------------------------------------------------------------
 \section{Status}\label{sec:status}
+\Toolname{} is being implemented using the Granary dynamic binary translator \cite{Granary}, as well as the address watchpoints
+\cite{AddressWatchpoints} framework.
 
+The following has been implemented:
+% TODO...
 
 % --------------------------------------------------------------------------------------
 \section{Evaluation}\label{sec:evaluation}
