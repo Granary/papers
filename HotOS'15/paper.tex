@@ -124,7 +124,7 @@ usefulness of the tools.
 This paper makes the following significant contributions:
 \begin{itemize}
 \item It presents \Toolname{}, a software-only framework that dynamically and precisely diagnoses
-false sharing  in multi-threaded, CTOS binaries. We believe that operating directly on binaries is
+false sharing  in multi-threaded, COTS binaries. We believe that operating directly on binaries is
 important because it allows one to verify observed performance problems using the same binaries
 that are running in a production environment.
 
@@ -155,6 +155,7 @@ sharing. That is, where race detectors focus on two threads concurrently accessi
 data, false sharing detectors focus on two threads concurrently accessing different data, but
 on the same cache line.
 
+% --------------------------------------
 \subsection{Race Detection}
 
 Race detectors can be categorized according to the following parameters:
@@ -240,6 +241,7 @@ same data, thus triggering the watchpoint and detecting a race. This brilliantly
 for \Toolname{}. \Toolname{} differs from DataCollider, in that the latter is code-centric insofar as it samples code, whereas
 \Toolname{} is data-centric insofar as it samples data.
 
+% --------------------------------------
 \subsection{False Sharing Detection}
 
 Similar to race detectors, false-sharing detectors can be sampling-based or comprehensive. Comprehensive approaches
@@ -299,14 +301,55 @@ innacurate approach that tells us what code might cause false sharing, thus esta
 can strengthen or discard beliefs by repeating this same process, but using finer-grained detection mechanisms that
 apply only to code thought to contain false sharing.
 
-The remainder of this section explains how we vary the detection granularity (\Secref{proxymem}), how we use sampling
+The remainder of this section explains how we proxy memory access behavior (\Secref{proxymem}), how we use sampling
 to detect contending accesses to shared memory (\Secref{heapsample}), how we reduce false negatives with our
-sampling-based approach (\Secref{falsenegs}), and finally how we rank discovered instances of false sharing (\Secref{ranking})
+sampling-based approach (\Secref{falsenegs}), how we achieve precision by eliminating false positives (\Secref{falsepos}),
+and finally how we rank discovered instances of false sharing (\Secref{ranking})
 
+% --------------------------------------
 \subsection{Proxy Memory and Tagged Reads}\label{sec:proxymem}
 
+Proxy memory is a form of read-only shadow memory that summarizes or proxies actual memory access behavior. The key
+idea  .... TODO!!
+
+% --------------------------------------
 \subsection{Heap Sampling}\label{sec:heapsample}
 
+\Toolname{} follows DataCollider's sampling based approach, but samples proxy memory instead of code \cite{DataCollider}.
+\Toolname{} applies the roughly the following high-level algorithm to sample proxy memory and detect potential false sharing:
+\begin{enumerate}
+\item Choose a proxy memory address $P$ uniformly at random. Add a hardware watchpoint $w(P)$ to $P$.
+\item If the watchpoint $w(P)$ is not triggered within $t$ units of time, then remove $w(P)$ and go to step (1).
+\item If $w(P)$ is triggered for thread $T_i$ then pause $T_i$ for $t$ units of time. The hope is that within this
+time slice, another thread, $T_j$ will be caught in the act of false sharing by triggering $w(P)$.
+\item If $w(P)$ is not triggered again for another $t$ time units, then remove $w(P)$ and go to step (1).
+\item If another thread $T_j$ triggers $w(P)$, then record stack traces for $T_i$ and $T_j$, and mark the associated program
+counters of each of $T_i$ and $T_j$ as potentially having false sharing.
+\item Go to step (1) to repeat the process for a new sample location.
+\end{enumerate}
+
+As described, our sampling algorithm is susceptible to bias: if only a small percentage of the application's data is concurrently
+modified, or ``hot", then our algorithm might miss potential false sharing by wasting time sampling from the cold data.
+To avoid this issue, we apply two new techniques: \emph{uniform heap sampling}, and \emph{selective heap sampling}.
+
+
+\newcommand\TypeId{$TypeId$}
+
+\paragraph{Uniform Heap Sampling}
+Uniform heap sampling is a round-robin algorithm that uniformly selects proxy memory locations to sample according to
+the types of data proxied. We interpose on memory allocation and deallocation routines (e.g. \texttt{malloc} and \texttt{free})
+and associate unique \TypeId{}s to each \TypeIdPair{}, where $PC$ is the return address of an allocation function, and $size$ is the
+number of bytes allocated.
+
+For each proxy memory location $P$, we maintain a counting \emph{typeset}: a mapping of \TypeId{}s to the number of objects of type
+\TypeId{} that are fully or partially proxied by $P$.
+
+\paragraph{Selective Heap Sampling}
+Selective heap sampling is a biased variant of uniform heap sampling that allows a user to guide the sampler to only focus
+on specific types of data. This is beneficial when one is trying to solve specific performance problems related to a subset
+of the data being accessed by the application.
+
+% --------------------------------------
 \subsection{Reducing False Negatives}\label{sec:falsenegs}
 
 One challenge with sampling-based approaches is their ability to get ``unlucky" and either not sample
@@ -321,14 +364,13 @@ then nearby instructions probably access shared data as well. Second, a belief o
 sharing: if we observe an object of a particular type being concurrently accessed in one place, then it might
 imply that concurrent accesses can also happen in other places.
 
-\newcommand\TypeId{$TypeId$}
-
 We perform two separate analyses to extend belief sets: \begin{description}
 \item[Type Analysis] \hfill \\
-This analysis instruments all code and identifies what types of objects are accessed by what code. Object types are loosely
-defined as \TypeIdPair{} pairs, where $PC$ is the return address of an allocation function, and $size$ is the number of bytes
-being allocated. To each \TypeIdPair pair, we associate a unique \TypeId{}. We taint \cite{AddressWatchpoints} allocated
-addresses with their \TypeId{}, and propagate this taint to code accessing typed data.
+This analysis instruments all code and identifies what types of objects are accessed by what code. We apply the same
+notion of typesets as used in the uniform heap sampler; however, in this case typesets are associated with basic
+blocks of code instead of with proxy memory. We use address watchpoints \cite{AddressWatchpoints} to taint
+allocated addresses with their \TypeId{}, and then propagate these \TypeId{}s to the typesets of the blocks operating
+of data of each type.
 
 \item[Concurrency Analysis] \hfill \\
 This analysis instruments all code and identifies what functions can execute concurrently. Each instrumented function
@@ -343,6 +385,32 @@ We combine the type and concurrency analyses to propagate beliefs in the followi
 false sharing on a single instruction operating on a specific type of object, then we mark all instructions in the intersection
 of those identified to operate on the same type with the set of concurrent functions.
 
+% --------------------------------------
+\subsection{Eliminating False Positives}\label{sec:falsepos}
+
+We apply two techniques to reduce and finally eliminate false positives:
+\begin{enumerate}
+\item We iteratively refine the granularity of proxy memory, starting from the page granularity and going down to the cache
+line granularity. As the granularity is refined and potential false sharing continues to be detected, our confidence in beliefs
+of false sharing improves.
+
+\item We apply a precise data race detector \cite{DataCollider} to instructions that demonstrate cache line contention. This
+allows us to distinguish between true and false sharing.
+\end{enumerate}
+
+Distinguishing between false sharing and pseudo sharing is more challenging. We approximate this detection by extending
+the type analysis phase to record the relative byte offset within each type of accessed object for each instruction. If false
+sharing is detected between two instructions operating on the same offset ($\pm$ the memory access size), then we report
+pseudo sharing, otherwise false sharing. Another valid heuristic would include the natural alignment and sizes of object
+types.
+
+% TODO: How to make it precise? Apply DataCollider to places where we've found potential false sharing at the granularity
+% of a cache line.
+
+% How do we distinguish between false sharing and pseudo sharing? Use the type analysis feature to figure out what offsets
+% into what data were being accessed.h
+
+% --------------------------------------
 \subsection{Ranking}\label{sec:ranking}
 
 Because we sample data of all types, we might find instances of false sharing that have no significant impact on performance.
