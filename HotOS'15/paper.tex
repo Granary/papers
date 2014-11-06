@@ -357,9 +357,12 @@ For each proxy memory location $P$, we maintain a counting \emph{typeset}: a map
 \TypeId{} that are fully or partially proxied by $P$.
 
 \paragraph{Selective Heap Sampling}
-Selective heap sampling is a biased variant of uniform heap sampling that allows a user to guide the sampler to only focus
-on specific types of data. This is beneficial when one is trying to solve specific performance problems related to a subset
-of the data being accessed by the application.
+Selective heap sampling is a biased variant of uniform heap sampling that enables \Toolname{} to only focus on the subset
+of the heap that is believed to contain objects that participate in false sharing. Selective heap sampling builds typesets
+for only a subset of proxy memory associated with specific allocation points.
+
+Selective heap sampling also allows a user to guide the sampler to only focus on specific types of data. This is beneficial
+when one is trying to solve specific performance problems related to a subset of the data being accessed by the application.
 
 % --------------------------------------
 \subsection{Reducing False Negatives}\label{sec:falsenegs}
