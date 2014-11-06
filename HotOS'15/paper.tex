@@ -133,14 +133,12 @@ efficient determination of memory access behavior using shadow memory. Unlike ex
 memory systems, proxy memory is not treated as a mutable meta-data store. This avoids extra
 serialization and coherence traffic introduced by prior work when dynamically manipulating shadow state.
 
-\item It describes a two new, data-centric sampling approaches: \begin{inparaenum}[i)]
-\item uniform heap sampling, and
-\item selective heap sampling.
-\end{inparaenum} Uniform heap sampling enables \Toolname{} to sample objects in the heap uniformly
-according to their type. This is beneficial because it improves coverage: if 90\% of false sharing occurs because
-of accesses to only 10\% of the data, then \Toolname{} will not miss those races by blindly focusing on the
-other 90\% of data. Once data of interesting has been narrowed down, \Toolname{} can apply selective heap
-sampling, which focuses sampling on specific types of objects or data accessed by specific code (or both).
+\item It describes two new, data-centric sampling approaches: uniform heap sampling, and selective heap
+sampling. Uniform heap sampling enables \Toolname{} to sample objects in the heap uniformly according to
+their type. This is beneficial because it improves coverage: if 90\% of false sharing occurs because of accesses
+to only 10\% of the data, then \Toolname{} will not miss those races by blindly focusing on the other 90\% of data.
+Once data of interesting has been narrowed down, \Toolname{} can apply selective heap sampling, which
+focuses sampling on specific types of objects or data accessed by specific code (or both).
 \end{itemize}
 
 % TODO: Define precise
