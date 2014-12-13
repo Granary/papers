@@ -48,7 +48,9 @@
 
 % For leaving some comments in the draft.
 \newcommand{\comment}[1]{}
-\newcommand{\Toolname}{DataReactor}
+\newcommand{\TextToolname}{CatcheScan}
+\newcommand{\Toolname}{\textsc{\TextToolname{}}}
+\newcommand{\BoldToolname}{\textsc{\bf\TextToolname{}}}
 
 % For getting rid of copyright box
 \makeatletter
@@ -58,7 +60,7 @@
 \begin{document}
 
 %make title bold and 14 pt font (Latex default is non-bold, 16 pt)
-\title{\Large \bf \Toolname: Precise False Sharing Detection for COTS Binaries}
+\title{\Large \bf \Toolname: Cache Line Contention Detection for COTS Binaries}
 \numberofauthors{3}
 \author{
 % 1st. author
@@ -82,63 +84,161 @@ Angela Demke Brown\\
 
 \section{Introduction}\label{sec:intro}
 
-% Key ideas:
-%		1) 	Shadow memory as a proxy for memory accesses, not as a meta-data store.
-%		2) 	Tagged reads as a way to avoid cache contention on shadow memory, but still
-%			highlight the essential memory access behaviour.
-%		3)	Proportional heap sampling, by using type-specific information to decide where
-%			to place hardware watchpoints.
+In multi-threaded applications, cache-line contention is a symptom of several kinds of bugs: data races, true sharing,
+false sharing, and pseudo sharing. Data races are potential correctness bugs that introduce non-determinism into running
+programs. True, false, and pseudo sharing are performance bugs that limit the scalability of multi-threaded applications
+\cite{ImpactOfFalseSharing}. Both problems are important in the multi-core era, where the level of concurrency in
+applications is growing to match the additional processing power provided by increasing core counts on modern processors.
 
-False-sharing is a performance-degrading problem that limits the scalability of multithreaded applications
-\cite{ImpactOfFalseSharing}. This problem is increasingly important in the multi-core era. The level of
-concurrency in applications is growing to match the additional processing power provided by increasing
-core counts on modern processors. Despite this rise in importance, detecting and diagnosing false
-sharing in large systems remains challenging. Due to the nature of cache coherent multiprocessors, false
-sharing is often indistinguishable from true sharing (including data races). Also, diagnosing the cause
-of false sharing requires that one distinguish accesses to the same objects from ``pseudo sharing", which
-occurs when two nearby objects are separately but concurrently accessed \cite{DegenerateSharingAndFalseCoherence}.
+% Despite this rise in importance, detecting and diagnosing false
+%sharing in large systems remains challenging. Due to the nature of cache coherent multiprocessors, false
+%sharing is often indistinguishable from true sharing (including data races). Also, diagnosing the cause
+%of false sharing requires that one distinguish accesses to the same objects from ``pseudo sharing", which
+%occurs when two nearby objects are separately but concurrently accessed \cite{DegenerateSharingAndFalseCoherence}.
 
-In this work, we present \Toolname{}, a system for precisely detecting and diagnosing false sharing
-in multi-threaded applications. \Toolname{} uses dynamic binary translation (DBT) and shadow memory
-to detect false sharing in commercial off-the-shelf (COTS) binaries.  The key insight of our
-approach is that accesses to shadow memory can be used as a proxy for accesses to actual memory. By 
-detecting contention on proxied accesses, we can establish beliefs about what code causes false sharing. These
-beliefs are strenghtened and eventually verified by specializing code to proxy memory accesses at increasingly
-finer granularities.
+This paper presents \BoldToolname{}, a software-only runtime for precisely detecting and diagnosting cache line
+contention in commercial, off-the-shelf (COTS) x86-64 program binaries. \Toolname{} addresses three limitations of prior
+work: \begin{enumerate}
+\item They are not general: they require an understanding of the semantics of all synchronization primitives used
+by the program. This is unsatisfactory for COTS binaries that employ lock-free algorithms and home-grown synchronization
+primitives.
 
-Our work addresses three limitations of prior work:
-\begin{enumerate}
-\item They introduce extra cache coherency traffic, which limits scalability and hides performance
-problems. The extra traffic introduced comes from the mechanisms used to track cache line ownership.
+\item They are imprecise: they cannot distinguish between data races, true sharing, false sharing, and pseudo sharing
+\cite{DegenerateSharingAndFalseCoherence}. This can result in high false-positive rates or confusing reports that decrease
+the usefulness of these tools for practitioners.
 
-\item They are unable to selectively detect false sharing on only specific types of objects or specific
-code.
+\item They are not comprehensive: they miss actual cases of cache line contention because they use heuristics to sample 
+or instrument only a subset of the code, and therefore lose visibility on accesses to data that might cause bugs.
 
-\item They are imprecise: they cannot distinguish between false sharing, true sharing (including
-data races), and and pseudo sharing. This can result in high false-positive rates that decrease the
-usefulness of the tools.
+%\item They are not selective. While apparently at odds with comprehensiveness, they track or instrument \emph{too much}, 
+%and therefore waste time looking for problems where none exist.
+
+%\item They introduce extra cache coherency traffic, which limits scalability and hides performance
+%problems. The extra traffic introduced comes from the mechanisms used to track cache line ownership.
+
+%\item They are unable to selectively detect false sharing on only specific types of objects or specific
+%code.
 
 \end{enumerate}
+
+\Toolname{} uses dynamic binary translation (DBT) to instrument a program binary and detect cache line contention
+at runtime. Our approach combines unlimited watchpoints \cite{UnlimitedWatchpoints,DynamoRIOWatchpoints}, data
+sampling, and a lightweight cache line ownership tracking mechanism to detect cache line contention. The key insight
+of our approach is that if we know \begin{inparaenum}[i)]
+\item what code is executed by more than one thread,
+\item what types of data are accessed by more than one thread, and
+\item what types of data are accessed by what code, then
+\end{inparaenum}
+we can efficiently detect cache line contention by selectively instrumenting only the code and the data that matters.
+
+%we can extend on and improve existing techniques to detecting
+%cache line contention by combining solutions the following problems:
+%\begin{enumerate}
+%\item Code concurrency: Detecting what code is executed by more than one thread.
+%\item Data concurrency: Detecting what types of data are accessed by more than one thread.
+%\item Code polymorphism: Detecting what code accesses what types of data.
+%\end{enumerate}
+
+% infinite software watchpoints, as implemented within a DBT system, as
+%well as being selective about what parts of the program to 
+
+%The key insight of our
+%approach is that accesses to shadow memory can be used as a proxy for accesses to actual memory. By 
+%detecting contention on proxied accesses, we can establish beliefs about what code causes false sharing. These
+%beliefs are strenghtened and eventually verified by specializing code to proxy memory accesses at increasingly
+%finer granularities.
 
 \paragraph{Contributions}
 This paper makes the following significant contributions:
 \begin{itemize}
-\item It presents \Toolname{}, a software-only framework that dynamically and precisely diagnoses
-false sharing  in multi-threaded, COTS binaries. We believe that operating directly on binaries is
-important because it allows one to verify observed performance problems using the same binaries
-that are running in a production environment.
+\item It describes \Toolname{}, a software-only system that dynamically and precisely diagnoses cache line
+contention in multi-threaded, COTS binaries. This enables \Toolname{} to detect performance
+and correctness bugs in programs using home-grown synchronization primitives and lock-free algorithms.
 
-\item It presents two new techniques, \emph{proxy memory} and \emph{tagged reads}, that enable
-efficient determination of memory access behavior using shadow memory. Unlike existing shadow
-memory systems, proxy memory is not treated as a mutable meta-data store. This avoids extra
-serialization and coherence traffic introduced by prior work when dynamically manipulating shadow state.
+\item It describes a new data-centric sampling approach, \emph{comprehensive data sampling}, that improves
+sampling coverage and contention detection accuracy. Comprehensive sampling uniformly samples objects in
+memory  according to their type. This avoids problems related to sampling bias in situations where a
+relatively small amount of shared data is crowded out by a much larger amount of unshared data (as happens
+when multi-threaded programs operate on partitions of a data set).
 
-\item It describes two new, data-centric sampling approaches: uniform heap sampling, and selective heap
-sampling. Uniform heap sampling enables \Toolname{} to sample objects in the heap uniformly according to
-their type. This is beneficial because it improves coverage: if 90\% of false sharing occurs because of accesses
-to only 10\% of the data, then \Toolname{} will not miss those races by blindly focusing on the other 90\% of data.
-Once data of interesting has been narrowed down, \Toolname{} can apply selective heap sampling, which
-focuses sampling on specific types of objects or data accessed by specific code (or both).
+%from wasting cycles looking for contention on
+%unshared data
+
+%This is beneficial because it improves coverage: if 90\% of false sharing occurs because of accesses
+%to only 10\% of the data, then \Toolname{} will not miss those races by blindly focusing on the other 90\% of data
+
+\item It describes a novel separation of cache line contention detection into two phases: \begin{enumerate}
+\item[1) \emph{Training:}] an ahead-of-time, heavyweight analysis of the program's execution that
+discovers what code can contain cache line contention, and what data is shared by multiple threads. A key
+aspect of this phase is that it \emph{does not} need to exhibit any cache line contention; the only requirement
+is that training and production workloads exercise/cover the code in similar ways.
+
+% TODO: Evaluate by showing the percentage of code that doesn't get instrumented at all, or is only
+% instrumented with lightweight instrumentation.
+
+\item[2) \emph{Detection:}] an online analysis that detects cache line contention by selectively
+instrumenting only the relevant code and sampling only the relevant data as recognized by the
+offline training phase.
+\end{enumerate}
+
+This separation is motivated by the need to reduce instrumentation overheads of the detection phase by
+as much as possible in order to maximize the detection accuracy (e.g. data races are time-sensitive). The key
+insight enabling this separation is that time--and therefore the cost of instrumentation--does not matter to
+the accuracy of the results produced by the training phase.
+
+%A key aspect of the training phase is that it must exhibit approximately the same code coverage as a
+%production
+%that it does not need to exhibit a buggy execution (i.e. contain actual
+%cache line contention)
+
+
+%It describes a novel separation of cache line contention detection into two phases: \begin{enumerate}
+%\item[1) \emph{Training:}] This phase uses heavyweight instrumentation to discover \begin{inparaenum}
+%\item what code is hot;
+%\item what code is executed by more than one thread;
+%\item what code accesses what data; and,
+%\item function call graphs.
+%\end{inparaenum}
+%
+%This information enables the detection phase to selectively prune the set of code that is instrumented,
+%and the set of data that is sampled in order to reduce overheads. 
+%
+%
+%
+%\item[2) \emph{Detection:}] b
+%\end{enumerate}
+
+%ahead-of-time training phase that discovers code and data that can be ignored
+%during online analysis, thus reducing online instrumentation overheads. The key insight is that all training
+%data gathered is 
+%time--and
+%time spent--doing offline analysis does not affect the accuracy of the results produced. This is important
+%because discovering what code can be pruned and what data does
+
+%\begin{enumerate}
+%\item Detecting what code is important to the 
+%\end{enumerate}
+%
+%analyzing
+%the 
+%
+%the detection
+%of what code should be instrumented and what data should be sampled is \emph{not} time-sensitive, and
+%therefore can be performed any time. 
+%
+%using results gathered from
+%an offline learning and analysis phase. This separation is motivated by recognizing that 
+
+
+%\item It presents two new techniques, \emph{proxy memory} and \emph{tagged reads}, that enable
+%efficient determination of memory access behavior using shadow memory. Unlike existing shadow
+%memory systems, proxy memory is not treated as a mutable meta-data store. This avoids extra
+%serialization and coherence traffic introduced by prior work when dynamically manipulating shadow state.
+
+%\item It describes two new, data-centric sampling approaches: uniform heap sampling, and selective heap
+%sampling. .
+%Once data of interesting has been narrowed down, \Toolname{} can apply selective heap sampling, which
+%focuses sampling on specific types of objects or data accessed by specific code (or both).
 \end{itemize}
 
 % TODO: Define precise
@@ -146,60 +246,175 @@ focuses sampling on specific types of objects or data accessed by specific code 
 
 % --------------------------------------------------------------------------------------
 
-\section{Related Work}\label{sec:background}
-\Toolname{} primarily draws on techniques from existing race detectors and false sharing detectors.
-This is appropriate because some forms of false-positives for race detectors are caused by false
-sharing. That is, where race detectors focus on two threads concurrently accessing the same
-data, false sharing detectors focus on two threads concurrently accessing different data, but
-on the same cache line.
+\section{Overview}\label{sec:overview}
 
-% --------------------------------------
-\subsection{Race Detection}
+\Toolname{} uses DBT to instrument the memory accesses of a program while it is running. During the offline
+learning phase, DBT is used to figure out what code is executed by more than one thread, what data is accessed
+by more than one thread, and what code accesses what data. During its online detection phase, \Toolname{} uses
+an implementation of unlimited watchpoints watch for accesses to a representative sample of cache lines, assign
+owning threads to those cache lines, and finally detect transfers in ownership.
 
-Race detectors can be categorized according to the following parameters:
+\subsection{Definitions}
+\Toolname{} looks for cache line contention bugs of the following forms:
 \begin{description}
-\item[Approach] Static or dynamic. \hfill \\
-Static race detectors analyze source code or binaries, typically performing interprocedural control-
-and data-flow analyses. The benefit of static analysis is that they can inspect all program paths.
+\item[Data races] Data races occur when the same program variable is concurrently modified by two threads, or 
+modified by one thread and concurrently accessed by another thread, where neither access is atomic (e.g. using
+and atomic read-modify-write instruction).
 
-Dynamic race detectors monitor memory accesses for races. The benefit of this approach is that
-races can be caught "in the act". The drawbacks of this approach is that most dynamic race detectors
-are too slow to run in production environments, and therefore must be tested on simulated workloads.
-If these workloads do not exercise all code paths than many races can be missed. Dynamic race detectors
-can be further broken down into on-the-fly detectors or post-mortem detectors, which analyze memory
-access logs.
+\item[True sharing] True sharing has the same access pattern as a data race, except that one or both operations
+are atomic.
 
-\item[Model] Precise or imprecise.  \hfill \\
-Precise race detectors report no false-positives and are usually implemented using Lamport's
-happens-before relationship \cite{VectorClocks}. Precise race detectors often trade efficiency
-for completeness in order to achieve their precision. That is, they sometime miss true races in
-code.
+\item[False sharing] False sharing occurs when two semantically related variables (e.g. two fields in a struct) occupy
+the same cache line and are concurrently accessed, thus introducing contention on the cache line.
 
-Imprecise race detectors can have high false positive rates, but tend to be more complete in terms of
-including races not detected by precise detectors. They tend to be implemented using a variant of the
-lockset algorithm \cite{Eraser}.
-
-\item[Granularity] Fine-grained or coarse-grained. \hfill \\
-Fine-grained race detectors operate at or close to the granularity of memory accesses. Coarse-grained
-race detectors operate at an object granularity, or at a fixed granularity (e.g. cache line, page).
-
-The granularity of a race detector can affect its precision. For example, a happens-before race detector 
-can be imprecise (i.e. report false positives) by operating at a coarse granularity. If the granularity were
-the size of a cache line, then the race detector would be a cache line contention detector: it would hint
-at races as well as false-sharing.
-
-\item[Mode] Comprehensive or sampling-based. \hfill \\
-Comprehensive race detectors typically analyze every memory read and write. They are usually implemented
-by instrumenting all program code.
-
-Sampling-based race detectors analyze either a subset of the code or a subset of the data. In the former
-case, they focus on detecting races by specific code.
+\item[Pseudo sharing] Pseudo sharing occurs when two semantically unrelated variables (e.g. fields in adjacent structs,
+adjacent array entries) occupy the same cache line and are concurrently accessed \cite{DegenerateSharingAndFalseCoherence}.
 \end{description}
 
-Under this categorization scheme, \Toolname{} is a dynamic, precise, variable-granularity, mixed-mode
-false-sharing detector. It draws inspiration from a number of existing race detectors, including LiteRace
-\cite{LiteRace}, MultiRace \cite{MultiRace}, RaceMob \cite{RaceMob}, RaceTrack \cite{RaceTrack}, and
-DataCollider \cite{DataCollider}.
+%\subsection{Mechanisms}
+
+% --------------------------------------------------------------------------------------
+
+\section{Related Work}\label{sec:background}
+\Toolname{} draws on and extends/refines techniques from existing race detectors and false sharing detectors.
+
+%% --------------------------------------
+\paragraph{Dr. Memory}
+Dr. Memory \cite{DrContention} implements a set of tools for detecting cache line contention, thread correlations,
+and true/false sharing detection in COTS binary programs. Dr. Memory uses the DynamoRIO \cite{DynamoRIO} DBT system
+and the Umbra shadow memory framework \cite{Umbra} to interpose on memory accesses and implement their
+detection tools. Dr. Memory's contention tool implements the following algorithm for detecting contention. Before each
+memory write,  instrumentation performs a ``racy" check to see if the current thread owns the cache line being accessed.
+If the cache line is owned by another thread, then a report is generated, and ownership is transferred. If the cache line is
+unowned, then ownership is established.
+
+This approach has two drawbacks. First, every time ownership is transferred/established, there is an additional
+memory write, which itself introduces CPU overheads due to contention on the cache lines of the shadow memory. Second,
+ownership is tracked on data that is never shared. This introduces extra CPU and memory overheads by instrumenting
+too much code and tracking too much data.
+
+\Toolname{} addresses both problems. First, its offline learning phase prunes the set of code that should be instrumented.
+This has the side effect of reducing the physical memory requirements of shadow memory because fewer instructions will
+introduce shadow accesses, and therefore less shadow is accessed. Second, our sampling approach means that ownership
+is only tracked for ``watched" objects. This introduces an additional racy read at the beginning of instrumentation, but the
+benefit is that the majority of shadow accesses are read-only, and therefore do not generate as much additional contention
+on the cache lines associated with shadow memory.
+
+%% --------------------------------------
+\paragraph{DataCollider}
+DataCollider \cite{DataCollider} is a precise, sampling-based race detector for the WIndows kernel. DataCollider's key
+novelties are its extremely low overhead, as well as its generality: it detects data races without any understanding of
+a system's underlying synchronization primitives. DataCollider uniformly samples code by introducing breakpoints into the code.
+When a breakpoint is hit, a hardware watchpoint is added to data that was about to be accessed by the interrupted instruction.
+Then, the interrupted thread is paused for a short period of time to give another thread the opportunity to access the
+same data. If the data is accessed by a second thread while the first thread is paused, then the watchpoint will detect the
+access, thus allowing DataCollider to detect a race ``in the act."" 
+
+While this approach is elegant in its simplicity, it has two major drawbacks. First, its dependence on hardware watchpoints
+limits it to being able to detect races on at most four distinct 8-byte memory locations simultaneously \cite{IntelSDManual}.
+Second, it cannot detect guarded cache line line conflicts: if the same cache line is concurrently accessed by two threads, but
+the accesses are guarded by a lock, then the pausing introduced by the first thread will prevent the watchpoint from being hit
+in the second thread (because the second thread will block on the lock).
+
+%% --------------------------------------
+\paragraph{Other}
+
+Intel's VTune \cite{IntelVTune} an an imprecise, sampling-based profiler that can detect false sharing using hardware performance
+counters and monitoring events. It provides detailed, architecture-specific performance-tuning suggestions. Unlike \Toolname{},
+VTune can only report individual program counters that general cache coherency events, but cannot correlate threads by showing
+two contending stack traces.
+
+%, thus triggering the watchpoint and detecting a race ``in the act".
+%
+%%sampling based approach enables it to be general
+%
+% The key strengths of
+%DataCollider is that it has low overhead, it is independent of the synchronization mechanisms being employed, and that
+%it often catches both threads in the act.  This brilliantly simple approach was the main inspiration
+%for \Toolname{}. \Toolname{} differs from DataCollider, in that the latter is code-centric insofar as it samples code, whereas
+%\Toolname{} is data-centric insofar as it samples data.
+
+%In either case, a memory write occurs to take ownership.
+
+%\DrContention{} comprehensively interposes on
+%all memory accesses to track ownership of all cache lines. Every instruction is instrumented to first check if the current
+%thread owns the cache line. If not, then the thread is added to the cache line's \emph{threadset}. 
+
+% TODO: Evaluate by disabling is_watched check, i.e. perform ownership tracking on all cache lines, vs. only a subset
+% of cache lines.
+
+%Several tracking mechanisms are discussed, including ones that
+%track strict ownership transers, and others that attempt to measure thread correlations and the impact of of cache line
+%invalidations. The drawback of this approach is that it necessitates checking and updating the shadow memory on every
+%memory access, which introduces performance overhead due to extra cache line contention.
+
+%Like \DrContention{}, \Toolname{} uses DBT and shadow memory to track ownership of cache lines. However, \Toolname{}
+%only tracks cache line ownership for a subset of the cache lines (those currently being sampled). This makes a big difference
+%because, although potentiall all instructions are instrumented for shadow memory, only a small subset of th
+
+\paragraph{Plastic}
+Plastic \cite{Plastic} is a Xen-based dynamic false sharing detector and repairer. Like \Toolname{}, it takes a pipeline-based
+approach that successively narrows down on the root causes of false sharing. Plastic also uses DBT as part of its
+repair mechanism. Plastic's pipeline begins by using hardware performance counters related to cache contention
+events to detect the presence of false-sharing. Then, it applies a similar technique to MultiRace \cite{MultiRace}, in
+that it tracks the dominant access pattern by each thread to memory on a shared page. This information informs
+their repair mechanism, which transparently re-maps memory accesses at a byte granularity.
+
+\paragraph{SHERIFF}
+SHERIFF \cite{SHERIFF} is a false-sharing detector and repairer that works in a similar way to MultiRace and Plastic. Initially,
+it applies read-only hardware page protection to all shared memory. Then, as threads attempt to write to protected pages, those
+pages are privately mapped as read/write. When the same page is privately mapped by two or more threads, SHERIFF applies
+the twinning and diffing approach of TreadMarks \cite{TreadMarks} to detect local changes to shared pages and narrow down
+on instances of false sharing. Like \Toolname{}, SHERIFF uses a coarse-grained mechanism to hint at the potential for races.
+
+
+%% --------------------------------------
+%\subsection{Race Detection}
+%
+%Race detectors can be categorized according to the following parameters:
+%\begin{description}
+%\item[Approach] Static or dynamic. \hfill \\
+%Static race detectors analyze source code or binaries, typically performing interprocedural control-
+%and data-flow analyses. The benefit of static analysis is that they can inspect all program paths.
+%
+%Dynamic race detectors monitor memory accesses for races. The benefit of this approach is that
+%races can be caught "in the act". The drawbacks of this approach is that most dynamic race detectors
+%are too slow to run in production environments, and therefore must be tested on simulated workloads.
+%If these workloads do not exercise all code paths than many races can be missed. Dynamic race detectors
+%can be further broken down into on-the-fly detectors or post-mortem detectors, which analyze memory
+%access logs.
+%
+%\item[Model] Precise or imprecise.  \hfill \\
+%Precise race detectors report no false-positives and are usually implemented using Lamport's
+%happens-before relationship \cite{VectorClocks}. Precise race detectors often trade efficiency
+%for completeness in order to achieve their precision. That is, they sometime miss true races in
+%code.
+%
+%Imprecise race detectors can have high false positive rates, but tend to be more complete in terms of
+%including races not detected by precise detectors. They tend to be implemented using a variant of the
+%lockset algorithm \cite{Eraser}.
+%
+%\item[Granularity] Fine-grained or coarse-grained. \hfill \\
+%Fine-grained race detectors operate at or close to the granularity of memory accesses. Coarse-grained
+%race detectors operate at an object granularity, or at a fixed granularity (e.g. cache line, page).
+%
+%The granularity of a race detector can affect its precision. For example, a happens-before race detector 
+%can be imprecise (i.e. report false positives) by operating at a coarse granularity. If the granularity were
+%the size of a cache line, then the race detector would be a cache line contention detector: it would hint
+%at races as well as false-sharing.
+%
+%\item[Mode] Comprehensive or sampling-based. \hfill \\
+%Comprehensive race detectors typically analyze every memory read and write. They are usually implemented
+%by instrumenting all program code.
+%
+%Sampling-based race detectors analyze either a subset of the code or a subset of the data. In the former
+%case, they focus on detecting races by specific code.
+%\end{description}
+
+%Under this categorization scheme, \Toolname{} is a dynamic, precise, variable-granularity, mixed-mode
+%false-sharing detector. It draws inspiration from a number of existing race detectors, including LiteRace
+%\cite{LiteRace}, MultiRace \cite{MultiRace}, RaceMob \cite{RaceMob}, RaceTrack \cite{RaceTrack}, and
+%DataCollider \cite{DataCollider}.
 
 LiteRace \cite{LiteRace} is a precise, sampling-based dynamic race detector implemented on top of the Microsoft
 Pheonix binary translator. It samples at a function granularity, and executes either one specialized version of the
@@ -230,57 +445,26 @@ granularity from object-granularity to field-granularity. \Toolname{} follows th
 and RaceTrack in that it attempts to predict the source of false-sharing at one granularity, then verify those predictions 
 at another granularity.
 
-DataCollider \cite{DataCollider} is a dynamic, precise, sampling-based race detector for the kernel. The key strengths of
-DataCollider is that it has low overhead, it is independent of the synchronization mechanisms being employed, and that
-it often catches both threads in the act. DataCollider uniformly samples code by introducing breakpoints into the code.
-When a breakpoint is hit, a hardware watchpoint is added to data that was about to be accessed by the interrupted instruction.
-Then, the interrupted thread is paused for a short period of time to give another thread the opportunity to access the
-same data, thus triggering the watchpoint and detecting a race. This brilliantly simple approach was the main inspiration
-for \Toolname{}. \Toolname{} differs from DataCollider, in that the latter is code-centric insofar as it samples code, whereas
-\Toolname{} is data-centric insofar as it samples data.
 
-% --------------------------------------
-\subsection{False Sharing Detection}
 
-Similar to race detectors, false-sharing detectors can be sampling-based or comprehensive. Comprehensive approaches
-can be categorized  into simulation-based and instrumentation-based approaches. Simulation-based approaches focus on
-simulating the full cache hierarchy and can distinguish fine-grained events like false sharing due to set-associativity and
-false sharing due to different data being accessed on the same cache line. Instrumentation-based approaches focus more
-on mechanisms for estimating or detecting cache line contention.
+%% --------------------------------------
+%\subsection{False Sharing Detection}
+%
+%Similar to race detectors, false-sharing detectors can be sampling-based or comprehensive. Comprehensive approaches
+%can be categorized  into simulation-based and instrumentation-based approaches. Simulation-based approaches focus on
+%simulating the full cache hierarchy and can distinguish fine-grained events like false sharing due to set-associativity and
+%false sharing due to different data being accessed on the same cache line. Instrumentation-based approaches focus more
+%on mechanisms for estimating or detecting cache line contention.
 
-\paragraph{Sampling-based}
-Intel's VTune \cite{IntelVTune} an an imprecise, sampling-based profiler that can detect false sharing using hardware performance
-counters and monitoring events. It represents the state-of-the-art in performance analysis tools and is able to provide detailed,
-architecture-specific performance-tuning suggestions. Unlike \Toolname{}, VTune is unable to analyze only a portion of the code,
-or only the portion of code that accesses specific shared data structures.
+%\paragraph{Sampling-based}
 
-\paragraph{Comprehensive}
+
+%\paragraph{Comprehensive}
 
 % Simulation based approaches:
 % TODO: Callgrind/Cachegrind?
 % TODO: Simics?
 % TODO: Pluto?
-
-\newcommand{\DrContention}{Zhao \emph{et al.}}
-
-\DrContention{} \cite{DrContention} implement a dynamic false and true sharing detector using the DynamoRIO \cite{DynamoRIO}
-DBT system and Umbra shadow memory framework \cite{Umbra}. Unlike \Toolname{}, \DrContention{} use fixed-granularity
-shadow memory to track cache line ownership by processor cores. The drawback of this approach is that it necessitates checking
-and updating the shadow memory on every memory access, which introduces its own form of cache line contention. \Toolname{}
-avoids this issue by using shadow memory and tagged reads as a proxy for memory access behavior instead of as a meta-data store.
-
-Plastic \cite{Plastic} is a Xen-based dynamic false sharing detector and repairer. Like \Toolname{}, it takes a pipeline-based
-approach that successively narrows down on the root causes of false sharing. Plastic also uses DBT as part of its
-repair mechanism. Plastic's pipeline begins by using hardware performance counters related to cache contention
-events to detect the presence of false-sharing. Then, it applies a similar technique to MultiRace \cite{MultiRace}, in
-that it tracks the dominant access pattern by each thread to memory on a shared page. This information informs
-their repair mechanism, which transparently re-maps memory accesses at a byte granularity.
-
-SHERIFF \cite{SHERIFF} is a false-sharing detector and repairer that works in a similar way to MultiRace and Plastic. Initially,
-it applies read-only hardware page protection to all shared memory. Then, as threads attempt to write to protected pages, those
-pages are privately mapped as read/write. When the same page is privately mapped by two or more threads, SHERIFF applies
-the twinning and diffing approach of TreadMarks \cite{TreadMarks} to detect local changes to shared pages and narrow down
-on instances of false sharing. Like \Toolname{}, SHERIFF uses a coarse-grained mechanism to hint at the potential for races.
 
 % --------------------------------------------------------------------------------------
 \section{Methodology}\label{sec:methodology}
