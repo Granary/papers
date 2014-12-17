@@ -1,0 +1,110 @@
+\documentclass[preprint]{sigplanconf}
+\usepackage{cleveref,amsmath,chngcntr}
+\usepackage{textcomp} % for tilde
+\usepackage{paralist} % for in-paragraph lists
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{multicol,multirow}
+\usepackage{tabularx}
+
+% For drawing FSMs
+%\usepackage{tikz}
+%\usetikzlibrary{arrows,automata}
+
+% Used for code snippets
+\usepackage{listings,courier}
+\usepackage{subfig,epsfig}
+\DeclareCaptionType{copyrightbox}
+\usepackage{epsfig}
+
+
+% Settings on code listings.
+\lstset{language=C,
+		xleftmargin=0pt,
+		xrightmargin=0pt,
+		framexbottommargin=0pt,
+        framextopmargin=0pt,
+        framesep=0pt}
+\usepackage{enumitem}
+
+% Add listing language for assembly
+\lstdefinelanguage
+   [x64]{Assembler}     % add a "x64" dialect of Assembler
+   [x86masm]{Assembler} % based on the "x86masm" dialect
+   % with these extra keywords:
+   {morekeywords={CDQE,CQO,CMPSQ,CMPXCHG16B,JRCXZ,LODSQ,MOVSXD, %
+                  POPFQ,PUSHFQ,SCASQ,STOSQ,IRETQ,RDTSCP,SWAPGS, %
+                  rax,rdx,rcx,rbx,rsi,rdi,rsp,rbp, %
+                  r8,r8d,r8w,r8b,r9,r9d,r9w,r9b}} % etc.
+
+
+% For leaving some comments in the draft.
+\newcommand{\comment}[1]{}
+
+% Customize cleverref
+\crefname{section}{Section}{Sections}
+
+\begin{document}
+
+%make title bold and 14 pt font (Latex default is non-bold, 16 pt)
+\title{Virtual Register Scheduling}
+
+%for single author (just remove % characters)
+\authorinfo{Peter Goodman \and Angela Demke Brown \and Ashvin Goel}
+{University of Toronto}{}
+% end authorinfo
+
+\maketitle
+\subsection*{Abstract}
+
+A common challenge faced by static and dynamic binary instrumentation
+systems is how to manage transient state used by injected or modified binary
+instructions. Virtual register systems solve this problem by providing
+instrumentation tool writers with an infinite set of registers for use by
+instrumented code. Unfortunately, generic virtual register systems are hard
+to implement in practice. In this work, we present a generic virtual
+register system for a complex instruction set (x86-64). Our virtual register
+system addresses three limitations of prior work: % \cite{Pin,Valgrind}
+\begin{inparaenum}[i)]
+	\item they require that all code be comprehensively instrumented;
+	\item they require a strong notion of threads and the availability of
+ thread-local storage, and;
+	\item they require a runtime monitor, and therefore cannot be applied
+by both static and dynamic binary instrumentation systems.
+\end{inparaenum}
+
+%\section{Introduction}\label{sec:intro}
+
+
+
+
+% 
+
+%Existing virtual register implementations  punt on generality and require
+%\begin{inparaenum}[i)]
+%	\item that all code be comprehensively instrumented,
+%	\item that the instruction set or OS be virtualized, and
+%	\item the availability of dedicated, thread-local storage.
+%\end{inparaenum} These re
+
+%In this work, we present a generic virtual register system for a complex instruction set (x86-64). Our virtual register system is general in that it
+%\begin{inparaenum}[i)]
+%	\item does not require that all code be instrumented,
+%	\item works on user and kernel space,
+%	\item operates directely on x86-64 binary instruction,
+%	\item does not assume the availability of 
+%\end{inparaenum}
+
+
+%\section{Related Work}\label{sec:related}
+
+%\section{Evaluation}\label{sec:eval}
+
+%\section{Conclusion}\label{sec:conclusion}
+
+
+
+%\bibliographystyle{acm}
+%\bibliography{library}
+
+\end{document}
