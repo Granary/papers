@@ -10,6 +10,9 @@
 \usepackage{graphicx}
 \usepackage{hyperref}
 
+% For algorithms
+\usepackage{program}
+
 % Used for changing the spacing after the title, sections, and subsections.
 \usepackage{titlesec,titling}
 
@@ -630,32 +633,70 @@ instance of contention is detected, then the issue is reported and tracking is d
 \begin{center}
 \epsfig{file=states.eps, height=30em}
 \end{center}
-\caption{\label{fig:states_of_shadow}States of individual shadow memory cells. Each cell tracks the watched and ownership %
-status of a cache line. Yellow states are unwatched. Green states are watched. Red states represent contention that was missed %
-due to races in the instrumentation. Transitions between states are based on (potentially stale) observed prior states. For %
-example, the spurious acquire transition is possible because the decision to make the transition is based on a racy \texttt{CMP} %
-against the $SampleId$ (\figref{inline_assembly}). If two threads simultaneously see that the cache line it watched but not %
-owned, then both will execute the atomic \texttt{XCHG}, and only one thread will ``win". The ignore transition is induced, %
-either because the sampling timeout expires, or more likely, because the report transition occurs.}
+\caption{\label{fig:states_of_shadow}States of individual shadow memory cells. Shadow memory cells begin as unwatched. %
+Then, when a cache line is selected for sampling, it becomes watched. This is represented by the presence of a $SampleId$. %
+The first thread that tries to access the shadow memory of the cache line will become the cache line's owner, as represented %
+by the presence of a $ThreadId$. If multiple threads attempt to simultaneously acquire ownership of the cache line, then %
+contention will be detected and reported. If not, then execution will continue until a second thread accesses the cache line, %
+thus triggering an ownership transfer.}
 \end{figure}
 
 \begin{figure}
 \lstset{language=[x64]Assembler}
 \begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
 ;; Racy watchpoint check.
-CMP [ShadowAddr + Offs(SampleId)], 0
+CMP [Shadow(Addr) + Offs(SampleId)], 0
 JZ ignore
 ;; Racy ownership check.
-CMP [ShadowAddr + Offs(ThreadId)], CurrThreadId
+CMP [Shadow(Addr) + Offs(ThreadId)], MyThreadId
 JZ ignore
 ;; Take ownership, or transfer ownership
-LOCK XCHG [ShadowAddr], OldState
-CALL CheckContention(OldState,Addr,PC)
+CALL CheckContention(Addr,PC)
 ignore:
 \end{lstlisting}
-\caption{\label{fig:inline_assembly}Instrumentation instructions injected for each shared memory access. The algorithm optimizes on %
-instruction footprint by using a single \texttt{XCHG} instruction to perform multiple state transitions from %
-\Figref{states_of_shadow}, and then figuring out what state we should be in based on the value of $OldState$.}
+\caption{\label{fig:inline_assembly}Instrumentation instructions injected for each shared memory access. The algorithm %
+optimizes on instruction footprint by performing lightweight, racy checks up front as a way of avoiding more heavyweight %
+contention detection. If the cache line appears watched, and if the race checks fail, then the $CheckContention$ function %
+is invoked. This function handles the state transitions of \Figref{states_of_shadow} internally using an atomic compare and %
+swap.}
+\end{figure}
+
+\begin{figure}
+\begin{lstlisting}[language=C,basicstyle=\footnotesize\ttfamily]
+void CheckContention(uintptr_t addr, PC pc) {
+  // Figure out address of shadow memory,
+  // given address of memory being accessed.
+  WP *wp = (addr / 64) + gShadowBase;
+  uint16_t sample_id = wp->sample_id;
+  uint16_t thread_id = GetThreadId();
+  if (!sample_id) return;
+
+  // Assume unowned; try to take ownership. We
+  // check the return value to figure out if
+  // the prior state was unowned.
+  WP state = CAS(wp, WP(sample_id,0),
+                     WP(sample_id,thread_id));
+
+  // Contention already detected, or
+  // sampling disabled due to sample
+  // period expiring.
+  if (!state.sample_id) return;
+
+  // Acquired ownership.
+  if (!state.thread_id) {
+    ReportOwner(sample_id,addr, pc);
+    PauseThread(gConfigSleepTime);
+  } else {
+    wp->sample_id = 0;  // Unwatch.
+    ReportContender(sample_id,addr, pc)
+  }
+}
+\end{lstlisting}
+\caption{\label{fig:algorithm}Algorithm for detecting contention on a cache line. Contention reports are updated as the threads %
+are discovered, and finalized at the end of each sampling period before new samples are taken. The \texttt{PauseThread} function %
+is notable. By passing a configurable sleep duration to the \texttt{PauseThread} function, we can turn on DataCollider-like detection, %
+or by not pausing, turn on Dr. Memory-like detection. Not shown in this algorithm is the extent of information passed to the reports %
+(memory operand sizes and types, call stacks).}
 \end{figure}
 
 Initially, a every cache line is unwatched, as represented by the absence of a $SampleId$ in \Figref{states_of_shadow}, and by the value
@@ -667,19 +708,10 @@ initialization, each $SampleId$ is allocated space to describe a detected case o
 about what types of memory was being sampled, what offsets into that memory were being sampled, stack traces for the contending
 threads, addresses accessed by each thread, and details about each thread's memory access type (read/write, atomic, width).
 
-The limitation to 16 bits for $SampleId$s was a deliberate decision. We take advantage of the structure of ``canonical addresses" on the
-x86-64 architecture, whereby the high-order 16 bits of a 64-bit address must have the same value as the 47th bit. In user space, all 16
-high-order bits are 0. We represent the $ThreadId$ using the thread's ``base pointer'' (a pointer thread-local storage). Thus, the
-\texttt{XCHG} in \Figref{inline_assembly} has the side-effect of temporarily disabling the watchpoint.
-
-% TODO: describe why this is reasonable, what alternatives there are, and the complications with those alternatives (atomicity,
-% re-watching, etc)
-
-% TODO: Should we have done it where we read the value of shadow memory into a reg, then used that as the old state to pass on
-% (plus the old value of the thread pointer)? This is valid, and might be better. But this has weird transitions.
-
-% Essentially: the "right" solution using a CMPXCHG, but that requires a lot of spills/fills of regs  === heavyweight.
-
+If a sampled memory location is accessed, then the instrumentation instructions of \Figref{inline_assembly} will detect the non-zero
+$SampleId$, and call out to the $CheckContention$ function, but only if the current thread does not appear to own the cache line
+already. The $CheckContention$ algorithm (\Figref{algorithm}) performs both the ``Acquire" and the ``Detect" state transitions of
+\Figref{states_of_shadow} using a single atomic compare-and-swap operation (\texttt{CAS}).
 
 %, the shadow is initialized with a $SampleId$. The first read or write to a cache 
 

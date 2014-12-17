@@ -2,19 +2,19 @@ digraph {
   node [fontfamily=serif shape=record nojustify=false labeljust=l style=filled];
   entry -> unwatched;
   unwatched -> watched_unowned [label=" Sample"];
-  watched_unowned -> unwatched_owned [label="Acquire"];
-  watched_unowned -> missed [label="Spurious\nAcquire"];
-  unwatched_owned -> watched_owned [label="Publish"];
-  watched_owned -> unwatched_contended [label="Detect"];
-  watched_owned -> missed [label="Spurious\nDetect"];
+  watched_unowned -> watched_owned [label="Acquire"];
+  watched_unowned -> contended [label="Contended\nAcquire"];
+  /*unwatched_owned -> watched_owned [label="Publish"];*/
+  watched_owned -> contended [label="Detect"];
+  watched_owned -> missed [label="Spurious\nDetect" style=dashed];
   missed -> unwatched [label=" Ignore" style=dashed];
-  unwatched_contended -> unwatched [label=" Report"];
+  contended -> unwatched [label=" Report"];
 
   entry [color=white label=""];
-  unwatched [label=<|> fillcolor="#F0E68C"];
+  unwatched [label="Unwatched" fillcolor="#F0E68C"];
   watched_unowned [label=<Sample ID|> fillcolor="#90EE90"];
-  unwatched_owned [label=<|Thread 1> fillcolor="#F0E68C"];
+  /*unwatched_owned [label=<|Thread 1> fillcolor="#F0E68C"];*/
   watched_owned [label=<Sample ID|Thread 1> fillcolor="#90EE90"];
-  unwatched_contended [label=<|Thread 2> fillcolor="#F0E68C"];
-  missed [label=<|Thread N> fillcolor="#FFCCCC"];
+  contended [label="Detected\nContention" fillcolor="#90EE90"];
+  missed [label="Ignored\nContention" fillcolor="#FFCCCC"];
 } 
