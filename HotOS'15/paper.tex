@@ -3,12 +3,14 @@
 \usepackage[margin=1in]{geometry}
 %\usepackage{endnotes,multirow}
 \usepackage{refstyle,amsmath,chngcntr}
+\usepackage{epstopdf}
 \usepackage{epsfig,subfigure,framed}
 \usepackage{textcomp} % for tilde
 \usepackage{paralist} % for in-paragraph lists
 \usepackage{parskip} % For making paragraphs split by new lines instead of indents
 \usepackage{graphicx}
 \usepackage{hyperref}
+\usepackage{dblfloatfix}
 
 % For algorithms
 \usepackage{program}
@@ -92,12 +94,12 @@ Contention on cache lines is symptomatic of both performance and correctness bug
 contention limits scalability by introducing extra latency when accessing shared memory.  In terms of correctness, cache
 line contention can also be caused by data races, which introduce non-determinism into one's program.
 
-In this paper, we describe \Toolname, a system that detects and diagnoses cache line contention in arbitrary binary programs.
-\Toolname{} refines existing contention detection approaches in several novel ways. First, we describe a method training
-a detection system to focus on only the code and data that matter to the problem. Second, we describe a new form of
-data-centric sampling: comprehensive data sampling. Our sampling approach uses unlimited watchpoints to uniformly
-sample memory locations according to the type of data stored in memory. This avoids sampling bias where a large portion
-of a program's memory is unshared.
+In this paper, we describe \Toolname, a general framework for detecting and diagnosing cache line contention in arbitrary,
+binary programs. \Toolname{} refines existing contention detection approaches in several novel ways. First, we describe a
+method training a detection system to focus on only the code and data that matter to the problem. Second, we describe a
+new form of data-centric sampling: comprehensive data sampling. Our sampling approach uses unlimited watchpoints to
+uniformly sample memory locations according to the type of data stored in memory. This avoids sampling bias where a large
+portion of a program's memory is unshared.
 
 \section{Introduction}\label{sec:intro}
 
@@ -628,20 +630,121 @@ instance of contention is detected, then the issue is reported and tracking is d
 \end{itemize}
 
 % --------------------------------------
-\subsection{Ownership Tracking}
-\begin{figure}
+\subsection{Training}
+
+% --------------------------------------
+\subsection{Shadow Memory}
+\begin{figure*}
+\includegraphics[width=\textwidth]{shadow.pdf}
+\caption{\label{fig:layout_of_shadow}Layout of shadow memory. Native cache lines map to individual shadow state cells. %
+ In the above %
+diagram, the cache line associated with bytes [\texttt{0xF00},\texttt{0xF40}) are being sampled using $SampleId=11$. When %
+we look at entry $11$ in the sample table, we see that the monitor thread chose this sample using a recent allocation of an %
+object with $TypeId=4$.}
+\end{figure*}
+
+\Toolname{} reserves one sixteenth of the virtual address space for shadow memory \cite{Umbra}, which it uses to track the watched and
+ownership state of every cache line. The majority of this space is never backed by physical memory due to a lazy memory allocation
+scheme. Also, unlike prior shadow memory-based approaches \cite{DrContention}, our sampling approach enforces a strict upper
+bound on the amount of physical memory needed for shadow memory\footnote{The upper bound on shadow memory usage is one
+memory page per sample. Because each shadow page can cover up to 1024 cache lines, having multiple samples map to cells on the
+same shadow page is common.}.
+
+% TODO: This isn't really true, but it could be true if we we had an index of what pages have samples, and map all other pages to the
+% sample underlying zero memory somehow...
+
+For each sampled cache line of native memory, \Toolname{} stores a $\langle SampleId,ThreadId \rangle$ pair in shadow memory.
+Initially, every cache line is ``unwatched", as represented by $SampleId=0$ in \Figref{states_of_shadow}. When a new sampling period
+begins, the monitor thread ``watches`` caches lines by assigning those lines a unique, non-zero $SampleId$. \Figref{layout_of_shadow}
+shows how the $SampleId$ stored in shadow memory associates with information about what was sampled and what threads contended on
+the cache line. The information stored for each sample include: \begin{itemize}
+
+	\item Type of object (in terms of a $TypeId$) affected by contention on the cache line. Using a secondary lookup table, we can
+determine the size and allocation context of this object.
+
+	\item Address of allocated object, and range of bytes within the allocated object that are located on the sampled cache
+line. Sampling a subsequence of bytes happens when a single object spans multiple cache lines, either due to alignment or due to size. When
+this happens, multiple samples for the different parts of the same object are taken. This allows us to perform both object-granularity
+\emph{and} field-granularity contention detection \cite{RaceTrack}.
+
+	\item Stack traces of the thread that first acquires ownership of the cache line, and of the first detected contenter thread.
+
+	\item Accessed addresses, memory operand sizes, and memory operand types (read, write, atomic) of both threads.
+\end{itemize}
+
+% --------------------------------------
+\subsection{Instrumentation}
+If a sampled memory location is accessed, then the instrumentation instructions of \Figref{inline_assembly} will detect the non-zero
+$SampleId$, and invoke the $CheckContention$ function if the current thread does not already appear to own the sampled cache line.
+The $CheckContention$ algorithm (\Figref{algorithm}) is responsible for acquiring ownership of a cache line, as well as detecting
+contention. At a high level, the algorithm detects contention by failing to acquire ownership. The two key differences between the
+$CheckContention$ algorithm and prior work are: \begin{enumerate}
+	\item The owner thread can be \emph{optionally} paused. Pausing the owner thread emulates the race-detection capability of
+DataCollider. Using this approach, we can pinpoint two locations where contention (and potentially races) can
+absolutely occur.
+
+Not pausing the owner thread means that \Toolname{} will detect contention as an ownership transfer. The benefit of
+this approach is that it can find contention even within critical sections. The drawback is that accuracy will not be perfect: the last access of
+the sampled cache line by the owner thread might not be the instruction at which it obtained ownership of the cache line.
+
+Our sampling approach also enables a middle ground: pausing for a period that is shorter than the sampling period, thus converting
+to relaxed ownership transfer detection after the delay expires.
+
+% TODO: Measure these improvements!!
+	\item Unlike in Dr. Memory, sampling (and therefore detection) is immediately disabled once contention is detected. This improves
+performance in the contended case because it reduces contention on the shadow memory itself.
+\end{enumerate}
+
+% --------------------------------------
+\subsection{Reporting}
+
+% Once contention is detected, sampling
+%is disabled for the cache line, reporting information is collected, and execution continues.
+
+
+
+%$SampleId$s and $TypeId$s
+%are distinct because for two reasons: \begin{enumeration}
+%\item Multiple samples for the same $TypeId$ are taken. This happens when objects of a type span multiple cache lines, and when more
+%samples than types are requested\footnote{The number of samples to take per sampling period is tunable via a command-line argument.}.
+%\item For reporting purposes, we want to accurately report the type of object affected by cache line contention. The distinction between
+%samples and types enables each sample to record more elaborate information: address of the typed object, which components of the object
+%are located in the sampled cache line (in case an object spans multiple lines)
+%\end{enumeration}
+%multiple samples for a given type might be taken, and
+%
+%  The distinction between $SampleId$ and $TypeId$ is primarily useful for reporting: at the program's
+%initialization, each $SampleId$ is allocated space to describe a detected case of cache line contention. The description includes information
+%about what types of memory was being sampled, what offsets into that memory were being sampled, stack traces for the contending
+%threads, addresses accessed by each thread, and details about each thread's memory access type (read/write, atomic, width).
+%
+%
+%When a cache line is sampled by
+%the monitor thread, it is assigned a unique 16-bit $SampleId$. 
+
+%\Figref{layout_of_shadow} shows the organi
+
+
+
+\begin{figure}[t]
 \begin{center}
-\epsfig{file=states.eps, height=30em}
+\includegraphics{states.pdf}
 \end{center}
-\caption{\label{fig:states_of_shadow}States of individual shadow memory cells. Shadow memory cells begin as unwatched. %
-Then, when a cache line is selected for sampling, it becomes watched. This is represented by the presence of a $SampleId$. %
-The first thread that tries to access the shadow memory of the cache line will become the cache line's owner, as represented %
-by the presence of a $ThreadId$. If multiple threads attempt to simultaneously acquire ownership of the cache line, then %
-contention will be detected and reported. If not, then execution will continue until a second thread accesses the cache line, %
-thus triggering an ownership transfer.}
+\caption{\label{fig:states_of_shadow}Valid states of shadow memory cells. Shadow cells are a $\langle SampleId,ThreadId \rangle$ %
+pair, where a $SampleId$ of $0$ represents unwatched. In this example, sampling of a cache line is enabled by assigning %
+$SampleId \gets 11$. The cache line becomes ``owned" when thread $5$ accesses the cache line. Owernship acquisition is %
+performed by the \texttt{CAS} operation in the $CheckContention$ algorithm (\Figref{algorithm}). If the \texttt{CAS} fails, %
+then contention is reported, and sampling of the line is disabled.}
+%
+%Shadow memory cells begin as unwatched. %
+%Then, when a cache line is selected for sampling, it becomes watched. This is represented by the presence of a $SampleId$. %
+%The first thread that tries to access the shadow memory of the cache line will become the cache line's owner, as represented %
+%by the presence of a $ThreadId$. If multiple threads attempt to simultaneously acquire ownership of the cache line, then %
+%contention will be detected and reported. If not, then execution will continue until a second thread accesses the cache line, %
+%thus triggering an ownership transfer.}
 \end{figure}
 
-\begin{figure}
+\begin{figure}[t]
 \lstset{language=[x64]Assembler}
 \begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
 ;; Racy watchpoint check.
@@ -656,12 +759,12 @@ ignore:
 \end{lstlisting}
 \caption{\label{fig:inline_assembly}Instrumentation instructions injected for each shared memory access. The algorithm %
 optimizes on instruction footprint by performing lightweight, racy checks up front as a way of avoiding more heavyweight %
-contention detection. If the cache line appears watched, and if the race checks fail, then the $CheckContention$ function %
-is invoked. This function handles the state transitions of \Figref{states_of_shadow} internally using an atomic compare and %
-swap.}
+contention detection. If the cache line appears watched, and if the current thread doesn't own the line, then the %
+$CheckContention$ algorithm is invoked. This algorithm either acquires ownership for the current thread, or detects and %
+reports contention.}
 \end{figure}
 
-\begin{figure}
+\begin{figure}[t]
 \begin{lstlisting}[language=C,basicstyle=\footnotesize\ttfamily]
 void CheckContention(uintptr_t addr, PC pc) {
   // Figure out address of shadow memory,
@@ -699,23 +802,17 @@ or by not pausing, turn on Dr. Memory-like detection. Not shown in this algorith
 (memory operand sizes and types, call stacks).}
 \end{figure}
 
-Initially, a every cache line is unwatched, as represented by the absence of a $SampleId$ in \Figref{states_of_shadow}, and by the value
-\texttt{0} in shadow memory. When a cache line is sampled by the monitor thread, it is assigned a unique 16-bit $SampleId$. $SampleId$s
-are distinct from $TypeId$ because multiple samples for a given type might be taken. This happens when objects of a type span multiple
-cache lines, and when more samples than types are requested\footnote{The number of samples to take per sampling period is tunable %
-via a command-line argument.}. The distinction between $SampleId$ and $TypeId$ is primarily useful for reporting: at the program's
-initialization, each $SampleId$ is allocated space to describe a detected case of cache line contention. The description includes information
-about what types of memory was being sampled, what offsets into that memory were being sampled, stack traces for the contending
-threads, addresses accessed by each thread, and details about each thread's memory access type (read/write, atomic, width).
+% TODO: Evaluate actual memory overheads of shadow?
+%In shadow memory, \Toolname{} stores
+%s that are used to track the state of some native cache lines. 
+%Using instrumentation, native addresses %
+%are mapped to shadow addresses as follows: $(NativeAddr/64)+ShadowBaseAddr$.
+% to record four bytes of state for every 64-byte cache line. 
 
-If a sampled memory location is accessed, then the instrumentation instructions of \Figref{inline_assembly} will detect the non-zero
-$SampleId$, and call out to the $CheckContention$ function, but only if the current thread does not appear to own the cache line
-already. The $CheckContention$ algorithm (\Figref{algorithm}) performs both the ``Acquire" and the ``Detect" state transitions of
-\Figref{states_of_shadow} using a single atomic compare-and-swap operation (\texttt{CAS}).
 
 %, the shadow is initialized with a $SampleId$. The first read or write to a cache 
 
-\section{Optimization}\label{sec:optimizations}
+%\section{Optimizations}\label{sec:optimizations}
 
 % TODO: Make the code accessing data context-sensitive. I.e. so that we can avoid cases like memset always
 % being heavily instrumented.
