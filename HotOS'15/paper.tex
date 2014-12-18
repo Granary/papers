@@ -58,11 +58,12 @@
 % Prevent footnotes from spanning multiple pages
 \interfootnotelinepenalty=10000
 
-% For leaving some comments in the draft.
-\newcommand{\comment}[1]{}
+% Name of the tool.
 \newcommand{\TextToolname}{Malcontent}
 \newcommand{\Toolname}{\textsc{\TextToolname{}}}
 \newcommand{\BoldToolname}{\textsc{\bf\TextToolname{}}}
+
+\renewcommand{\Secref}[1]{Section~\ref{sec:#1}} 
 
 % For getting rid of copyright box
 \makeatletter
@@ -613,7 +614,7 @@ understanding of the sycnrhonization primitives used by a program.
 % TODO: Pluto?
 
 % --------------------------------------------------------------------------------------
-\section{Methodology}\label{sec:methodology}
+\section{Implementation}\label{sec:implementation}
 
 \Toolname{} can be thought of as combining DataCollider's sampling based approach \cite{DataCollider}, and Dr. Memory's
 cache line ownership tracking approach \cite{DrContention}. The major distinction between \Toolname, DataCollider, and
@@ -630,10 +631,67 @@ instance of contention is detected, then the issue is reported and tracking is d
 \end{itemize}
 
 % --------------------------------------
-\subsection{Training}
+\subsection{Interposition}
+
+\begin{figure}[t]
+\begin{lstlisting}[language=C,basicstyle=\footnotesize\ttfamily]
+WRAP_FUNCTION(libc, malloc, (void *),
+                            (size_t size)) {
+  auto malloc = WRAPPED_FUNCTION;
+  auto context = RETURN_ADDRESS;
+  auto addr = malloc(size);
+  if (addr) {
+    auto type_id = TypeIdFor(context, size);
+    AddSamplePoint(type_id, addr);
+  }
+  return addr;
+}
+\end{lstlisting}
+\caption{\label{fig:wrapper}Wrapper for the \texttt{malloc} function in \texttt{libc}. The wrapper invokes the native malloc %
+function, thus preserving native memory layouts, and determines the $TypeId$ for the allocated address. Finally, the }
+\end{figure}
+
+The interposition layer is responsible for assigning $TypeId$s to different types of allocated objects, and maintaining lists of
+the most recently allocated object addresses on a per-type basis. These lists are used by the monitor to comprehensively
+sample the heap.
+
+\Toolname{} uses Granary's wrapper mechanism \cite{Granary} to interpose on the dynamic memory allocation routines
+used by the application. By default, \Toolname{} interposes on \texttt{malloc} and other POSIX memory management
+routines  available from \texttt{libc}, as well as \texttt{new} from \texttt{libc++}. \Toolname{} can also be configured to
+interpose on non-standard allocators, either by using symbol information, or the addresses of the allocators within the
+binaries to be instrumented.
+
+\Figref{wrapper} shows an example wrapper for the \texttt{malloc} function. The wrapper determines the $TypeId$ for the
+allocated object given the size of the object and the allocation context (heuristically estimated using the return address into
+the caller of the \texttt{malloc} function). For finer-grained $TypeId$ associations, or more detailed reporting, calls stacks
+can be provided as the allocation context.
+
+{\bf Future work:} Like SHERIFF \cite{SHERIFF}, try to fix some cache contention issues by padding allocated objects.
 
 % --------------------------------------
-\subsection{Shadow Memory}
+\subsection{Monitor}
+
+The monitor thread is spawned at program startup and is responsible for periodically choosing memory locations to sample,
+then enabling their watchpoints. When a sampling period is over, the enabled watchpoints are disabled, and any detected
+contention is reported.
+
+The monitor employs a round-robin sampling algorithm. For each $TypeId$, it chooses the most recently allocated object, as
+recorded by the interposition layer. Then, it enables \emph{all} watchpoints associated with the cache lines spanned by
+the allocated object. When the maximum configured number of samples have been placed, it goes to sleep, so as to give the
+placed watchpoints time to be hit and detect contention. Eventually, it wakes up and reported any instances of detected
+contention.
+
+{\bf Future work: Biased sampling.} Bias sampling toward objects that are more typically accessed in \emph{cold} code.
+This would agree with the ``cold code hypothesis'' \cite{LiteRace}, wherein important sources of cache contention (in
+the case of \cite{LiteRace}, the focus was data races) are likely to be in colder code because otherwise those issues would
+have already been discovered, or are benign.
+
+{\bf Future work: Threshold sampling.} Disable sampling of some types when the number of detected issues exceeds some
+bound.
+
+% --------------------------------------
+\subsection{Instrumentation}
+\paragraph{Shadow Memory}
 \begin{figure*}
 \includegraphics[width=\textwidth]{shadow.pdf}
 \caption{\label{fig:layout_of_shadow}Layout of shadow memory. Native cache lines map to individual shadow state cells. %
@@ -672,8 +730,30 @@ this happens, multiple samples for the different parts of the same object are ta
 	\item Accessed addresses, memory operand sizes, and memory operand types (read, write, atomic) of both threads.
 \end{itemize}
 
-% --------------------------------------
-\subsection{Instrumentation}
+\begin{figure}[t]
+\begin{center}
+\includegraphics{states.pdf}
+\end{center}
+\caption{\label{fig:states_of_shadow}Valid states of shadow memory cells. Shadow cells are a $\langle SampleId,ThreadId \rangle$ %
+pair, where a $SampleId$ of $0$ represents unwatched. In this example, sampling of a cache line is enabled by assigning %
+$SampleId \gets 11$. The cache line becomes ``owned" when thread $5$ accesses the cache line. Owernship acquisition is %
+performed by the \texttt{CAS} operation in the $CheckContention$ algorithm (\Figref{algorithm}). If the \texttt{CAS} fails, %
+then contention is reported, and sampling of the line is disabled.}
+%
+%Shadow memory cells begin as unwatched. %
+%Then, when a cache line is selected for sampling, it becomes watched. This is represented by the presence of a $SampleId$. %
+%The first thread that tries to access the shadow memory of the cache line will become the cache line's owner, as represented %
+%by the presence of a $ThreadId$. If multiple threads attempt to simultaneously acquire ownership of the cache line, then %
+%contention will be detected and reported. If not, then execution will continue until a second thread accesses the cache line, %
+%thus triggering an ownership transfer.}
+\end{figure}
+
+\paragraph{Shadow Instrumentation}
+
+Shadow memory instrumentation is applied only to those memory-accessing instructions identified during the training phase. For all
+other instructions, Granary's ``null" instrumentation is applied. In some cases, \Toolname{} can even instruct Granary to execute code
+natively. The rest of this section focuses on shadow instrumentation.
+
 If a sampled memory location is accessed, then the instrumentation instructions of \Figref{inline_assembly} will detect the non-zero
 $SampleId$, and invoke the $CheckContention$ function if the current thread does not already appear to own the sampled cache line.
 The $CheckContention$ algorithm (\Figref{algorithm}) is responsible for acquiring ownership of a cache line, as well as detecting
@@ -683,20 +763,19 @@ $CheckContention$ algorithm and prior work are: \begin{enumerate}
 DataCollider. Using this approach, we can pinpoint two locations where contention (and potentially races) can
 absolutely occur.
 
-Not pausing the owner thread means that \Toolname{} will detect contention as an ownership transfer. The benefit of
-this approach is that it can find contention even within critical sections. The drawback is that accuracy will not be perfect: the last access of
-the sampled cache line by the owner thread might not be the instruction at which it obtained ownership of the cache line.
+Not pausing the owner thread means that \Toolname{} can detect contention even within critical sections. The drawback
+is that accuracy will not be perfect: the last access of the sampled cache line by the owner thread might not be the
+instruction at which it obtained ownership of the cache line.
 
 Our sampling approach also enables a middle ground: pausing for a period that is shorter than the sampling period, thus converting
 to relaxed ownership transfer detection after the delay expires.
 
 % TODO: Measure these improvements!!
 	\item Unlike in Dr. Memory, sampling (and therefore detection) is immediately disabled once contention is detected. This improves
-performance in the contended case because it reduces contention on the shadow memory itself.
+performance in the contended case because it reduces contention on the cache lines associated with shadow memory, as well as reduces
+CPU overheads due to executing fewer inject instrumentation instructions.
 \end{enumerate}
 
-% --------------------------------------
-\subsection{Reporting}
 
 % Once contention is detected, sampling
 %is disabled for the cache line, reporting information is collected, and execution continues.
@@ -725,26 +804,7 @@ performance in the contended case because it reduces contention on the shadow me
 %\Figref{layout_of_shadow} shows the organi
 
 
-
-\begin{figure}[t]
-\begin{center}
-\includegraphics{states.pdf}
-\end{center}
-\caption{\label{fig:states_of_shadow}Valid states of shadow memory cells. Shadow cells are a $\langle SampleId,ThreadId \rangle$ %
-pair, where a $SampleId$ of $0$ represents unwatched. In this example, sampling of a cache line is enabled by assigning %
-$SampleId \gets 11$. The cache line becomes ``owned" when thread $5$ accesses the cache line. Owernship acquisition is %
-performed by the \texttt{CAS} operation in the $CheckContention$ algorithm (\Figref{algorithm}). If the \texttt{CAS} fails, %
-then contention is reported, and sampling of the line is disabled.}
-%
-%Shadow memory cells begin as unwatched. %
-%Then, when a cache line is selected for sampling, it becomes watched. This is represented by the presence of a $SampleId$. %
-%The first thread that tries to access the shadow memory of the cache line will become the cache line's owner, as represented %
-%by the presence of a $ThreadId$. If multiple threads attempt to simultaneously acquire ownership of the cache line, then %
-%contention will be detected and reported. If not, then execution will continue until a second thread accesses the cache line, %
-%thus triggering an ownership transfer.}
-\end{figure}
-
-\begin{figure}[t]
+\begin{figure}
 \lstset{language=[x64]Assembler}
 \begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
 ;; Racy watchpoint check.
@@ -940,7 +1000,7 @@ or by not pausing, turn on Dr. Memory-like detection. Not shown in this algorith
 %
 %We apply two techniques to reduce and finally eliminate false positives:
 %\begin{enumerate}
-%\item We iteratively refine the granularity of proxy memory, starting from the page granularity and going down to the cache
+%\item We iteratively refine the granularity of proxy memory, starting from the page granularity and goig down to the cache
 %line granularity. As the granularity is refined and potential false sharing continues to be detected, our confidence in beliefs
 %of false sharing improves.
 %
@@ -991,11 +1051,47 @@ or by not pausing, turn on Dr. Memory-like detection. Not shown in this algorith
 
 % --------------------------------------------------------------------------------------
 \section{Evaluation}\label{sec:evaluation}
-Our evaluation aims to answer the following questions:
-\begin{itemize}
-\item Does the training phase significant reduce the performance overheads of the detection phase?
+I want to evaluate the following things:
 
-\end{itemize}
+\paragraph{Training} Here, I want to focus on measuring the reduction in overheads provided by the training phase. There will
+be two ways of showing this. The first is tabular, and will compare dynamic instruction counts. Specifically, it will measure how
+many instructions would execute with heavy instrumentation with training, how many without, and how many execute natively.
+
+Another thing that might be worth showing is that for some levels of sampling (e.g. 16 samples, 64 samples, 356 samples, etc.) how
+many of the heavily instrumented instructions go through a "heavyweight" instrumentation path. This could give insights on
+the actual coverage of sampling, and might inform us on whether or not we need to change our sampling strategies. Hopefully
+there will be some insights there.
+
+The next is way of showing the benefits are in terms of overhead. Here, we could either focus on a particular benchmark (e.g.
+Phoenix, PARSEC), or on a few applications (MySQL, Memcached, etc.). This would be a standard grouped bar chart, with three
+bars per application. Each bar is overhead relative to native. The first bar for each application shows baseline Granary overheads.
+The second bar shows overheads without training. The third bar shows overheads with training.
+
+\paragraph{Sampling}
+Here the purpose is to compare the performance benefits of ``comprehensive sampling" vs. ``comprehensive tracking". This serves
+as a direct comparison to Dr. Memory. Again, we want a grouped bar chart. The first bar for each application is a Granary version
+of Dr. Memory, which is a basically our tool without training without sampling. The second group of bars is for untrained \Toolname{}
+but using sampling, with increasing number of watchpoints. The third group of bars is for trained, with the same numbers of watchpoints.
+
+It would also be nice if we could have a small table that chooses a select few of the results from the graph, and shows data cache
+hit/miss ratios, as well as icache hit/miss ratios.
+
+\paragraph{Memory Overheads}
+This needs to show the memory overheads of \Toolname{}, both in terms of shadow and in terms of code cache. I've described that
+the shadow has an upper-bound on its memory overheads; however, I haven't actually implemented it as such. In practice though,
+that might not matter if none of our tests reach the theoretical upper bound.
+
+\paragraph{Effectiveness}
+For this to be useful, we need to find real bugs, and showing an example of a report for a real bug will be key I think. In the short
+time before HotOS, I don't expect to find much, as getting everything working will be its own challenge. This isn't discouraging me
+though as I feel that this is the first ``real" tool that Granary has, and for that reason, it's something that I'm very pleased with.
+
+\section{Conclusion}
+This paper presented \Toolname{}, a new cache contention detection framework that combines the strengths of DataCollider and
+Dr. Memory into a unified framework. The key novelties of \Toolname{} are the separation of the problem into two phases. The
+first phase figures out what code can contain bugs. The second phase detects bugs in that code. The tool, but more specifically
+Granary itself, is still under heavy development, and so performance and effectiveness evaluations could not be performed. It is
+hoped that Granary's stability will improve enough in time to get some kind of numbers.
 
 %Our evaluation aims to answer the following questions:
 %\begin{itemize}
